@@ -141,6 +141,46 @@ func (h *Teams) Update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toTeamDTO(t))
 }
 
+type teamMarkerStatsDTO struct {
+	TeamID  string `json:"teamId"`
+	Success int64  `json:"success"`
+	Failure int64  `json:"failure"`
+	Note    int64  `json:"note"`
+}
+
+func (h *Teams) MarkerStats(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUIDParam(chi.URLParam(r, "teamId"))
+	if err != nil {
+		badRequest(w, "invalid teamId")
+		return
+	}
+	if _, err := h.Q.GetTeam(r.Context(), id); err != nil {
+		if isNoRows(err) {
+			notFound(w, "team not found")
+			return
+		}
+		internalError(w, err)
+		return
+	}
+	rows, err := h.Q.CountMarkersByTeamAndCategory(r.Context(), id)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	out := teamMarkerStatsDTO{TeamID: uuidString(id)}
+	for _, row := range rows {
+		switch row.Category {
+		case sqlc.MarkerCategorySuccess:
+			out.Success = row.Count
+		case sqlc.MarkerCategoryFailure:
+			out.Failure = row.Count
+		case sqlc.MarkerCategoryNote:
+			out.Note = row.Count
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (h *Teams) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUUIDParam(chi.URLParam(r, "teamId"))
 	if err != nil {

@@ -341,6 +341,25 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /teams/{teamId}/marker-stats:
+    parameters:
+      - $ref: "#/components/parameters/TeamId"
+    get:
+      tags: [teams, markers]
+      operationId: getTeamMarkerStats
+      summary: チーム配下 Run の Marker カテゴリ別件数
+      description: |
+        対戦相手スカウト用。Phase 2 のマッチアップビューで使う。
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamMarkerStats"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   # ---------- Robots ----------
   /robots:
     get:
@@ -2282,6 +2301,19 @@ components:
             $ref: "#/components/schemas/Marker"
         pagination:
           $ref: "#/components/schemas/Pagination"
+    TeamMarkerStats:
+      type: object
+      required: [teamId, success, failure, note]
+      properties:
+        teamId:
+          type: string
+          format: uuid
+        success:
+          type: integer
+        failure:
+          type: integer
+        note:
+          type: integer
 
     # ---------- Tournament (Phase 2) ----------
     Tournament:

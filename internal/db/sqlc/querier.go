@@ -14,6 +14,7 @@ type Querier interface {
 	AddRunTag(ctx context.Context, arg AddRunTagParams) error
 	AddRunVideo(ctx context.Context, arg AddRunVideoParams) (RunVideo, error)
 	ClearRunTags(ctx context.Context, runID pgtype.UUID) error
+	CountMarkersByTeamAndCategory(ctx context.Context, teamID pgtype.UUID) ([]CountMarkersByTeamAndCategoryRow, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
 	CreateMarker(ctx context.Context, arg CreateMarkerParams) (Marker, error)
 	CreateMatch(ctx context.Context, arg CreateMatchParams) (Match, error)

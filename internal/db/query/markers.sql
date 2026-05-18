@@ -28,3 +28,10 @@ RETURNING *;
 
 -- name: DeleteMarker :execrows
 DELETE FROM markers WHERE id = $1;
+
+-- name: CountMarkersByTeamAndCategory :many
+SELECT m.category, COUNT(*) AS count
+FROM markers m
+JOIN runs r ON r.id = m.run_id
+WHERE r.team_id = $1
+GROUP BY m.category;

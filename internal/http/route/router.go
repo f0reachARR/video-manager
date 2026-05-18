@@ -71,6 +71,7 @@ func New(d Deps) http.Handler {
 		r.Get("/{teamId}", d.Teams.Get)
 		r.Patch("/{teamId}", d.Teams.Update)
 		r.Delete("/{teamId}", d.Teams.Delete)
+		r.Get("/{teamId}/marker-stats", d.Teams.MarkerStats)
 	})
 
 	r.Route("/robots", func(r chi.Router) {

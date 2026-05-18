@@ -155,6 +155,28 @@ export interface paths {
         patch: operations["updateTeam"];
         trace?: never;
     };
+    "/teams/{teamId}/marker-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: components["parameters"]["TeamId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * チーム配下 Run の Marker カテゴリ別件数
+         * @description 対戦相手スカウト用。Phase 2 のマッチアップビューで使う。
+         */
+        get: operations["getTeamMarkerStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/robots": {
         parameters: {
             query?: never;
@@ -1064,6 +1086,13 @@ export interface components {
             data: components["schemas"]["Marker"][];
             pagination: components["schemas"]["Pagination"];
         };
+        TeamMarkerStats: {
+            /** Format: uuid */
+            teamId: string;
+            success: number;
+            failure: number;
+            note: number;
+        };
         Tournament: {
             /** Format: uuid */
             id: string;
@@ -1602,6 +1631,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Team"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getTeamMarkerStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: components["parameters"]["TeamId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMarkerStats"];
                 };
             };
             404: components["responses"]["NotFound"];

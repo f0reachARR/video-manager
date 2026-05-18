@@ -279,6 +279,34 @@ export const useDeleteDevice = () => {
 export const useTeams = () =>
   useQuery({ queryKey: queryKeys.teams, queryFn: () => teamsApi.list({ limit: 200 }) });
 
+export const useTeam = (id: string | null | undefined) =>
+  useQuery({
+    queryKey: ["teams", "detail", id ?? ""] as const,
+    queryFn: () => teamsApi.get(id as string),
+    enabled: !!id,
+  });
+
+export const useTeamMarkerStats = (id: string | null | undefined) =>
+  useQuery({
+    queryKey: ["teams", "marker-stats", id ?? ""] as const,
+    queryFn: () => teamsApi.markerStats(id as string),
+    enabled: !!id,
+  });
+
+export const useMatch = (id: string | null | undefined) =>
+  useQuery({
+    queryKey: ["matches", "detail", id ?? ""] as const,
+    queryFn: () => matchesApi.get(id as string),
+    enabled: !!id,
+  });
+
+export const useTournament = (id: string | null | undefined) =>
+  useQuery({
+    queryKey: ["tournaments", "detail", id ?? ""] as const,
+    queryFn: () => tournamentsApi.get(id as string),
+    enabled: !!id,
+  });
+
 export const useCreateTeam = () => {
   const qc = useQueryClient();
   return useMutation({

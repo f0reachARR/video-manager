@@ -18,6 +18,7 @@ export type Team = components["schemas"]["Team"];
 export type CreateTeamRequest = components["schemas"]["CreateTeamRequest"];
 export type UpdateTeamRequest = components["schemas"]["UpdateTeamRequest"];
 export type TeamList = components["schemas"]["TeamList"];
+export type TeamMarkerStats = components["schemas"]["TeamMarkerStats"];
 
 export type Robot = components["schemas"]["Robot"];
 export type CreateRobotRequest = components["schemas"]["CreateRobotRequest"];
@@ -194,6 +195,8 @@ export const teamsApi = {
     request<Team>(`/teams/${id}`, { method: "PATCH", json: body }),
   remove: (id: string) =>
     request<void>(`/teams/${id}`, { method: "DELETE" }),
+  markerStats: (id: string) =>
+    request<TeamMarkerStats>(`/teams/${id}/marker-stats`),
 };
 
 // ---- Robots ----

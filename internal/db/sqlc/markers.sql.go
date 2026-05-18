@@ -11,6 +11,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countMarkersByTeamAndCategory = `-- name: CountMarkersByTeamAndCategory :many
+SELECT m.category, COUNT(*) AS count
+FROM markers m
+JOIN runs r ON r.id = m.run_id
+WHERE r.team_id = $1
+GROUP BY m.category
+`
+
+type CountMarkersByTeamAndCategoryRow struct {
+	Category MarkerCategory
+	Count    int64
+}
+
+func (q *Queries) CountMarkersByTeamAndCategory(ctx context.Context, teamID pgtype.UUID) ([]CountMarkersByTeamAndCategoryRow, error) {
+	rows, err := q.db.Query(ctx, countMarkersByTeamAndCategory, teamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountMarkersByTeamAndCategoryRow
+	for rows.Next() {
+		var i CountMarkersByTeamAndCategoryRow
+		if err := rows.Scan(&i.Category, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createMarker = `-- name: CreateMarker :one
 INSERT INTO markers (run_id, author_id, run_offset_sec, label, category)
 VALUES ($1, $2, $3, $4, $5)

@@ -11,11 +11,11 @@ import {
 } from "@mantine/core";
 import { DateTimePicker } from "@mantine/dates";
 import { useDisclosure } from "@mantine/hooks";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { ResourcePage } from "../components/ResourcePage";
-import type { Match } from "../lib/api/client";
+import { ResourcePage } from "../../components/ResourcePage";
+import type { Match } from "../../lib/api/client";
 import {
   useCreateMatch,
   useDeleteMatch,
@@ -23,11 +23,11 @@ import {
   useTeams,
   useTournaments,
   useUpdateMatch,
-} from "../lib/queries";
+} from "../../lib/queries";
 
 type MatchesSearch = { tournamentId?: string };
 
-export const Route = createFileRoute("/matches")({
+export const Route = createFileRoute("/matches/")({
   component: MatchesPage,
   validateSearch: (search: Record<string, unknown>): MatchesSearch => ({
     tournamentId: typeof search.tournamentId === "string" ? search.tournamentId : undefined,
@@ -36,7 +36,8 @@ export const Route = createFileRoute("/matches")({
 
 function MatchesPage() {
   const { tournamentId } = Route.useSearch();
-  const navigate = Route.useNavigate();
+  const searchNavigate = Route.useNavigate();
+  const navigate = useNavigate();
   const tournaments = useTournaments();
   const teams = useTeams();
   const matches = useMatches(tournamentId ? { tournamentId } : {});
@@ -67,7 +68,7 @@ function MatchesPage() {
             placeholder="Tournament で絞り込み"
             data={(tournaments.data?.data ?? []).map((t) => ({ value: t.id, label: t.name }))}
             value={tournamentId ?? null}
-            onChange={(v) => navigate({ search: { tournamentId: v ?? undefined } })}
+            onChange={(v) => searchNavigate({ search: { tournamentId: v ?? undefined } })}
             clearable
             w={260}
             size="sm"
@@ -90,7 +91,11 @@ function MatchesPage() {
         </Table.Thead>
         <Table.Tbody>
           {list.map((m) => (
-            <Table.Tr key={m.id}>
+            <Table.Tr
+              key={m.id}
+              style={{ cursor: "pointer" }}
+              onClick={() => navigate({ to: "/matches/$matchId", params: { matchId: m.id } })}
+            >
               <Table.Td>
                 <Badge variant="light">{tournamentName(m.tournamentId)}</Badge>
               </Table.Td>
@@ -101,7 +106,7 @@ function MatchesPage() {
               </Table.Td>
               <Table.Td>{m.scheduledAt ? new Date(m.scheduledAt).toLocaleString() : "—"}</Table.Td>
               <Table.Td>{new Date(m.createdAt).toLocaleString()}</Table.Td>
-              <Table.Td>
+              <Table.Td onClick={(e) => e.stopPropagation()}>
                 <Group gap={4}>
                   <ActionIcon variant="subtle" onClick={() => setEditing(m)} aria-label="編集">
                     ✏️
