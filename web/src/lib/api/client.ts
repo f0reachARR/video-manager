@@ -47,6 +47,14 @@ export type SessionModeHint = components["schemas"]["SessionModeHint"];
 export type SessionCandidate = components["schemas"]["SessionCandidate"];
 export type SessionCandidateList = components["schemas"]["SessionCandidateList"];
 
+export type Run = components["schemas"]["Run"];
+export type CreateRunRequest = components["schemas"]["CreateRunRequest"];
+export type UpdateRunRequest = components["schemas"]["UpdateRunRequest"];
+export type RunList = components["schemas"]["RunList"];
+export type RunVideo = components["schemas"]["RunVideo"];
+export type AddRunVideoRequest = components["schemas"]["AddRunVideoRequest"];
+export type UpdateRunVideoRequest = components["schemas"]["UpdateRunVideoRequest"];
+
 const BASE_URL = "/api";
 
 export class ApiError extends Error {
@@ -270,4 +278,43 @@ export const sessionsApi = {
     request<void>(`/sessions/${id}`, { method: "DELETE" }),
   candidates: (videoId: string) =>
     request<SessionCandidateList>(`/sessions/candidates${qs({ videoId })}`),
+};
+
+// ---- Runs ----
+export type RunListParams = PageParams & {
+  sessionId?: string;
+  teamId?: string;
+  robotId?: string;
+  scenarioId?: string;
+  matchId?: string;
+};
+export const runsApi = {
+  list: (p: RunListParams = {}) =>
+    request<RunList>(
+      `/runs${qs({
+        cursor: p.cursor,
+        limit: p.limit,
+        sessionId: p.sessionId,
+        teamId: p.teamId,
+        robotId: p.robotId,
+        scenarioId: p.scenarioId,
+        matchId: p.matchId,
+      })}`,
+    ),
+  get: (id: string) => request<Run>(`/runs/${id}`),
+  create: (body: CreateRunRequest) =>
+    request<Run>("/runs", { method: "POST", json: body }),
+  update: (id: string, body: UpdateRunRequest) =>
+    request<Run>(`/runs/${id}`, { method: "PATCH", json: body }),
+  remove: (id: string) =>
+    request<void>(`/runs/${id}`, { method: "DELETE" }),
+  addVideo: (runId: string, body: AddRunVideoRequest) =>
+    request<RunVideo>(`/runs/${runId}/videos`, { method: "POST", json: body }),
+  updateVideo: (runId: string, runVideoId: string, body: UpdateRunVideoRequest) =>
+    request<RunVideo>(`/runs/${runId}/videos/${runVideoId}`, {
+      method: "PATCH",
+      json: body,
+    }),
+  removeVideo: (runId: string, runVideoId: string) =>
+    request<void>(`/runs/${runId}/videos/${runVideoId}`, { method: "DELETE" }),
 };

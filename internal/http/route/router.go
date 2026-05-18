@@ -20,6 +20,7 @@ type Deps struct {
 	Tags           *handler.Tags
 	Sessions       *handler.Sessions
 	Videos         *handler.Videos
+	Runs           *handler.Runs
 	Uploads        *handler.Uploads
 	AllowedOrigins []string
 }
@@ -108,6 +109,17 @@ func New(d Deps) http.Handler {
 		r.Patch("/{videoId}", d.Videos.Update)
 		r.Delete("/{videoId}", d.Videos.Delete)
 		r.Get("/{videoId}/playback-url", d.Videos.PlaybackURL)
+	})
+
+	r.Route("/runs", func(r chi.Router) {
+		r.Get("/", d.Runs.List)
+		r.Post("/", d.Runs.Create)
+		r.Get("/{runId}", d.Runs.Get)
+		r.Patch("/{runId}", d.Runs.Update)
+		r.Delete("/{runId}", d.Runs.Delete)
+		r.Post("/{runId}/videos", d.Runs.AddVideo)
+		r.Patch("/{runId}/videos/{runVideoId}", d.Runs.UpdateVideo)
+		r.Delete("/{runId}/videos/{runVideoId}", d.Runs.RemoveVideo)
 	})
 
 	r.Post("/uploads/tus-hook", d.Uploads.TusHook)
