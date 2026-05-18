@@ -40,7 +40,7 @@
 3. GoPro の GPMF メタデータ
 4. ファイルの mtime（最後の砦、信頼度低）
 
-各 Video には `recorded_at` と信頼度 (`high` / `medium` / `low` / `manual`) を保持。
+各 Video には `recorded_at` を保持する。抽出できなかった場合や後から修正された場合は、運用上ユーザーが手で直す前提とする。
 
 ### 3.2 Session（撮影セッション）
 
@@ -78,10 +78,12 @@
 
 - 機体（Robot、バージョン管理含む）
 - 走行課題（Scenario）
-- 結果（成功・部分成功・失敗）+ タイム / スコア
+- タイム / スコア
 - 操縦者・撮影者（User）
 - タグ（自由付与）
 - メモ
+
+成否は単一の enum で扱わず、Marker（成功・失敗・note などのカテゴリ）と memo、タグの組み合わせで表現する。
 
 ### 3.4 Marker（時刻つきコメント）
 
@@ -207,7 +209,6 @@ erDiagram
         uuid uploader_id FK
         string storage_key
         timestamp recorded_at
-        enum recorded_at_confidence "high | medium | low | manual"
         int duration_sec
         int time_offset_sec "individual override"
     }
@@ -221,7 +222,6 @@ erDiagram
         uuid match_id FK "nullable"
         timestamp started_at
         timestamp ended_at
-        enum result "success | partial | failure"
         float score "nullable"
         text memo
     }

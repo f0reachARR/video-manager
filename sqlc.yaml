@@ -12,3 +12,8 @@ sql:
         emit_pointers_for_null_types: true
         emit_prepared_queries: false
         emit_interface: true
+        emit_exact_table_names: false
+        rename:
+          session_mode_hint: SessionModeHint
+          marker_category: MarkerCategory
+          annotation_type: AnnotationType

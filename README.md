@@ -19,7 +19,8 @@ cp .env.example .env
 pnpm install
 ./scripts/gen-api-client.sh   # OpenAPI から TS 型を生成
 docker compose up -d
-./scripts/migrate.sh up        # users テーブルを作成
+./scripts/migrate.sh up        # 初期スキーマを適用
+./scripts/seed-dev.sh          # User / Device / Robot / Scenario / Tag を投入（冪等）
 ./scripts/dev.sh               # Vite (5173) + Go API (8080) を起動
 ```
 
@@ -42,7 +43,8 @@ docker compose up -d
 | --- | --- |
 | `scripts/dev.sh` | infra コンテナ起動 → web dev + Go API を foreground 起動 |
 | `scripts/migrate.sh` | `go run` 経由で `golang-migrate` を呼ぶ薄いラッパー |
-| `scripts/gen-sqlc.sh` | `internal/db/query/*.sql` から sqlc コード生成（§2 で query 追加後） |
+| `scripts/gen-sqlc.sh` | `internal/db/query/*.sql` から `internal/db/sqlc/` に sqlc コード生成 |
+| `scripts/seed-dev.sh` | `cmd/seed-dev` を実行してマスタの最小データを投入（冪等） |
 | `scripts/lint-openapi.sh` | `docs/api/openapi.yaml` を Redocly で検証 |
 | `scripts/gen-api-client.sh` | OpenAPI から `web/src/lib/api/generated.ts` を生成 |
 
@@ -70,8 +72,8 @@ docker compose up -d
 
 ## 次のステップ
 
-[spec-devflow.md](spec-devflow.md) §2「初期 DB スキーマ」へ進む。
+[spec-devflow.md](spec-devflow.md) §3「API 契約を決める」へ進む。
 
-- 主要テーブル（sessions / videos / runs / run_videos / markers ほか）を migration として追加
-- `internal/db/query/*.sql` を書いて sqlc 生成
-- `internal/domain` / `internal/service` を立ち上げる
+- `docs/api/openapi.yaml` に Phase 1 の主要リソース（sessions / videos / runs / markers）を追加
+- 生成スクリプトを通して TS 型を更新
+- Go 側 handler / service を順に立ち上げる
