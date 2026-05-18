@@ -79,6 +79,19 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  hocuspocus:
+    build:
+      context: ./hocuspocus
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-video_manager}?sslmode=disable
+      HOCUSPOCUS_PORT: "1234"
+    ports:
+      - "${HOCUSPOCUS_PORT:-1234}:1234"
+
 volumes:
   postgres-data:
   minio-data:

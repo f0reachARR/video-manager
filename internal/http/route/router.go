@@ -25,6 +25,7 @@ type Deps struct {
 	Tournaments    *handler.Tournaments
 	Matches        *handler.Matches
 	Annotations    *handler.Annotations
+	ScoutingNotes  *handler.ScoutingNotes
 	WS             *handler.WS
 	Uploads        *handler.Uploads
 	AllowedOrigins []string
@@ -149,6 +150,13 @@ func New(d Deps) http.Handler {
 		r.Get("/{matchId}", d.Matches.Get)
 		r.Patch("/{matchId}", d.Matches.Update)
 		r.Delete("/{matchId}", d.Matches.Delete)
+		r.Get("/{matchId}/scouting-notes", d.ScoutingNotes.ListByMatch)
+		r.Post("/{matchId}/scouting-notes", d.ScoutingNotes.Create)
+	})
+
+	r.Route("/scouting-notes", func(r chi.Router) {
+		r.Get("/{noteId}", d.ScoutingNotes.Get)
+		r.Delete("/{noteId}", d.ScoutingNotes.Delete)
 	})
 
 	r.Route("/markers", func(r chi.Router) {

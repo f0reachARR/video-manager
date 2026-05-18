@@ -1,0 +1,19 @@
+{
+  "name": "video-manager-hocuspocus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hocuspocus server for ScoutingNote collaborative editing.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@hocuspocus/server": "^3.1.4",
+    "@hocuspocus/extension-database": "^3.1.4",
+    "pg": "^8.13.1",
+    "yjs": "^13.6.20"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

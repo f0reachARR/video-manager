@@ -60,6 +60,8 @@ tags:
     description: 試合 (Phase 2)
   - name: annotations
     description: Video 単位の永続描画 (Phase 2)
+  - name: scouting-notes
+    description: 対戦相手スカウティングノート (Phase 2、本文は Hocuspocus 経由)
 
 paths:
   /health:
@@ -894,6 +896,77 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /matches/{matchId}/scouting-notes:
+    parameters:
+      - $ref: "#/components/parameters/MatchIdPath"
+    get:
+      tags: [scouting-notes]
+      operationId: listScoutingNotes
+      summary: Match 配下の ScoutingNote 一覧
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoutingNoteList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [scouting-notes]
+      operationId: createScoutingNote
+      summary: ScoutingNote を新規作成
+      description: |
+        本文は Hocuspocus が WS 経由で更新する。同じ (matchId, targetTeamId)
+        の組が既に存在する場合は 409 を返す。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScoutingNoteRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoutingNote"
+        "409":
+          description: 既に存在する
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /scouting-notes/{noteId}:
+    parameters:
+      - $ref: "#/components/parameters/ScoutingNoteId"
+    get:
+      tags: [scouting-notes]
+      operationId: getScoutingNote
+      summary: ScoutingNote 取得 (メタデータ + plain_text のみ)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoutingNote"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [scouting-notes]
+      operationId: deleteScoutingNote
+      summary: ScoutingNote 削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /annotations/{annotationId}:
     parameters:
       - $ref: "#/components/parameters/AnnotationId"
@@ -1588,6 +1661,13 @@ components:
         format: uuid
     AnnotationId:
       name: annotationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ScoutingNoteId:
+      name: noteId
       in: path
       required: true
       schema:
@@ -2597,3 +2677,42 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Annotation"
+
+    # ---------- ScoutingNote (Phase 2) ----------
+    ScoutingNote:
+      type: object
+      required: [id, matchId, targetTeamId, plainText, updatedAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        matchId:
+          type: string
+          format: uuid
+        targetTeamId:
+          type: string
+          format: uuid
+        plainText:
+          type: string
+          description: Hocuspocus が yjs ドキュメントから派生して書き込む検索用テキスト
+        updatedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    CreateScoutingNoteRequest:
+      type: object
+      required: [targetTeamId]
+      properties:
+        targetTeamId:
+          type: string
+          format: uuid
+    ScoutingNoteList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoutingNote"

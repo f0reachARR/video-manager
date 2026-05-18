@@ -53,7 +53,8 @@ func setupEnv(t *testing.T) *testEnv {
 		Markers:     &handler.Markers{Q: q},
 		Tournaments: &handler.Tournaments{Q: q},
 		Matches:     &handler.Matches{Q: q},
-		Annotations: &handler.Annotations{Q: q},
+		Annotations:   &handler.Annotations{Q: q},
+		ScoutingNotes: &handler.ScoutingNotes{Q: q},
 		// Videos handler depends on a Storage client; not exercised in these tests.
 		Videos:  &handler.Videos{Q: q},
 		Uploads: &handler.Uploads{Q: q, Worker: enq},
