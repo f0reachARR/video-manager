@@ -55,6 +55,12 @@ export type RunVideo = components["schemas"]["RunVideo"];
 export type AddRunVideoRequest = components["schemas"]["AddRunVideoRequest"];
 export type UpdateRunVideoRequest = components["schemas"]["UpdateRunVideoRequest"];
 
+export type Marker = components["schemas"]["Marker"];
+export type MarkerList = components["schemas"]["MarkerList"];
+export type MarkerCategory = components["schemas"]["MarkerCategory"];
+export type CreateMarkerRequest = components["schemas"]["CreateMarkerRequest"];
+export type UpdateMarkerRequest = components["schemas"]["UpdateMarkerRequest"];
+
 const BASE_URL = "/api";
 
 export class ApiError extends Error {
@@ -317,4 +323,25 @@ export const runsApi = {
     }),
   removeVideo: (runId: string, runVideoId: string) =>
     request<void>(`/runs/${runId}/videos/${runVideoId}`, { method: "DELETE" }),
+};
+
+// ---- Markers ----
+export type MarkerListParams = PageParams & {
+  category?: MarkerCategory[];
+};
+export const markersApi = {
+  list: (runId: string, p: MarkerListParams = {}) =>
+    request<MarkerList>(
+      `/runs/${runId}/markers${qs({
+        cursor: p.cursor,
+        limit: p.limit,
+        category: p.category && p.category.length > 0 ? p.category.join(",") : undefined,
+      })}`,
+    ),
+  create: (runId: string, body: CreateMarkerRequest) =>
+    request<Marker>(`/runs/${runId}/markers`, { method: "POST", json: body }),
+  update: (markerId: string, body: UpdateMarkerRequest) =>
+    request<Marker>(`/markers/${markerId}`, { method: "PATCH", json: body }),
+  remove: (markerId: string) =>
+    request<void>(`/markers/${markerId}`, { method: "DELETE" }),
 };

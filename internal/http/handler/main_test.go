@@ -50,6 +50,7 @@ func setupEnv(t *testing.T) *testEnv {
 		Tags:      &handler.Tags{Q: q},
 		Sessions:  &handler.Sessions{Q: q},
 		Runs:      &handler.Runs{Q: q},
+		Markers:   &handler.Markers{Q: q},
 		// Videos handler depends on a Storage client; not exercised in these tests.
 		Videos:  &handler.Videos{Q: q},
 		Uploads: &handler.Uploads{Q: q, Worker: enq},
@@ -60,6 +61,10 @@ func setupEnv(t *testing.T) *testEnv {
 // do executes a request against the test router and decodes the JSON body into
 // out (if non-nil). It returns the recorder for status/headers assertions.
 func (e *testEnv) do(t *testing.T, method, path string, in any, out any) *httptest.ResponseRecorder {
+	return e.doWithHeaders(t, method, path, in, out, nil)
+}
+
+func (e *testEnv) doWithHeaders(t *testing.T, method, path string, in any, out any, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	var body io.Reader
 	if in != nil {
@@ -72,6 +77,9 @@ func (e *testEnv) do(t *testing.T, method, path string, in any, out any) *httpte
 	req := httptest.NewRequest(method, path, body)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	rec := httptest.NewRecorder()
 	e.Router.ServeHTTP(rec, req)

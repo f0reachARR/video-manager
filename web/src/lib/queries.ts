@@ -15,6 +15,11 @@ import {
   type VideoListParams,
   runsApi,
   videosApi,
+  markersApi,
+  type CreateMarkerRequest,
+  type MarkerCategory,
+  type MarkerListParams,
+  type UpdateMarkerRequest,
   type CreateDeviceRequest,
   type CreateRobotRequest,
   type CreateScenarioRequest,
@@ -51,6 +56,8 @@ export const queryKeys = {
   videos: (params: VideoListParams = {}) => ["videos", params] as const,
   runs: (params: RunListParams = {}) => ["runs", params] as const,
   run: (id: string) => ["runs", "detail", id] as const,
+  markers: (runId: string, params: MarkerListParams = {}) =>
+    ["markers", runId, params] as const,
 };
 
 // ---- Runs ----
@@ -125,6 +132,44 @@ export const useRemoveRunVideo = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
   });
 };
+
+// ---- Markers ----
+export const useMarkers = (
+  runId: string | null | undefined,
+  params: MarkerListParams = {},
+) =>
+  useQuery({
+    queryKey: queryKeys.markers(runId ?? "", params),
+    queryFn: () => markersApi.list(runId as string, { limit: 200, ...params }),
+    enabled: !!runId,
+  });
+
+export const useCreateMarker = (runId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateMarkerRequest) => markersApi.create(runId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["markers", runId] }),
+  });
+};
+
+export const useUpdateMarker = (runId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateMarkerRequest }) =>
+      markersApi.update(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["markers", runId] }),
+  });
+};
+
+export const useDeleteMarker = (runId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => markersApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["markers", runId] }),
+  });
+};
+
+export const markerCategories: MarkerCategory[] = ["success", "failure", "note"];
 
 // ---- Videos ----
 export const useVideos = (params: VideoListParams = {}) =>

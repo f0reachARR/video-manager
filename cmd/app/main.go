@@ -88,6 +88,7 @@ func run() error {
 		Sessions:       &handler.Sessions{Q: q},
 		Videos:         &handler.Videos{Q: q, Storage: store},
 		Runs:           &handler.Runs{Q: q},
+		Markers:        &handler.Markers{Q: q},
 		Uploads:        &handler.Uploads{Q: q, Worker: workers},
 		AllowedOrigins: cfg.AllowedOrigins,
 	})

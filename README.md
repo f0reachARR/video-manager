@@ -2,8 +2,8 @@
 
 ロボコン テストラン動画整理アプリ。詳細は [spec.md](spec.md) を参照。
 
-このリポジトリは現在 [spec-devflow.md](spec-devflow.md) §7「Run とマルチアングルの核」までを実装した段階。
-Marker・検索などの本機能は §8 以降で順次追加する。
+このリポジトリは現在 [spec-devflow.md](spec-devflow.md) §8「Marker を実装する」までを実装した段階。
+検索などの本機能は §9 以降で順次追加する。
 
 ホストに `ffprobe` (FFmpeg) が必要 (`brew install ffmpeg` 等)。
 
@@ -88,8 +88,8 @@ docker compose up -d postgres        # 既に起動済みなら不要
 
 ## 次のステップ
 
-[spec-devflow.md](spec-devflow.md) §8「Marker を実装する」へ進む。
+[spec-devflow.md](spec-devflow.md) §9「検索・フィルタを Phase 1 レベルまで作る」へ進む。
 
-- Run 詳細画面のタイムラインに Marker を打つ UI を追加
-- Marker の category / label / run_offset_sec を編集できるようにする
-- 再生中の現在時刻と Marker のジャンプを連動させる
+- Run / Video / Session を期間・Robot・Scenario・tags で絞り込む API
+- Marker category による Run 検索
+- pg_trgm を活かした memo 全文検索の index 設計
