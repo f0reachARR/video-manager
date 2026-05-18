@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 const WS_BASE: string =
   (import.meta.env.VITE_WS_BASE as string | undefined) ??
@@ -69,24 +69,40 @@ export function useTopicSubscription(
 /**
  * useWebSocketPublisher exposes a function to send JSON-serializable messages
  * to a server topic via WebSocket. The connection is kept alive while the
- * caller is mounted. Useful for live ink and similar transient publishes.
+ * caller is mounted. An optional onMessage handler turns the socket into a
+ * bidirectional channel (avoids opening a separate subscribe socket).
  */
-export function useWebSocketPublisher(path: string | null | undefined) {
+export function useWebSocketPublisher(
+  path: string | null | undefined,
+  onMessage?: Handler,
+) {
   const ref = useRef<WebSocket | null>(null);
+  const handlerRef = useRef(onMessage);
+  handlerRef.current = onMessage;
   useEffect(() => {
     if (!path) return;
     const url = `${WS_BASE}/api${path}`;
     const ws = new WebSocket(url);
     ref.current = ws;
+    ws.onmessage = (e) => {
+      const fn = handlerRef.current;
+      if (!fn) return;
+      try {
+        const data = JSON.parse(e.data);
+        fn(data);
+      } catch {
+        // ignore non-JSON frames
+      }
+    };
     return () => {
       ws.close();
       ref.current = null;
     };
   }, [path]);
 
-  return (msg: unknown) => {
+  return useCallback((msg: unknown) => {
     const ws = ref.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify(msg));
-  };
+  }, []);
 }

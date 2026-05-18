@@ -31,16 +31,17 @@ func (h *WS) acceptOptions() *websocket.AcceptOptions {
 	return opts
 }
 
-// SubscribeRun handles GET /ws/run/{runId}. The connection receives JSON
-// events published to "run:<runId>". The client may not send messages — any
-// inbound frame closes the connection cleanly.
+// SubscribeRun handles GET /ws/run/{runId}. The connection both receives and
+// publishes JSON events on "run:<runId>". Receive side is used for Marker
+// realtime + playback-position sync; publish side is used by viewers to share
+// their playback state with other viewers of the same Run.
 func (h *WS) SubscribeRun(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runId")
 	if _, err := parseUUIDParam(runID); err != nil {
 		badRequest(w, "invalid runId")
 		return
 	}
-	h.serveSubscribe(w, r, "run:"+runID, false)
+	h.serveSubscribe(w, r, "run:"+runID, true)
 }
 
 // SubscribeVideo handles GET /ws/video/{videoId}. Bidirectional: clients can

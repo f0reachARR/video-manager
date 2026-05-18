@@ -49,7 +49,20 @@ import {
   useVideos,
 } from "../../lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
-import { useTopicSubscription } from "../../lib/realtime";
+import { useTopicSubscription, useWebSocketPublisher } from "../../lib/realtime";
+import { RunVideoOverlay, type OverlayMode } from "../../components/RunVideoOverlay";
+
+// Random per-tab id so we can distinguish our own playback.sync echoes from
+// other viewers' messages.
+const SENDER_ID = `v_${Math.random().toString(36).slice(2, 10)}`;
+
+type PlaybackSyncMsg = {
+  type: "playback.sync";
+  senderId: string;
+  tSec: number;
+  playing: boolean;
+  ts: number;
+};
 
 export const Route = createFileRoute("/runs/$runId")({
   component: RunDetailPage,
@@ -65,12 +78,17 @@ function RunDetailPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  // Subscribe to the Run's realtime topic. Every event triggers a markers
-  // refetch — simple invalidate keeps state authoritative without needing to
-  // diff marker mutations client-side. Reconnects also refetch.
+  // Subscribe to the Run's realtime topic. Marker events refetch the markers
+  // query; non-marker events (e.g. playback.sync from SyncPlayer) are ignored
+  // here. Reconnects also refetch.
   useTopicSubscription(
     `/ws/run/${runId}`,
-    () => qc.invalidateQueries({ queryKey: ["markers", runId] }),
+    (msg) => {
+      const m = msg as { type?: string };
+      if (typeof m.type === "string" && m.type.startsWith("marker.")) {
+        qc.invalidateQueries({ queryKey: ["markers", runId] });
+      }
+    },
     () => qc.invalidateQueries({ queryKey: ["markers", runId] }),
   );
   const [addVideoOpen, { open: openAddVideo, close: closeAddVideo }] = useDisclosure(false);
@@ -197,6 +215,39 @@ function SyncPlayer({
   const lastPlaybackTime = useRef<number>(0);
   const lastT = useRef<number>(0);
 
+  // Overlay (Annotation 追加 / ライブインク) — applies to the main angle.
+  const [overlayMode, setOverlayMode] = useState<OverlayMode>("off");
+  // Playback sync — independent from overlay mode. acceptSync controls whether
+  // *incoming* sync events nudge our playback. We always broadcast.
+  const [acceptSync, setAcceptSync] = useState(true);
+  const [lastSyncSender, setLastSyncSender] = useState<string | null>(null);
+
+  // Single bidirectional WS to /ws/run/{runId} for playback.sync messages.
+  // (Marker realtime uses a separate read-only subscription at the page level.)
+  const wsRef = useRef<{ playing: boolean; t: number }>({ playing: false, t: 0 });
+  wsRef.current = { playing, t };
+  const publishPlayback = useWebSocketPublisher(`/ws/run/${run.id}`, (msg) => {
+    const m = msg as Partial<PlaybackSyncMsg>;
+    if (m.type !== "playback.sync" || m.senderId === SENDER_ID) return;
+    if (!acceptSync) return;
+    if (typeof m.tSec !== "number" || typeof m.playing !== "boolean") return;
+    // Estimate one-way latency from sender's timestamp, then nudge if drift
+    // > 0.5s. Don't fight the sender on every tick — only catch up when we
+    // diverge meaningfully.
+    const latency = Math.max(0, (Date.now() - (m.ts ?? Date.now())) / 1000);
+    const targetT = m.tSec + (m.playing ? latency : 0);
+    const drift = Math.abs(targetT - wsRef.current.t);
+    setLastSyncSender(m.senderId ?? null);
+    if (drift > 0.5) {
+      // Don't re-broadcast a seek we just received — that would feedback-loop.
+      seek(Math.min(runDurationSec, Math.max(0, targetT)), { broadcast: false });
+    }
+    if (m.playing !== wsRef.current.playing) {
+      // Defer to togglePlay so video elements get .play()/.pause() correctly.
+      void applyExternalPlaying(m.playing);
+    }
+  });
+
   // Resolve playback URLs once per video id.
   useEffect(() => {
     let canceled = false;
@@ -298,13 +349,16 @@ function SyncPlayer({
     };
   }, [playing, mainAngleId, runDurationSec, videos]);
 
-  const seek = (newT: number) => {
+  const seek = (newT: number, opts: { broadcast?: boolean } = {}) => {
     lastT.current = newT;
     setT(newT);
     for (const v of videos) {
       const el = refs.current.get(v.id);
       if (!el) continue;
       el.currentTime = v.videoOffsetStartSec + newT;
+    }
+    if (opts.broadcast !== false) {
+      broadcastPlayback({ tSec: newT });
     }
   };
 
@@ -314,10 +368,60 @@ function SyncPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videos, registerSeek]);
 
+  const applyExternalPlaying = async (shouldPlay: boolean) => {
+    if (shouldPlay === wsRef.current.playing) return;
+    if (shouldPlay) {
+      await Promise.all(
+        videos.map(async (v) => {
+          const el = refs.current.get(v.id);
+          if (!el) return;
+          try {
+            await el.play();
+          } catch {
+            /* autoplay rejection */
+          }
+        }),
+      );
+      setPlaying(true);
+    } else {
+      for (const v of videos) refs.current.get(v.id)?.pause();
+      setPlaying(false);
+    }
+  };
+
+  const broadcastPlayback = (override?: { tSec?: number; playing?: boolean }) => {
+    publishPlayback({
+      type: "playback.sync",
+      senderId: SENDER_ID,
+      tSec: override?.tSec ?? wsRef.current.t,
+      playing: override?.playing ?? wsRef.current.playing,
+      ts: Date.now(),
+    } satisfies PlaybackSyncMsg);
+  };
+
+  // Clear the "他の視聴者から同期中" hint after a moment of silence so the
+  // badge reflects fresh activity, not stale state.
+  useEffect(() => {
+    if (!lastSyncSender) return;
+    const id = setTimeout(() => setLastSyncSender(null), 2000);
+    return () => clearTimeout(id);
+  }, [lastSyncSender]);
+
+  // Periodic broadcast while playing so late joiners catch up; on local seek /
+  // play / pause we always send immediately.
+  useEffect(() => {
+    if (!playing) return;
+    const id = setInterval(() => broadcastPlayback(), 500);
+    return () => clearInterval(id);
+    // broadcastPlayback closes over publishPlayback (stable) and reads via ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing]);
+
   const togglePlay = async () => {
     if (playing) {
       for (const v of videos) refs.current.get(v.id)?.pause();
       setPlaying(false);
+      broadcastPlayback({ playing: false });
       return;
     }
     // Sync to current t and play together.
@@ -338,6 +442,7 @@ function SyncPlayer({
       }),
     );
     setPlaying(true);
+    broadcastPlayback({ playing: true });
   };
 
   if (videos.length === 0) {
@@ -365,6 +470,7 @@ function SyncPlayer({
             <AngleVideo
               angle={mainAngle}
               isMain
+              overlayMode={overlayMode}
               registerRef={(el) => {
                 if (el) refs.current.set(mainAngle.rv.id, el);
                 else refs.current.delete(mainAngle.rv.id);
@@ -379,6 +485,7 @@ function SyncPlayer({
                 <AngleVideo
                   key={angle.rv.id}
                   angle={angle}
+                  overlayMode="off"
                   onSelectMain={() => setMainAngleId(angle.rv.id)}
                   registerRef={(el) => {
                     if (el) refs.current.set(angle.rv.id, el);
@@ -402,6 +509,43 @@ function SyncPlayer({
           </Stack>
         </Alert>
       )}
+
+      <Group gap="xs" wrap="wrap">
+        <Button
+          size="xs"
+          variant={overlayMode === "addPoint" ? "filled" : "default"}
+          color={overlayMode === "addPoint" ? "teal" : undefined}
+          onClick={() =>
+            setOverlayMode((m) => (m === "addPoint" ? "off" : "addPoint"))
+          }
+        >
+          {overlayMode === "addPoint" ? "クリックして配置..." : "📍 Annotation を追加"}
+        </Button>
+        <Button
+          size="xs"
+          variant={overlayMode === "liveInk" ? "filled" : "default"}
+          color={overlayMode === "liveInk" ? "grape" : undefined}
+          onClick={() =>
+            setOverlayMode((m) => (m === "liveInk" ? "off" : "liveInk"))
+          }
+        >
+          {overlayMode === "liveInk" ? "ライブインク中" : "✏️ ライブインク"}
+        </Button>
+        <Chip
+          checked={acceptSync}
+          onChange={setAcceptSync}
+          variant="light"
+          color="blue"
+          size="xs"
+        >
+          再生位置を同期 (受信)
+        </Chip>
+        {lastSyncSender && acceptSync && (
+          <Badge size="xs" color="blue" variant="dot">
+            他の視聴者から同期中
+          </Badge>
+        )}
+      </Group>
 
       <Group>
         <Button onClick={togglePlay} size="sm" variant={playing ? "outline" : "filled"}>
@@ -464,12 +608,21 @@ function AngleVideo({
   isMain,
   onSelectMain,
   registerRef,
+  overlayMode,
 }: {
   angle: LoadedAngle;
   isMain?: boolean;
   onSelectMain?: () => void;
   registerRef: (el: HTMLVideoElement | null) => void;
+  overlayMode: OverlayMode;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const setVideoEl = (el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    registerRef(el);
+  };
+
   return (
     <Card withBorder p="xs">
       <Stack gap={4}>
@@ -490,15 +643,32 @@ function AngleVideo({
             )}
           </Group>
         </Group>
-        <video
-          ref={registerRef}
-          src={angle.url}
-          muted={!isMain}
-          playsInline
-          style={{ width: "100%", maxHeight: isMain ? "60vh" : "150px", background: "#000" }}
+        <div
+          ref={containerRef}
+          style={{
+            position: "relative",
+            // Live ink mode hides the native controls to free up pointer space.
+            touchAction: isMain && overlayMode === "liveInk" ? "none" : undefined,
+          }}
         >
-          <track kind="captions" />
-        </video>
+          <video
+            ref={setVideoEl}
+            src={angle.url}
+            muted={!isMain}
+            playsInline
+            controls={isMain && overlayMode !== "liveInk"}
+            style={{ width: "100%", maxHeight: isMain ? "60vh" : "150px", background: "#000", display: "block" }}
+          >
+            <track kind="captions" />
+          </video>
+          <RunVideoOverlay
+            videoId={angle.rv.videoId}
+            videoRef={videoRef}
+            containerRef={containerRef}
+            mode={isMain ? overlayMode : "off"}
+            canEdit={!!isMain}
+          />
+        </div>
       </Stack>
     </Card>
   );
