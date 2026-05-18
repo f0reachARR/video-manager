@@ -96,6 +96,17 @@ function RunDetailPage() {
             {r.id}
           </Text>
         </Stack>
+        <Button
+          size="xs"
+          variant="default"
+          onClick={() => {
+            const url = `${window.location.origin}/share/runs/${r.id}`;
+            navigator.clipboard?.writeText(url).catch(() => {});
+            window.open(url, "_blank");
+          }}
+        >
+          🔗 共有リンクをコピー
+        </Button>
       </Group>
 
       <SyncPlayer

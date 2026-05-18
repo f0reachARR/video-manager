@@ -1,10 +1,11 @@
-import { AppShell, Group, NavLink, ScrollArea, Stack, Title } from "@mantine/core";
+import { AppShell, Box, Group, NavLink, ScrollArea, Stack, Title } from "@mantine/core";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   Link,
   Outlet,
   createRootRouteWithContext,
   useMatchRoute,
+  useRouterState,
 } from "@tanstack/react-router";
 
 import { CurrentUserPicker } from "../components/CurrentUserPicker";
@@ -31,6 +32,20 @@ const navItems = [
 ] as const;
 
 function RootLayout() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // /share/* は read-only 共有ビュー — AppShell サイドバー / ユーザピッカーを
+  // 隠して最低限のレイアウトだけ提供する。
+  if (pathname.startsWith("/share/")) {
+    return (
+      <Box p="md">
+        <Outlet />
+      </Box>
+    );
+  }
+  return <AuthenticatedLayout />;
+}
+
+function AuthenticatedLayout() {
   const matchRoute = useMatchRoute();
   return (
     <AppShell

@@ -97,6 +97,47 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
     }
   };
 
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const exportPng = async () => {
+    setExportError(null);
+    const el = videoRef.current;
+    if (!el || !el.videoWidth) {
+      setExportError("動画がまだ準備中です");
+      return;
+    }
+    const w = el.videoWidth;
+    const h = el.videoHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    try {
+      ctx.drawImage(el, 0, 0, w, h);
+    } catch (e) {
+      setExportError("動画フレームの取得に失敗 (MinIO CORS 設定が必要かも): " + String(e));
+      return;
+    }
+    // Draw visible annotations in source-pixel coords.
+    for (const a of visible) {
+      drawAnnotation(ctx, a, w, h);
+    }
+    let dataUrl: string;
+    try {
+      dataUrl = canvas.toDataURL("image/png");
+    } catch (e) {
+      setExportError("PNG 化に失敗 (CORS タインテッド): " + String(e));
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = `video-${video.id}-${Math.round(el.currentTime * 10) / 10}s.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
   return (
     <Stack>
       {error && <Alert color="red">{error}</Alert>}
@@ -114,6 +155,7 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
             ref={videoRef}
             src={url}
             controls
+            crossOrigin="anonymous"
             style={{ width: "100%", maxHeight: "60vh", display: "block" }}
           >
             <track kind="captions" />
@@ -160,7 +202,15 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
             ユーザ未選択: authorId は null になります
           </Text>
         )}
+        <Button size="xs" variant="default" ml="auto" onClick={exportPng}>
+          🖼 PNG エクスポート
+        </Button>
       </Group>
+      {exportError && (
+        <Alert color="orange" onClose={() => setExportError(null)} withCloseButton>
+          {exportError}
+        </Alert>
+      )}
 
       <AnnotationTable
         annotations={ann.data?.data ?? []}
@@ -170,6 +220,50 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
       />
     </Stack>
   );
+}
+
+function drawAnnotation(
+  ctx: CanvasRenderingContext2D,
+  a: Annotation,
+  w: number,
+  h: number,
+) {
+  const geom = a.geometry as Record<string, number>;
+  switch (a.type) {
+    case "point": {
+      const x = Number(geom.x ?? 0) * w;
+      const y = Number(geom.y ?? 0) * h;
+      ctx.fillStyle = "rgba(255, 200, 0, 0.8)";
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x, y, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      if (a.label) {
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.font = `${Math.max(14, h * 0.025)}px sans-serif`;
+        ctx.fillText(a.label, x + 14, y + 6);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(a.label, x + 12, y + 4);
+      }
+      return;
+    }
+    case "rect": {
+      const x = Number(geom.x ?? 0) * w;
+      const y = Number(geom.y ?? 0) * h;
+      const rw = Number(geom.w ?? 0) * w;
+      const rh = Number(geom.h ?? 0) * h;
+      ctx.fillStyle = "rgba(255, 80, 80, 0.15)";
+      ctx.strokeStyle = "rgba(255, 80, 80, 0.9)";
+      ctx.lineWidth = 3;
+      ctx.fillRect(x, y, rw, rh);
+      ctx.strokeRect(x, y, rw, rh);
+      return;
+    }
+    default:
+      return;
+  }
 }
 
 function AnnotationOverlay({ a }: { a: Annotation }) {
