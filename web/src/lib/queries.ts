@@ -15,6 +15,8 @@ import {
   type VideoListParams,
   runsApi,
   videosApi,
+  searchApi,
+  type SearchRunsParams,
   markersApi,
   type CreateMarkerRequest,
   type MarkerCategory,
@@ -132,6 +134,13 @@ export const useRemoveRunVideo = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
   });
 };
+
+// ---- Search ----
+export const useSearchRuns = (params: SearchRunsParams) =>
+  useQuery({
+    queryKey: ["search", "runs", params] as const,
+    queryFn: () => searchApi.runs({ limit: 50, ...params }),
+  });
 
 // ---- Markers ----
 export const useMarkers = (

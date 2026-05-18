@@ -159,6 +159,90 @@ func (q *Queries) ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]R
 	return items, nil
 }
 
+const searchRuns = `-- name: SearchRuns :many
+SELECT r.id, r.session_id, r.team_id, r.robot_id, r.scenario_id, r.match_id, r.started_at, r.ended_at, r.score, r.memo, r.created_at
+FROM runs r
+WHERE
+  ($2::timestamptz IS NULL OR r.started_at >= $2::timestamptz)
+  AND ($3::timestamptz IS NULL OR r.started_at < $3::timestamptz)
+  AND ($4::uuid IS NULL OR r.robot_id = $4::uuid)
+  AND ($5::uuid IS NULL OR r.scenario_id = $5::uuid)
+  AND ($6::text IS NULL OR r.memo ILIKE '%' || $6::text || '%')
+  AND (COALESCE(array_length($7::text[], 1), 0) = 0
+       OR EXISTS (
+         SELECT 1 FROM markers m
+         WHERE m.run_id = r.id
+           AND m.category::text = ANY($7::text[])
+       ))
+  AND ($8::int = 0 OR (
+         SELECT count(DISTINCT tag_id) FROM run_tags
+         WHERE run_id = r.id
+           AND tag_id = ANY($9::uuid[])
+       ) = $8::int)
+  AND ($10::timestamptz IS NULL
+       OR (r.started_at, r.id) < ($10::timestamptz, $11::uuid))
+ORDER BY r.started_at DESC, r.id DESC
+LIMIT $1
+`
+
+type SearchRunsParams struct {
+	Limit            int32
+	From             pgtype.Timestamptz
+	To               pgtype.Timestamptz
+	RobotID          pgtype.UUID
+	ScenarioID       pgtype.UUID
+	MemoQ            *string
+	MarkerCategories []string
+	TagCount         int32
+	TagIds           []pgtype.UUID
+	CursorStartedAt  pgtype.Timestamptz
+	CursorID         pgtype.UUID
+}
+
+func (q *Queries) SearchRuns(ctx context.Context, arg SearchRunsParams) ([]Run, error) {
+	rows, err := q.db.Query(ctx, searchRuns,
+		arg.Limit,
+		arg.From,
+		arg.To,
+		arg.RobotID,
+		arg.ScenarioID,
+		arg.MemoQ,
+		arg.MarkerCategories,
+		arg.TagCount,
+		arg.TagIds,
+		arg.CursorStartedAt,
+		arg.CursorID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Run
+	for rows.Next() {
+		var i Run
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.TeamID,
+			&i.RobotID,
+			&i.ScenarioID,
+			&i.MatchID,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.Score,
+			&i.Memo,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateRun = `-- name: UpdateRun :one
 UPDATE runs
 SET

@@ -325,6 +325,36 @@ export const runsApi = {
     request<void>(`/runs/${runId}/videos/${runVideoId}`, { method: "DELETE" }),
 };
 
+// ---- Search ----
+export type SearchRunsParams = PageParams & {
+  from?: string;
+  to?: string;
+  robotId?: string;
+  scenarioId?: string;
+  tagIds?: string[];
+  markerCategories?: MarkerCategory[];
+  q?: string;
+};
+export const searchApi = {
+  runs: (p: SearchRunsParams = {}) =>
+    request<RunList>(
+      `/search/runs${qs({
+        cursor: p.cursor,
+        limit: p.limit,
+        from: p.from,
+        to: p.to,
+        robotId: p.robotId,
+        scenarioId: p.scenarioId,
+        tagIds: p.tagIds && p.tagIds.length > 0 ? p.tagIds.join(",") : undefined,
+        markerCategories:
+          p.markerCategories && p.markerCategories.length > 0
+            ? p.markerCategories.join(",")
+            : undefined,
+        q: p.q,
+      })}`,
+    ),
+};
+
 // ---- Markers ----
 export type MarkerListParams = PageParams & {
   category?: MarkerCategory[];

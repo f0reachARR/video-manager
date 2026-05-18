@@ -125,6 +125,8 @@ func New(d Deps) http.Handler {
 		r.Post("/{runId}/markers", d.Markers.Create)
 	})
 
+	r.Get("/search/runs", d.Runs.Search)
+
 	r.Route("/markers", func(r chi.Router) {
 		r.Patch("/{markerId}", d.Markers.Update)
 		r.Delete("/{markerId}", d.Markers.Delete)

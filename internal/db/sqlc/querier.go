@@ -68,6 +68,7 @@ type Querier interface {
 	ListUsers(ctx context.Context) ([]User, error)
 	ListUsersPage(ctx context.Context, arg ListUsersPageParams) ([]User, error)
 	ListVideosPage(ctx context.Context, arg ListVideosPageParams) ([]Video, error)
+	SearchRuns(ctx context.Context, arg SearchRunsParams) ([]Run, error)
 	UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error)
 	UpdateMarker(ctx context.Context, arg UpdateMarkerParams) (Marker, error)
 	UpdateRobot(ctx context.Context, arg UpdateRobotParams) (Robot, error)

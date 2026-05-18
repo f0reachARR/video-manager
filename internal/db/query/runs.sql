@@ -34,3 +34,28 @@ RETURNING *;
 
 -- name: DeleteRun :execrows
 DELETE FROM runs WHERE id = $1;
+
+-- name: SearchRuns :many
+SELECT r.*
+FROM runs r
+WHERE
+  (sqlc.narg('from')::timestamptz IS NULL OR r.started_at >= sqlc.narg('from')::timestamptz)
+  AND (sqlc.narg('to')::timestamptz IS NULL OR r.started_at < sqlc.narg('to')::timestamptz)
+  AND (sqlc.narg('robot_id')::uuid IS NULL OR r.robot_id = sqlc.narg('robot_id')::uuid)
+  AND (sqlc.narg('scenario_id')::uuid IS NULL OR r.scenario_id = sqlc.narg('scenario_id')::uuid)
+  AND (sqlc.narg('memo_q')::text IS NULL OR r.memo ILIKE '%' || sqlc.narg('memo_q')::text || '%')
+  AND (COALESCE(array_length(sqlc.narg('marker_categories')::text[], 1), 0) = 0
+       OR EXISTS (
+         SELECT 1 FROM markers m
+         WHERE m.run_id = r.id
+           AND m.category::text = ANY(sqlc.narg('marker_categories')::text[])
+       ))
+  AND (sqlc.arg('tag_count')::int = 0 OR (
+         SELECT count(DISTINCT tag_id) FROM run_tags
+         WHERE run_id = r.id
+           AND tag_id = ANY(sqlc.narg('tag_ids')::uuid[])
+       ) = sqlc.arg('tag_count')::int)
+  AND (sqlc.narg('cursor_started_at')::timestamptz IS NULL
+       OR (r.started_at, r.id) < (sqlc.narg('cursor_started_at')::timestamptz, sqlc.narg('cursor_id')::uuid))
+ORDER BY r.started_at DESC, r.id DESC
+LIMIT $1;
