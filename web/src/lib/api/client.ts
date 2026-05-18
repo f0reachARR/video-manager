@@ -455,6 +455,7 @@ export const markersApi = {
         category: p.category && p.category.length > 0 ? p.category.join(",") : undefined,
       })}`,
     ),
+  get: (markerId: string) => request<Marker>(`/markers/${markerId}`),
   create: (runId: string, body: CreateMarkerRequest) =>
     request<Marker>(`/runs/${runId}/markers`, { method: "POST", json: body }),
   update: (markerId: string, body: UpdateMarkerRequest) =>

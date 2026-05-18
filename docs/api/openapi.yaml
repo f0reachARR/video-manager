@@ -1271,6 +1271,19 @@ paths:
   /markers/{markerId}:
     parameters:
       - $ref: "#/components/parameters/MarkerId"
+    get:
+      tags: [markers]
+      operationId: getMarker
+      summary: Marker 取得 (marker_link 解決用)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Marker"
+        "404":
+          $ref: "#/components/responses/NotFound"
     patch:
       tags: [markers]
       operationId: updateMarker

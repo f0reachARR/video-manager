@@ -644,7 +644,8 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /** Marker 取得 (marker_link 解決用) */
+        get: operations["getMarker"];
         put?: never;
         post?: never;
         /** Marker 削除 */
@@ -2990,6 +2991,29 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getMarker: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                markerId: components["parameters"]["MarkerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Marker"];
+                };
+            };
             404: components["responses"]["NotFound"];
         };
     };

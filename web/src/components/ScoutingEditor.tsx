@@ -1,10 +1,14 @@
-import { Badge, Group, Paper, Text } from "@mantine/core";
+import { Badge, Button, Group, Paper, Text } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import Collaboration from "@tiptap/extension-collaboration";
 import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useMemo, useState } from "react";
 import * as Y from "yjs";
+
+import { MarkerLink } from "./MarkerLink";
+import { MarkerPickerModal } from "./MarkerPickerModal";
 
 const HOCUSPOCUS_URL: string =
   (import.meta.env.VITE_HOCUSPOCUS_URL as string | undefined) ??
@@ -49,24 +53,32 @@ export function ScoutingEditor({ noteId }: { noteId: string }) {
         // disable StarterKit's so we don't end up with two stacks.
         StarterKit.configure({ undoRedo: false }),
         Collaboration.configure({ document: ydoc }),
+        MarkerLink,
       ],
     },
     [ydoc],
   );
 
+  const [pickerOpen, { open: openPicker, close: closePicker }] = useDisclosure(false);
+
   return (
     <Paper withBorder p="sm">
       <Group justify="space-between" mb="xs">
-        <Text size="xs" c="dimmed">
-          リアルタイム同期 (Hocuspocus)
-        </Text>
-        <Badge
-          size="xs"
-          color={status === "connected" ? "teal" : status === "connecting" ? "yellow" : "red"}
-          variant="light"
-        >
-          {status}
-        </Badge>
+        <Group gap="xs">
+          <Text size="xs" c="dimmed">
+            リアルタイム同期 (Hocuspocus)
+          </Text>
+          <Badge
+            size="xs"
+            color={status === "connected" ? "teal" : status === "connecting" ? "yellow" : "red"}
+            variant="light"
+          >
+            {status}
+          </Badge>
+        </Group>
+        <Button size="compact-xs" variant="default" onClick={openPicker} disabled={!editor}>
+          📍 Marker を挿入
+        </Button>
       </Group>
       <div
         style={{
@@ -79,6 +91,14 @@ export function ScoutingEditor({ noteId }: { noteId: string }) {
       >
         <EditorContent editor={editor} />
       </div>
+      <MarkerPickerModal
+        opened={pickerOpen}
+        onClose={closePicker}
+        onPick={(markerId) => {
+          editor?.chain().focus().insertMarkerLink(markerId).run();
+          closePicker();
+        }}
+      />
     </Paper>
   );
 }

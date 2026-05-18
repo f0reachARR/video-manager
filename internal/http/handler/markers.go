@@ -202,6 +202,24 @@ func (h *Markers) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, markerListResponse{Data: out, Pagination: pg})
 }
 
+func (h *Markers) Get(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUIDParam(chi.URLParam(r, "markerId"))
+	if err != nil {
+		badRequest(w, "invalid markerId")
+		return
+	}
+	m, err := h.Q.GetMarker(r.Context(), id)
+	if err != nil {
+		if isNoRows(err) {
+			notFound(w, "marker not found")
+			return
+		}
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toMarkerDTO(m))
+}
+
 func (h *Markers) Create(w http.ResponseWriter, r *http.Request) {
 	runID, err := parseUUIDParam(chi.URLParam(r, "runId"))
 	if err != nil {

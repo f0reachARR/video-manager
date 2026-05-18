@@ -190,6 +190,13 @@ export const useDeleteMarker = (runId: string) => {
   });
 };
 
+export const useMarker = (id: string | null | undefined) =>
+  useQuery({
+    queryKey: ["markers", "detail", id ?? ""] as const,
+    queryFn: () => markersApi.get(id as string),
+    enabled: !!id,
+  });
+
 export const markerCategories: MarkerCategory[] = ["success", "failure", "note"];
 
 // ---- Videos ----

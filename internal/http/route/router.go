@@ -160,6 +160,7 @@ func New(d Deps) http.Handler {
 	})
 
 	r.Route("/markers", func(r chi.Router) {
+		r.Get("/{markerId}", d.Markers.Get)
 		r.Patch("/{markerId}", d.Markers.Update)
 		r.Delete("/{markerId}", d.Markers.Delete)
 	})
