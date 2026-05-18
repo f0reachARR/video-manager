@@ -54,6 +54,10 @@ tags:
     description: Run 単位の時刻つきコメント
   - name: search
     description: 横断検索
+  - name: tournaments
+    description: 大会 (Phase 2)
+  - name: matches
+    description: 試合 (Phase 2)
 
 paths:
   /health:
@@ -1199,6 +1203,176 @@ paths:
               schema:
                 $ref: "#/components/schemas/RunList"
 
+  # ---------- Tournaments (Phase 2) ----------
+  /tournaments:
+    get:
+      tags: [tournaments]
+      operationId: listTournaments
+      summary: Tournament 一覧
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentList"
+    post:
+      tags: [tournaments]
+      operationId: createTournament
+      summary: Tournament 作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTournamentRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /tournaments/{tournamentId}:
+    parameters:
+      - $ref: "#/components/parameters/TournamentId"
+    get:
+      tags: [tournaments]
+      operationId: getTournament
+      summary: Tournament 取得
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [tournaments]
+      operationId: updateTournament
+      summary: Tournament 更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTournamentRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [tournaments]
+      operationId: deleteTournament
+      summary: Tournament 削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------- Matches (Phase 2) ----------
+  /matches:
+    get:
+      tags: [matches]
+      operationId: listMatches
+      summary: Match 一覧
+      parameters:
+        - name: tournamentId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchList"
+    post:
+      tags: [matches]
+      operationId: createMatch
+      summary: Match 作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMatchRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /matches/{matchId}:
+    parameters:
+      - $ref: "#/components/parameters/MatchIdPath"
+    get:
+      tags: [matches]
+      operationId: getMatch
+      summary: Match 取得
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [matches]
+      operationId: updateMatch
+      summary: Match 更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMatchRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [matches]
+      operationId: deleteMatch
+      summary: Match 削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     xUserId:
@@ -1300,6 +1474,20 @@ components:
         format: uuid
     MarkerId:
       name: markerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TournamentId:
+      name: tournamentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MatchIdPath:
+      name: matchId
       in: path
       required: true
       schema:
@@ -2092,5 +2280,120 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Marker"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ---------- Tournament (Phase 2) ----------
+    Tournament:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        startDate:
+          type: [string, "null"]
+          format: date
+        endDate:
+          type: [string, "null"]
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+    CreateTournamentRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        startDate:
+          type: [string, "null"]
+          format: date
+        endDate:
+          type: [string, "null"]
+          format: date
+    UpdateTournamentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        startDate:
+          type: [string, "null"]
+          format: date
+        endDate:
+          type: [string, "null"]
+          format: date
+    TournamentList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tournament"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ---------- Match (Phase 2) ----------
+    Match:
+      type: object
+      required: [id, tournamentId, teamAId, teamBId, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tournamentId:
+          type: string
+          format: uuid
+        teamAId:
+          type: string
+          format: uuid
+        teamBId:
+          type: string
+          format: uuid
+        scheduledAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    CreateMatchRequest:
+      type: object
+      required: [tournamentId, teamAId, teamBId]
+      properties:
+        tournamentId:
+          type: string
+          format: uuid
+        teamAId:
+          type: string
+          format: uuid
+        teamBId:
+          type: string
+          format: uuid
+        scheduledAt:
+          type: [string, "null"]
+          format: date-time
+    UpdateMatchRequest:
+      type: object
+      properties:
+        teamAId:
+          type: string
+          format: uuid
+        teamBId:
+          type: string
+          format: uuid
+        scheduledAt:
+          type: [string, "null"]
+          format: date-time
+    MatchList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Match"
         pagination:
           $ref: "#/components/schemas/Pagination"

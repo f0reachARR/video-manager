@@ -18,6 +18,13 @@ import {
   searchApi,
   type SearchRunsParams,
   markersApi,
+  tournamentsApi,
+  type CreateTournamentRequest,
+  type UpdateTournamentRequest,
+  matchesApi,
+  type CreateMatchRequest,
+  type MatchListParams,
+  type UpdateMatchRequest,
   type CreateMarkerRequest,
   type MarkerCategory,
   type MarkerListParams,
@@ -384,6 +391,66 @@ export const useDeleteTag = () => {
   return useMutation({
     mutationFn: (id: string) => tagsApi.remove(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tags }),
+  });
+};
+
+// ---- Tournaments ----
+export const useTournaments = () =>
+  useQuery({
+    queryKey: ["tournaments"] as const,
+    queryFn: () => tournamentsApi.list({ limit: 200 }),
+  });
+
+export const useCreateTournament = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateTournamentRequest) => tournamentsApi.create(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tournaments"] }),
+  });
+};
+export const useUpdateTournament = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateTournamentRequest }) =>
+      tournamentsApi.update(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tournaments"] }),
+  });
+};
+export const useDeleteTournament = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => tournamentsApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tournaments"] }),
+  });
+};
+
+// ---- Matches ----
+export const useMatches = (params: MatchListParams = {}) =>
+  useQuery({
+    queryKey: ["matches", params] as const,
+    queryFn: () => matchesApi.list({ limit: 200, ...params }),
+  });
+
+export const useCreateMatch = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateMatchRequest) => matchesApi.create(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["matches"] }),
+  });
+};
+export const useUpdateMatch = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateMatchRequest }) =>
+      matchesApi.update(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["matches"] }),
+  });
+};
+export const useDeleteMatch = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => matchesApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["matches"] }),
   });
 };
 

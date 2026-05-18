@@ -19,6 +19,8 @@ const navItems = [
   { to: "/sessions", label: "セッション" },
   { to: "/runs", label: "Run" },
   { to: "/videos", label: "動画" },
+  { to: "/tournaments", label: "大会" },
+  { to: "/matches", label: "試合" },
   { to: "/users", label: "ユーザー" },
   { to: "/teams", label: "チーム" },
   { to: "/robots", label: "ロボット" },

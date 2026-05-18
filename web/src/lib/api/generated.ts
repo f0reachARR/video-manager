@@ -570,6 +570,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tournaments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tournament 一覧 */
+        get: operations["listTournaments"];
+        put?: never;
+        /** Tournament 作成 */
+        post: operations["createTournament"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tournaments/{tournamentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        /** Tournament 取得 */
+        get: operations["getTournament"];
+        put?: never;
+        post?: never;
+        /** Tournament 削除 */
+        delete: operations["deleteTournament"];
+        options?: never;
+        head?: never;
+        /** Tournament 更新 */
+        patch: operations["updateTournament"];
+        trace?: never;
+    };
+    "/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Match 一覧 */
+        get: operations["listMatches"];
+        put?: never;
+        /** Match 作成 */
+        post: operations["createMatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/matches/{matchId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matchId: components["parameters"]["MatchIdPath"];
+            };
+            cookie?: never;
+        };
+        /** Match 取得 */
+        get: operations["getMatch"];
+        put?: never;
+        post?: never;
+        /** Match 削除 */
+        delete: operations["deleteMatch"];
+        options?: never;
+        head?: never;
+        /** Match 更新 */
+        patch: operations["updateMatch"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -986,6 +1064,71 @@ export interface components {
             data: components["schemas"]["Marker"][];
             pagination: components["schemas"]["Pagination"];
         };
+        Tournament: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: date */
+            startDate?: string | null;
+            /** Format: date */
+            endDate?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateTournamentRequest: {
+            name: string;
+            /** Format: date */
+            startDate?: string | null;
+            /** Format: date */
+            endDate?: string | null;
+        };
+        UpdateTournamentRequest: {
+            name?: string;
+            /** Format: date */
+            startDate?: string | null;
+            /** Format: date */
+            endDate?: string | null;
+        };
+        TournamentList: {
+            data: components["schemas"]["Tournament"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        Match: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            tournamentId: string;
+            /** Format: uuid */
+            teamAId: string;
+            /** Format: uuid */
+            teamBId: string;
+            /** Format: date-time */
+            scheduledAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateMatchRequest: {
+            /** Format: uuid */
+            tournamentId: string;
+            /** Format: uuid */
+            teamAId: string;
+            /** Format: uuid */
+            teamBId: string;
+            /** Format: date-time */
+            scheduledAt?: string | null;
+        };
+        UpdateMatchRequest: {
+            /** Format: uuid */
+            teamAId?: string;
+            /** Format: uuid */
+            teamBId?: string;
+            /** Format: date-time */
+            scheduledAt?: string | null;
+        };
+        MatchList: {
+            data: components["schemas"]["Match"][];
+            pagination: components["schemas"]["Pagination"];
+        };
     };
     responses: {
         /** @description リクエストが不正 */
@@ -1041,6 +1184,8 @@ export interface components {
         RunId: string;
         RunVideoId: string;
         MarkerId: string;
+        TournamentId: string;
+        MatchIdPath: string;
     };
     requestBodies: never;
     headers: never;
@@ -2507,6 +2652,250 @@ export interface operations {
                     "application/json": components["schemas"]["RunList"];
                 };
             };
+        };
+    };
+    listTournaments: {
+        parameters: {
+            query?: {
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TournamentList"];
+                };
+            };
+        };
+    };
+    createTournament: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTournamentRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tournament"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    getTournament: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tournament"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteTournament: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTournament: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTournamentRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tournament"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listMatches: {
+        parameters: {
+            query?: {
+                tournamentId?: string;
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchList"];
+                };
+            };
+        };
+    };
+    createMatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Match"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getMatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matchId: components["parameters"]["MatchIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Match"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteMatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matchId: components["parameters"]["MatchIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateMatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matchId: components["parameters"]["MatchIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMatchRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Match"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
 }

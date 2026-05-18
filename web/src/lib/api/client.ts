@@ -55,6 +55,16 @@ export type RunVideo = components["schemas"]["RunVideo"];
 export type AddRunVideoRequest = components["schemas"]["AddRunVideoRequest"];
 export type UpdateRunVideoRequest = components["schemas"]["UpdateRunVideoRequest"];
 
+export type Tournament = components["schemas"]["Tournament"];
+export type CreateTournamentRequest = components["schemas"]["CreateTournamentRequest"];
+export type UpdateTournamentRequest = components["schemas"]["UpdateTournamentRequest"];
+export type TournamentList = components["schemas"]["TournamentList"];
+
+export type Match = components["schemas"]["Match"];
+export type CreateMatchRequest = components["schemas"]["CreateMatchRequest"];
+export type UpdateMatchRequest = components["schemas"]["UpdateMatchRequest"];
+export type MatchList = components["schemas"]["MatchList"];
+
 export type Marker = components["schemas"]["Marker"];
 export type MarkerList = components["schemas"]["MarkerList"];
 export type MarkerCategory = components["schemas"]["MarkerCategory"];
@@ -355,6 +365,35 @@ export const searchApi = {
         q: p.q,
       })}`,
     ),
+};
+
+// ---- Tournaments ----
+export const tournamentsApi = {
+  list: (p: PageParams = {}) =>
+    request<TournamentList>(`/tournaments${qs({ cursor: p.cursor, limit: p.limit })}`),
+  get: (id: string) => request<Tournament>(`/tournaments/${id}`),
+  create: (body: CreateTournamentRequest) =>
+    request<Tournament>("/tournaments", { method: "POST", json: body }),
+  update: (id: string, body: UpdateTournamentRequest) =>
+    request<Tournament>(`/tournaments/${id}`, { method: "PATCH", json: body }),
+  remove: (id: string) =>
+    request<void>(`/tournaments/${id}`, { method: "DELETE" }),
+};
+
+// ---- Matches ----
+export type MatchListParams = PageParams & { tournamentId?: string };
+export const matchesApi = {
+  list: (p: MatchListParams = {}) =>
+    request<MatchList>(
+      `/matches${qs({ cursor: p.cursor, limit: p.limit, tournamentId: p.tournamentId })}`,
+    ),
+  get: (id: string) => request<Match>(`/matches/${id}`),
+  create: (body: CreateMatchRequest) =>
+    request<Match>("/matches", { method: "POST", json: body }),
+  update: (id: string, body: UpdateMatchRequest) =>
+    request<Match>(`/matches/${id}`, { method: "PATCH", json: body }),
+  remove: (id: string) =>
+    request<void>(`/matches/${id}`, { method: "DELETE" }),
 };
 
 // ---- Markers ----

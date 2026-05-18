@@ -50,7 +50,9 @@ func setupEnv(t *testing.T) *testEnv {
 		Tags:      &handler.Tags{Q: q},
 		Sessions:  &handler.Sessions{Q: q},
 		Runs:      &handler.Runs{Q: q},
-		Markers:   &handler.Markers{Q: q},
+		Markers:     &handler.Markers{Q: q},
+		Tournaments: &handler.Tournaments{Q: q},
+		Matches:     &handler.Matches{Q: q},
 		// Videos handler depends on a Storage client; not exercised in these tests.
 		Videos:  &handler.Videos{Q: q},
 		Uploads: &handler.Uploads{Q: q, Worker: enq},
