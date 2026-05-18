@@ -1,11 +1,15 @@
 import { Alert, Badge, Button, Group, Paper, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { HocuspocusProvider } from "@hocuspocus/provider";
+import {
+  HocuspocusProviderWebsocketComponent,
+  HocuspocusRoom,
+  useHocuspocusConnectionStatus,
+  useHocuspocusProvider,
+  useHocuspocusSyncStatus,
+} from "@hocuspocus/provider-react";
 import Collaboration from "@tiptap/extension-collaboration";
 import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
-import { useEffect, useMemo, useState } from "react";
-import * as Y from "yjs";
 
 import { MarkerLink } from "./MarkerLink";
 import { MarkerPickerModal } from "./MarkerPickerModal";
@@ -16,35 +20,23 @@ const HOCUSPOCUS_URL: string =
     window.location.hostname +
     ":1234";
 
-type Status = "connecting" | "connected" | "disconnected";
-
 export function ScoutingEditor({ noteId }: { noteId: string }) {
-  const [status, setStatus] = useState<Status>("connecting");
+  return (
+    <HocuspocusProviderWebsocketComponent url={HOCUSPOCUS_URL}>
+      <HocuspocusRoom name={noteId}>
+        <ScoutingEditorInner />
+      </HocuspocusRoom>
+    </HocuspocusProviderWebsocketComponent>
+  );
+}
 
-  // One Y.Doc + Hocuspocus provider per noteId.
-  const { ydoc, provider } = useMemo(() => {
-    const doc = new Y.Doc();
-    const p = new HocuspocusProvider({
-      url: HOCUSPOCUS_URL,
-      name: noteId,
-      document: doc,
-    });
-    return { ydoc: doc, provider: p };
-  }, [noteId]);
-
-  useEffect(() => {
-    const onStatus = (e: { status: string }) => {
-      if (e.status === "connected") setStatus("connected");
-      else if (e.status === "disconnected") setStatus("disconnected");
-      else setStatus("connecting");
-    };
-    provider.on("status", onStatus);
-    return () => {
-      provider.off("status", onStatus);
-      provider.destroy();
-      ydoc.destroy();
-    };
-  }, [provider, ydoc]);
+function ScoutingEditorInner() {
+  // The provider-react hooks take care of provider lifecycle (Y.Doc creation,
+  // WebSocket connect, status / sync events, cleanup on unmount). We only
+  // consume the resulting provider + observed status.
+  const provider = useHocuspocusProvider();
+  const status = useHocuspocusConnectionStatus();
+  const synced = useHocuspocusSyncStatus();
 
   const editor = useEditor(
     {
@@ -52,11 +44,11 @@ export function ScoutingEditor({ noteId }: { noteId: string }) {
         // The collaboration extension brings its own undo/redo via Y.UndoManager;
         // disable StarterKit's so we don't end up with two stacks.
         StarterKit.configure({ undoRedo: false }),
-        Collaboration.configure({ document: ydoc }),
+        Collaboration.configure({ document: provider.document }),
         MarkerLink,
       ],
     },
-    [ydoc],
+    [provider],
   );
 
   const [pickerOpen, { open: openPicker, close: closePicker }] = useDisclosure(false);
@@ -75,6 +67,11 @@ export function ScoutingEditor({ noteId }: { noteId: string }) {
           >
             {status}
           </Badge>
+          {status === "connected" && !synced && (
+            <Badge size="xs" color="yellow" variant="light">
+              syncing
+            </Badge>
+          )}
         </Group>
         <Button size="compact-xs" variant="default" onClick={openPicker} disabled={!editor}>
           📍 Marker を挿入
