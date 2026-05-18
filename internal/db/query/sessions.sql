@@ -30,5 +30,12 @@ SET
 WHERE id = sqlc.arg('id')
 RETURNING *;
 
+-- name: ListSessionsInWindow :many
+SELECT *
+FROM sessions
+WHERE started_at IS NOT NULL
+  AND started_at BETWEEN sqlc.arg('window_start')::timestamptz AND sqlc.arg('window_end')::timestamptz
+ORDER BY started_at ASC;
+
 -- name: DeleteSession :execrows
 DELETE FROM sessions WHERE id = $1;

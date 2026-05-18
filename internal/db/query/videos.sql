@@ -30,5 +30,13 @@ SET
 WHERE id = sqlc.arg('id')
 RETURNING *;
 
+-- name: UpdateVideoProbe :one
+UPDATE videos
+SET
+  recorded_at = CASE WHEN sqlc.arg('recorded_at_set')::bool THEN sqlc.narg('recorded_at')::timestamptz ELSE recorded_at END,
+  duration_sec = CASE WHEN sqlc.arg('duration_sec_set')::bool THEN sqlc.narg('duration_sec')::int ELSE duration_sec END
+WHERE id = sqlc.arg('id')
+RETURNING *;
+
 -- name: DeleteVideo :execrows
 DELETE FROM videos WHERE id = $1;

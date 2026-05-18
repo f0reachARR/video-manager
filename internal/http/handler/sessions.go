@@ -13,6 +13,24 @@ type Sessions struct {
 	Q *sqlc.Queries
 }
 
+// candidateWindow is the half-window we query in SQL for nearby sessions.
+// The final 30-minute gap rule is enforced in Go after this fetch.
+const candidateWindow = 24 * time.Hour
+
+// candidateGapThreshold is the spec-defined 30 minute Session adjacency gap.
+const candidateGapThreshold = 30 * time.Minute
+
+type sessionCandidateDTO struct {
+	Type          string      `json:"type"`
+	Session       *sessionDTO `json:"session,omitempty"`
+	GapSec        *int32      `json:"gapSec"`
+	SuggestedName *string     `json:"suggestedName,omitempty"`
+}
+
+type sessionCandidateListResponse struct {
+	Data []sessionCandidateDTO `json:"data"`
+}
+
 type sessionDTO struct {
 	ID           string     `json:"id"`
 	Name         string     `json:"name"`
@@ -254,6 +272,95 @@ func (h *Sessions) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toSessionDTO(s))
+}
+
+func (h *Sessions) Candidates(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("videoId")
+	if q == "" {
+		badRequest(w, "videoId is required")
+		return
+	}
+	videoID, err := parseUUIDParam(q)
+	if err != nil {
+		badRequest(w, "invalid videoId")
+		return
+	}
+	video, err := h.Q.GetVideo(r.Context(), videoID)
+	if err != nil {
+		if isNoRows(err) {
+			notFound(w, "video not found")
+			return
+		}
+		internalError(w, err)
+		return
+	}
+	if !video.RecordedAt.Valid {
+		// Without recorded_at we can only propose a new session.
+		writeJSON(w, http.StatusOK, sessionCandidateListResponse{
+			Data: []sessionCandidateDTO{newSessionCandidate(time.Time{}, video)},
+		})
+		return
+	}
+
+	recordedAt := video.RecordedAt.Time
+	var durationSec int32
+	if video.DurationSec != nil {
+		durationSec = *video.DurationSec
+	}
+	videoEnd := recordedAt.Add(time.Duration(durationSec) * time.Second)
+
+	sessions, err := h.Q.ListSessionsInWindow(r.Context(), sqlc.ListSessionsInWindowParams{
+		WindowStart: pgtypeTimestamptz(recordedAt.Add(-candidateWindow)),
+		WindowEnd:   pgtypeTimestamptz(videoEnd.Add(candidateWindow)),
+	})
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+
+	out := make([]sessionCandidateDTO, 0, len(sessions)+1)
+	for _, s := range sessions {
+		gap := computeSessionGap(s, recordedAt, videoEnd)
+		if gap > candidateGapThreshold {
+			continue
+		}
+		dto := toSessionDTO(s)
+		gapSec := int32(gap / time.Second)
+		out = append(out, sessionCandidateDTO{
+			Type:    "existing",
+			Session: &dto,
+			GapSec:  &gapSec,
+		})
+	}
+	out = append(out, newSessionCandidate(recordedAt, video))
+	writeJSON(w, http.StatusOK, sessionCandidateListResponse{Data: out})
+}
+
+func computeSessionGap(s sqlc.Session, videoStart, videoEnd time.Time) time.Duration {
+	if !s.StartedAt.Valid {
+		return time.Duration(1<<62) // effectively infinity
+	}
+	sessStart := s.StartedAt.Time
+	sessEnd := sessStart
+	if s.EndedAt.Valid {
+		sessEnd = s.EndedAt.Time
+	}
+	switch {
+	case videoEnd.Before(sessStart):
+		return sessStart.Sub(videoEnd)
+	case videoStart.After(sessEnd):
+		return videoStart.Sub(sessEnd)
+	default:
+		return 0 // overlap
+	}
+}
+
+func newSessionCandidate(recordedAt time.Time, _ sqlc.Video) sessionCandidateDTO {
+	name := "新規 Session"
+	if !recordedAt.IsZero() {
+		name = "Session " + recordedAt.Format("2006-01-02 15:04")
+	}
+	return sessionCandidateDTO{Type: "new", SuggestedName: &name}
 }
 
 func (h *Sessions) Delete(w http.ResponseWriter, r *http.Request) {

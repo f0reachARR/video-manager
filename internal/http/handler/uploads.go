@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -8,8 +9,14 @@ import (
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
 )
 
+// JobEnqueuer is the subset of worker.Manager the upload handler depends on.
+type JobEnqueuer interface {
+	EnqueueProbe(ctx context.Context, videoID string) error
+}
+
 type Uploads struct {
-	Q *sqlc.Queries
+	Q      *sqlc.Queries
+	Worker JobEnqueuer
 }
 
 // tusHookRequest mirrors the JSON tusd v2 sends to its HTTP hook endpoint.
@@ -101,5 +108,10 @@ func (h *Uploads) TusHook(w http.ResponseWriter, r *http.Request) {
 
 	id := uuidString(video.ID)
 	slog.Info("tus hook: created video", "id", id, "storageKey", storageKey, "size", req.Event.Upload.Size)
+	if h.Worker != nil {
+		if err := h.Worker.EnqueueProbe(r.Context(), id); err != nil {
+			slog.Warn("enqueue probe failed", "error", err, "videoId", id)
+		}
+	}
 	writeJSON(w, http.StatusOK, tusHookResponse{VideoID: &id})
 }

@@ -19,9 +19,16 @@ import { useMemo, useRef, useState } from "react";
 import { Upload } from "tus-js-client";
 
 import { ResourcePage } from "../components/ResourcePage";
+import { SessionAssignModal } from "../components/SessionAssignModal";
+import { VideoMetadataModal } from "../components/VideoMetadataModal";
 import { ApiError, type Video, videosApi } from "../lib/api/client";
 import { useCurrentUserId } from "../lib/currentUser";
-import { useDeleteVideo, useDevices, useVideos } from "../lib/queries";
+import {
+  useDeleteVideo,
+  useDevices,
+  useSessions,
+  useVideos,
+} from "../lib/queries";
 
 const TUSD_ENDPOINT =
   (import.meta.env.VITE_TUSD_ENDPOINT as string | undefined) ??
@@ -43,6 +50,7 @@ type UploadItem = {
 function VideosPage() {
   const videos = useVideos();
   const devices = useDevices();
+  const sessions = useSessions();
   const currentUserId = useCurrentUserId();
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [deviceId, setDeviceId] = useState<string | null>(null);
@@ -52,6 +60,11 @@ function VideosPage() {
     for (const d of devices.data?.data ?? []) m.set(d.id, d.name);
     return m;
   }, [devices.data]);
+  const sessionNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of sessions.data?.data ?? []) m.set(s.id, s.name);
+    return m;
+  }, [sessions.data]);
 
   const startUpload = (file: File) => {
     const id = crypto.randomUUID();
@@ -176,7 +189,7 @@ function VideosPage() {
                 <Table.Td>
                   {v.sessionId ? (
                     <Badge size="sm" variant="light">
-                      Session
+                      {sessionNameById.get(v.sessionId) ?? "Session"}
                     </Badge>
                   ) : (
                     <Text size="xs" c="dimmed">
@@ -207,12 +220,20 @@ function VideosPage() {
 }
 
 function VideoActions({ video }: { video: Video }) {
-  const [opened, { open, close }] = useDisclosure(false);
+  const [playOpen, { open: openPlay, close: closePlay }] = useDisclosure(false);
+  const [metaOpen, { open: openMeta, close: closeMeta }] = useDisclosure(false);
+  const [sessionOpen, { open: openSession, close: closeSession }] = useDisclosure(false);
   const del = useDeleteVideo();
   return (
     <Group gap={4}>
-      <ActionIcon variant="subtle" onClick={open} aria-label="再生">
+      <ActionIcon variant="subtle" onClick={openPlay} aria-label="再生">
         ▶
+      </ActionIcon>
+      <ActionIcon variant="subtle" onClick={openMeta} aria-label="メタデータ編集">
+        ✏️
+      </ActionIcon>
+      <ActionIcon variant="subtle" onClick={openSession} aria-label="Session 紐付け">
+        📁
       </ActionIcon>
       <ActionIcon
         variant="subtle"
@@ -227,7 +248,9 @@ function VideoActions({ video }: { video: Video }) {
       >
         🗑️
       </ActionIcon>
-      {opened && <PlaybackModal video={video} onClose={close} />}
+      {playOpen && <PlaybackModal video={video} onClose={closePlay} />}
+      {metaOpen && <VideoMetadataModal video={video} onClose={closeMeta} />}
+      {sessionOpen && <SessionAssignModal video={video} onClose={closeSession} />}
     </Group>
   );
 }

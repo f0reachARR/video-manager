@@ -44,6 +44,8 @@ export type CreateSessionRequest = components["schemas"]["CreateSessionRequest"]
 export type UpdateSessionRequest = components["schemas"]["UpdateSessionRequest"];
 export type SessionList = components["schemas"]["SessionList"];
 export type SessionModeHint = components["schemas"]["SessionModeHint"];
+export type SessionCandidate = components["schemas"]["SessionCandidate"];
+export type SessionCandidateList = components["schemas"]["SessionCandidateList"];
 
 const BASE_URL = "/api";
 
@@ -266,4 +268,6 @@ export const sessionsApi = {
     request<Session>(`/sessions/${id}`, { method: "PATCH", json: body }),
   remove: (id: string) =>
     request<void>(`/sessions/${id}`, { method: "DELETE" }),
+  candidates: (videoId: string) =>
+    request<SessionCandidateList>(`/sessions/candidates${qs({ videoId })}`),
 };

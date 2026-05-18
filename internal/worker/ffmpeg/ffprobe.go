@@ -1,0 +1,104 @@
+// Package ffmpeg wraps the local ffmpeg/ffprobe binaries to extract video
+// metadata. Phase 1 only uses ffprobe.
+package ffmpeg
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os/exec"
+	"strconv"
+	"time"
+)
+
+type Metadata struct {
+	RecordedAt  *time.Time
+	DurationSec *int32
+}
+
+// Probe runs `ffprobe -show_format -of json` against the given input URL or
+// path. Returns extracted creation_time and duration when present.
+func Probe(ctx context.Context, input string) (Metadata, error) {
+	cmd := exec.CommandContext(ctx,
+		"ffprobe",
+		"-v", "error",
+		"-print_format", "json",
+		"-show_format",
+		"-show_streams",
+		input,
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return Metadata{}, fmt.Errorf("ffprobe: %w (stderr=%q)", err, stderr.String())
+	}
+	return parse(stdout.Bytes())
+}
+
+type ffprobeOutput struct {
+	Format struct {
+		Duration string            `json:"duration"`
+		Tags     map[string]string `json:"tags"`
+	} `json:"format"`
+	Streams []struct {
+		Tags map[string]string `json:"tags"`
+	} `json:"streams"`
+}
+
+var creationTimeFormats = []string{
+	time.RFC3339Nano,
+	time.RFC3339,
+	"2006-01-02T15:04:05.000000Z",
+	"2006-01-02 15:04:05",
+}
+
+func parse(raw []byte) (Metadata, error) {
+	var out ffprobeOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return Metadata{}, fmt.Errorf("decode ffprobe json: %w", err)
+	}
+	m := Metadata{}
+	if out.Format.Duration != "" {
+		if d, err := strconv.ParseFloat(out.Format.Duration, 64); err == nil {
+			sec := int32(d + 0.5)
+			m.DurationSec = &sec
+		}
+	}
+	if t := pickCreationTime(out); t != nil {
+		m.RecordedAt = t
+	}
+	return m, nil
+}
+
+func pickCreationTime(out ffprobeOutput) *time.Time {
+	candidates := []string{out.Format.Tags["creation_time"]}
+	for _, s := range out.Streams {
+		if v := s.Tags["creation_time"]; v != "" {
+			candidates = append(candidates, v)
+		}
+	}
+	for _, c := range candidates {
+		if c == "" {
+			continue
+		}
+		for _, layout := range creationTimeFormats {
+			if t, err := time.Parse(layout, c); err == nil {
+				utc := t.UTC()
+				return &utc
+			}
+		}
+	}
+	return nil
+}
+
+// IsAvailable returns true if ffprobe is in PATH.
+func IsAvailable() bool {
+	_, err := exec.LookPath("ffprobe")
+	return err == nil
+}
+
+// ErrNotAvailable is returned by callers when ffprobe is not installed.
+var ErrNotAvailable = errors.New("ffprobe binary not found in PATH")

@@ -81,6 +81,48 @@ func (q *Queries) GetSession(ctx context.Context, id pgtype.UUID) (Session, erro
 	return i, err
 }
 
+const listSessionsInWindow = `-- name: ListSessionsInWindow :many
+SELECT id, name, started_at, ended_at, location, mode_hint, tournament_id, created_at
+FROM sessions
+WHERE started_at IS NOT NULL
+  AND started_at BETWEEN $1::timestamptz AND $2::timestamptz
+ORDER BY started_at ASC
+`
+
+type ListSessionsInWindowParams struct {
+	WindowStart pgtype.Timestamptz
+	WindowEnd   pgtype.Timestamptz
+}
+
+func (q *Queries) ListSessionsInWindow(ctx context.Context, arg ListSessionsInWindowParams) ([]Session, error) {
+	rows, err := q.db.Query(ctx, listSessionsInWindow, arg.WindowStart, arg.WindowEnd)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Session
+	for rows.Next() {
+		var i Session
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.Location,
+			&i.ModeHint,
+			&i.TournamentID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSessionsPage = `-- name: ListSessionsPage :many
 SELECT id, name, started_at, ended_at, location, mode_hint, tournament_id, created_at
 FROM sessions

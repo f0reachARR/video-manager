@@ -96,6 +96,7 @@ func New(d Deps) http.Handler {
 	r.Route("/sessions", func(r chi.Router) {
 		r.Get("/", d.Sessions.List)
 		r.Post("/", d.Sessions.Create)
+		r.Get("/candidates", d.Sessions.Candidates)
 		r.Get("/{sessionId}", d.Sessions.Get)
 		r.Patch("/{sessionId}", d.Sessions.Update)
 		r.Delete("/{sessionId}", d.Sessions.Delete)

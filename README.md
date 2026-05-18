@@ -2,8 +2,10 @@
 
 ロボコン テストラン動画整理アプリ。詳細は [spec.md](spec.md) を参照。
 
-このリポジトリは現在 [spec-devflow.md](spec-devflow.md) §5「アップロード経路を最小実装」までを実装した段階。
-ffprobe / Session 候補・Run・Marker などの本機能は §6 以降で順次追加する。
+このリポジトリは現在 [spec-devflow.md](spec-devflow.md) §6「メタデータ抽出と Session 候補」までを実装した段階。
+Run・Marker・検索などの本機能は §7 以降で順次追加する。
+
+ホストに `ffprobe` (FFmpeg) が必要 (`brew install ffmpeg` 等)。
 
 ## 必要ツール
 
@@ -72,9 +74,8 @@ docker compose up -d
 
 ## 次のステップ
 
-[spec-devflow.md](spec-devflow.md) §6「メタデータ抽出と Session 候補を作る」へ進む。
+[spec-devflow.md](spec-devflow.md) §7「Run とマルチアングルの核を作る」へ進む。
 
-- worker / river ジョブを起動し、アップロード後に ffprobe を回す
-- `recorded_at` と `duration_sec` を Video に反映する
-- Device の `time_offset_sec` を適用したうえで Session 候補を計算
-- 未割当の Video に Session を割り当てる確認 UI を作る
+- Run と RunVideo を CRUD で扱う API/UI を追加する
+- 複数アングルの Video を同じ Run に紐付けて同期再生の土台を作る
+- Marker のための土台（Run 詳細画面）を整える

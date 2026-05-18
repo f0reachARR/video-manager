@@ -211,3 +211,43 @@ func (q *Queries) UpdateVideo(ctx context.Context, arg UpdateVideoParams) (Video
 	)
 	return i, err
 }
+
+const updateVideoProbe = `-- name: UpdateVideoProbe :one
+UPDATE videos
+SET
+  recorded_at = CASE WHEN $1::bool THEN $2::timestamptz ELSE recorded_at END,
+  duration_sec = CASE WHEN $3::bool THEN $4::int ELSE duration_sec END
+WHERE id = $5
+RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at
+`
+
+type UpdateVideoProbeParams struct {
+	RecordedAtSet  bool
+	RecordedAt     pgtype.Timestamptz
+	DurationSecSet bool
+	DurationSec    *int32
+	ID             pgtype.UUID
+}
+
+func (q *Queries) UpdateVideoProbe(ctx context.Context, arg UpdateVideoProbeParams) (Video, error) {
+	row := q.db.QueryRow(ctx, updateVideoProbe,
+		arg.RecordedAtSet,
+		arg.RecordedAt,
+		arg.DurationSecSet,
+		arg.DurationSec,
+		arg.ID,
+	)
+	var i Video
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.DeviceID,
+		&i.UploaderID,
+		&i.StorageKey,
+		&i.RecordedAt,
+		&i.DurationSec,
+		&i.TimeOffsetSec,
+		&i.CreatedAt,
+	)
+	return i, err
+}

@@ -16,6 +16,7 @@ import (
 	"github.com/f0reachARR/video-manager/internal/http/handler"
 	"github.com/f0reachARR/video-manager/internal/http/route"
 	"github.com/f0reachARR/video-manager/internal/storage"
+	"github.com/f0reachARR/video-manager/internal/worker"
 )
 
 func main() {
@@ -58,6 +59,21 @@ func run() error {
 		return err
 	}
 
+	workers, err := worker.Setup(ctx, database.Pool, q, store)
+	if err != nil {
+		return err
+	}
+	if err := workers.Start(ctx); err != nil {
+		return err
+	}
+	defer func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := workers.Stop(stopCtx); err != nil {
+			slog.Warn("river stop error", "error", err)
+		}
+	}()
+
 	router := route.New(route.Deps{
 		Health: &handler.Health{
 			Version: cfg.AppVersion,
@@ -71,7 +87,7 @@ func run() error {
 		Tags:           &handler.Tags{Q: q},
 		Sessions:       &handler.Sessions{Q: q},
 		Videos:         &handler.Videos{Q: q, Storage: store},
-		Uploads:        &handler.Uploads{Q: q},
+		Uploads:        &handler.Uploads{Q: q, Worker: workers},
 		AllowedOrigins: cfg.AllowedOrigins,
 	})
 

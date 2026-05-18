@@ -43,6 +43,7 @@ type Querier interface {
 	ListRobotsPage(ctx context.Context, arg ListRobotsPageParams) ([]Robot, error)
 	ListScenarios(ctx context.Context) ([]Scenario, error)
 	ListScenariosPage(ctx context.Context, arg ListScenariosPageParams) ([]Scenario, error)
+	ListSessionsInWindow(ctx context.Context, arg ListSessionsInWindowParams) ([]Session, error)
 	ListSessionsPage(ctx context.Context, arg ListSessionsPageParams) ([]Session, error)
 	ListTags(ctx context.Context) ([]Tag, error)
 	ListTagsPage(ctx context.Context, arg ListTagsPageParams) ([]Tag, error)
@@ -59,6 +60,7 @@ type Querier interface {
 	UpdateTeam(ctx context.Context, arg UpdateTeamParams) (Team, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateVideo(ctx context.Context, arg UpdateVideoParams) (Video, error)
+	UpdateVideoProbe(ctx context.Context, arg UpdateVideoProbeParams) (Video, error)
 }
 
 var _ Querier = (*Queries)(nil)
