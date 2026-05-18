@@ -260,6 +260,7 @@ function VideosPage() {
         <Table striped highlightOnHover withRowBorders={false}>
           <Table.Thead>
             <Table.Tr>
+              <Table.Th style={{ width: 90 }}>Thumb</Table.Th>
               <Table.Th>Storage Key</Table.Th>
               <Table.Th>Device</Table.Th>
               <Table.Th>Recorded At</Table.Th>
@@ -272,6 +273,9 @@ function VideosPage() {
           <Table.Tbody>
             {list.map((v) => (
               <Table.Tr key={v.id}>
+                <Table.Td>
+                  <VideoThumb video={v} />
+                </Table.Td>
                 <Table.Td>
                   <Text size="xs" ff="monospace" truncate maw={180}>
                     {v.storageKey}
@@ -303,7 +307,7 @@ function VideosPage() {
             ))}
             {list.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={7}>
+                <Table.Td colSpan={8}>
                   <Text c="dimmed" ta="center" py="md">
                     まだ動画がありません
                   </Text>
@@ -314,6 +318,57 @@ function VideosPage() {
         </Table>
       </Stack>
     </ResourcePage>
+  );
+}
+
+function VideoThumb({ video }: { video: Video }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [errored, setErrored] = useState(false);
+  const requested = useRef(false);
+
+  if (!video.hasThumbnail) {
+    return (
+      <div
+        style={{
+          width: 80,
+          height: 45,
+          background: "var(--mantine-color-gray-2)",
+          borderRadius: 4,
+        }}
+      />
+    );
+  }
+  if (!requested.current) {
+    requested.current = true;
+    videosApi
+      .thumbnailUrl(video.id)
+      .then((r) => setUrl(r.url))
+      .catch(() => setErrored(true));
+  }
+  if (errored || !url) {
+    return (
+      <div
+        style={{
+          width: 80,
+          height: 45,
+          background: "var(--mantine-color-gray-3)",
+          borderRadius: 4,
+        }}
+      />
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      style={{
+        width: 80,
+        height: 45,
+        objectFit: "cover",
+        borderRadius: 4,
+        background: "#000",
+      }}
+    />
   );
 }
 

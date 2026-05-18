@@ -254,6 +254,8 @@ export const videosApi = {
     request<void>(`/videos/${id}`, { method: "DELETE" }),
   playbackUrl: (id: string) =>
     request<PlaybackUrl>(`/videos/${id}/playback-url`),
+  thumbnailUrl: (id: string) =>
+    request<PlaybackUrl>(`/videos/${id}/thumbnail-url`),
 };
 
 // ---- Sessions ----

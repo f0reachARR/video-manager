@@ -24,6 +24,7 @@ type videoDTO struct {
 	RecordedAt    *time.Time `json:"recordedAt"`
 	DurationSec   *int32     `json:"durationSec"`
 	TimeOffsetSec int32      `json:"timeOffsetSec"`
+	HasThumbnail  bool       `json:"hasThumbnail"`
 	CreatedAt     time.Time  `json:"createdAt"`
 }
 
@@ -50,6 +51,7 @@ func toVideoDTO(v sqlc.Video) videoDTO {
 		RecordedAt:    timeOrNil(v.RecordedAt),
 		DurationSec:   v.DurationSec,
 		TimeOffsetSec: v.TimeOffsetSec,
+		HasThumbnail:  v.ThumbnailKey != nil && *v.ThumbnailKey != "",
 		CreatedAt:     v.CreatedAt.Time,
 	}
 }
@@ -222,6 +224,33 @@ func (h *Videos) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeNoContent(w)
+}
+
+func (h *Videos) ThumbnailURL(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUIDParam(chi.URLParam(r, "videoId"))
+	if err != nil {
+		badRequest(w, "invalid videoId")
+		return
+	}
+	v, err := h.Q.GetVideo(r.Context(), id)
+	if err != nil {
+		if isNoRows(err) {
+			notFound(w, "video not found")
+			return
+		}
+		internalError(w, err)
+		return
+	}
+	if v.ThumbnailKey == nil || *v.ThumbnailKey == "" {
+		notFound(w, "thumbnail not available")
+		return
+	}
+	url, expires, err := h.Storage.PresignGet(r.Context(), *v.ThumbnailKey)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, playbackUrlResponse{URL: url, ExpiresAt: expires})
 }
 
 func (h *Videos) PlaybackURL(w http.ResponseWriter, r *http.Request) {

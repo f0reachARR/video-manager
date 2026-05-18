@@ -81,6 +81,7 @@ type Querier interface {
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateVideo(ctx context.Context, arg UpdateVideoParams) (Video, error)
 	UpdateVideoProbe(ctx context.Context, arg UpdateVideoProbeParams) (Video, error)
+	UpdateVideoThumbnail(ctx context.Context, arg UpdateVideoThumbnailParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

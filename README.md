@@ -2,8 +2,10 @@
 
 ロボコン テストラン動画整理アプリ。詳細は [spec.md](spec.md) を参照。
 
-このリポジトリは現在 [spec-devflow.md](spec-devflow.md) §8「Marker を実装する」までを実装した段階。
-検索などの本機能は §9 以降で順次追加する。
+このリポジトリは Phase 1 ([spec-devflow.md](spec-devflow.md) §1〜§11) の機能を一通り
+実装した段階。WebSocket リアルタイム / Annotation / ScoutingNote 等の Phase 2 は未着手。
+
+開発のセットアップやリポジトリ地図は [docs/development.md](docs/development.md) を参照。
 
 ホストに `ffprobe` (FFmpeg) が必要 (`brew install ffmpeg` 等)。
 
@@ -88,8 +90,8 @@ docker compose up -d postgres        # 既に起動済みなら不要
 
 ## 次のステップ
 
-[spec-devflow.md](spec-devflow.md) §9「検索・フィルタを Phase 1 レベルまで作る」へ進む。
+Phase 2 ([spec-devflow.md](spec-devflow.md) §「Phase 2 の進め方」) へ。
 
-- Run / Video / Session を期間・Robot・Scenario・tags で絞り込む API
-- Marker category による Run 検索
-- pg_trgm を活かした memo 全文検索の index 設計
+- Marker / Annotation の WebSocket リアルタイム反映
+- Hocuspocus 連携 (ScoutingNote)
+- Tournament / Match / 本番前モード

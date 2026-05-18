@@ -390,6 +390,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/videos/{videoId}/thumbnail-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        /** サムネイル画像の署名 URL を発行 */
+        get: operations["getVideoThumbnailUrl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/uploads/tus-hook": {
         parameters: {
             query?: never;
@@ -784,6 +803,8 @@ export interface components {
             durationSec?: number | null;
             /** @description 個別オフセット（Device default に対する追加補正） */
             timeOffsetSec: number;
+            /** @description サムネイルが生成済みなら true。 GET /videos/{id}/thumbnail-url で取得 */
+            hasThumbnail: boolean;
             /** Format: date-time */
             createdAt: string;
         };
@@ -2084,6 +2105,37 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    getVideoThumbnailUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackUrl"];
+                };
+            };
+            /** @description サムネイル未生成 もしくは Video が存在しない */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     handleTusHook: {

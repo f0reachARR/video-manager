@@ -85,6 +85,30 @@ func (w *ProbeVideoWorker) Work(ctx context.Context, job *river.Job[ProbeVideoAr
 	if _, err := w.Q.UpdateVideoProbe(ctx, params); err != nil {
 		return fmt.Errorf("update video: %w", err)
 	}
+
+	// Thumbnail extraction is best-effort: ffmpeg may be missing, the video
+	// may be unreadable, etc. We log and continue rather than failing the job.
+	if ffmpeg.FFmpegAvailable() {
+		offset := 1.0
+		if meta.DurationSec != nil && float64(*meta.DurationSec) < 2 {
+			offset = 0
+		}
+		thumb, err := ffmpeg.ExtractThumbnail(ctx, url, offset, 320)
+		if err != nil {
+			slog.Warn("thumbnail extraction failed", "videoId", job.Args.VideoID, "error", err)
+		} else {
+			thumbKey := "thumbnails/" + v.StorageKey + ".jpg"
+			if err := w.Storage.PutBytes(ctx, thumbKey, "image/jpeg", thumb); err != nil {
+				slog.Warn("thumbnail upload failed", "videoId", job.Args.VideoID, "error", err)
+			} else if _, err := w.Q.UpdateVideoThumbnail(ctx, sqlc.UpdateVideoThumbnailParams{
+				ID:           pgID,
+				ThumbnailKey: &thumbKey,
+			}); err != nil {
+				slog.Warn("thumbnail row update failed", "videoId", job.Args.VideoID, "error", err)
+			}
+		}
+	}
+
 	slog.Info("video probe complete", "videoId", job.Args.VideoID,
 		"recordedAt", meta.RecordedAt, "durationSec", meta.DurationSec)
 	return nil

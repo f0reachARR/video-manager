@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -74,6 +75,18 @@ func (c *Client) PresignGet(ctx context.Context, key string) (string, time.Time,
 		return "", time.Time{}, err
 	}
 	return req.URL, expires, nil
+}
+
+// PutBytes uploads a small in-memory payload (used for thumbnails). It is not
+// optimized for large objects — those should be streamed via the multipart API.
+func (c *Client) PutBytes(ctx context.Context, key, contentType string, data []byte) error {
+	_, err := c.s3.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(c.bucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String(contentType),
+	})
+	return err
 }
 
 // Delete removes an object (and tusd's `.info` sidecar if present).

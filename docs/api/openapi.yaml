@@ -829,6 +829,27 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /videos/{videoId}/thumbnail-url:
+    parameters:
+      - $ref: "#/components/parameters/VideoId"
+    get:
+      tags: [videos]
+      operationId: getVideoThumbnailUrl
+      summary: サムネイル画像の署名 URL を発行
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackUrl"
+        "404":
+          description: サムネイル未生成 もしくは Video が存在しない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ---------- Uploads ----------
   /uploads/tus-hook:
     post:
@@ -1731,7 +1752,7 @@ components:
     # ---------- Video ----------
     Video:
       type: object
-      required: [id, storageKey, timeOffsetSec, createdAt]
+      required: [id, storageKey, timeOffsetSec, hasThumbnail, createdAt]
       properties:
         id:
           type: string
@@ -1756,6 +1777,9 @@ components:
         timeOffsetSec:
           type: integer
           description: 個別オフセット（Device default に対する追加補正）
+        hasThumbnail:
+          type: boolean
+          description: サムネイルが生成済みなら true。 GET /videos/{id}/thumbnail-url で取得
         createdAt:
           type: string
           format: date-time

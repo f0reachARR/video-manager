@@ -38,5 +38,10 @@ SET
 WHERE id = sqlc.arg('id')
 RETURNING *;
 
+-- name: UpdateVideoThumbnail :execrows
+UPDATE videos
+SET thumbnail_key = $2
+WHERE id = $1;
+
 -- name: DeleteVideo :execrows
 DELETE FROM videos WHERE id = $1;

@@ -110,6 +110,7 @@ func New(d Deps) http.Handler {
 		r.Patch("/{videoId}", d.Videos.Update)
 		r.Delete("/{videoId}", d.Videos.Delete)
 		r.Get("/{videoId}/playback-url", d.Videos.PlaybackURL)
+		r.Get("/{videoId}/thumbnail-url", d.Videos.ThumbnailURL)
 	})
 
 	r.Route("/runs", func(r chi.Router) {

@@ -100,5 +100,44 @@ func IsAvailable() bool {
 	return err == nil
 }
 
+// FFmpegAvailable returns true if ffmpeg (used for thumbnail extraction) is in PATH.
+func FFmpegAvailable() bool {
+	_, err := exec.LookPath("ffmpeg")
+	return err == nil
+}
+
 // ErrNotAvailable is returned by callers when ffprobe is not installed.
 var ErrNotAvailable = errors.New("ffprobe binary not found in PATH")
+
+// ExtractThumbnail uses ffmpeg to grab a single JPEG frame at the given offset
+// (seconds), scaled to maxWidth pixels wide (height auto). The thumbnail bytes
+// are returned in memory — Phase 1 thumbnails are small (<100 KB).
+func ExtractThumbnail(ctx context.Context, input string, offsetSec float64, maxWidth int) ([]byte, error) {
+	if maxWidth <= 0 {
+		maxWidth = 320
+	}
+	if offsetSec < 0 {
+		offsetSec = 0
+	}
+	cmd := exec.CommandContext(ctx,
+		"ffmpeg",
+		"-y",
+		"-ss", strconv.FormatFloat(offsetSec, 'f', 3, 64),
+		"-i", input,
+		"-frames:v", "1",
+		"-vf", fmt.Sprintf("scale=%d:-2", maxWidth),
+		"-f", "image2",
+		"-vcodec", "mjpeg",
+		"pipe:1",
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("ffmpeg thumbnail: %w (stderr=%q)", err, stderr.String())
+	}
+	if stdout.Len() == 0 {
+		return nil, errors.New("ffmpeg produced empty thumbnail")
+	}
+	return stdout.Bytes(), nil
+}
