@@ -24,6 +24,7 @@ import {
   useDeleteAnnotation,
 } from "../lib/queries";
 import { useTopicSubscription, useWebSocketPublisher } from "../lib/realtime";
+import { useQueryClient } from "@tanstack/react-query";
 
 type Mode = "off" | "addPoint" | "liveInk";
 
@@ -53,16 +54,22 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
   const create = useCreateAnnotation(video.id);
   const del = useDeleteAnnotation(video.id);
 
+  const qc = useQueryClient();
+
   // Live ink: ephemeral strokes broadcast over WS, fade after a few seconds.
+  // The same socket also delivers annotation.* events from the server so the
+  // editor stays in sync with other viewers without polling.
   const publish = useWebSocketPublisher(`/ws/video/${video.id}`);
   const [strokes, setStrokes] = useState<RemoteStroke[]>([]);
   useTopicSubscription(`/ws/video/${video.id}`, (msg) => {
-    const m = msg as Partial<InkStrokeMessage>;
+    const m = msg as Partial<InkStrokeMessage> & { type?: string };
     if (m.type === "ink.stroke" && Array.isArray(m.points) && typeof m.color === "string") {
       setStrokes((cur) => [
         ...cur,
         { type: "ink.stroke", color: m.color!, points: m.points!, receivedAt: Date.now() },
       ]);
+    } else if (typeof m.type === "string" && m.type.startsWith("annotation.")) {
+      qc.invalidateQueries({ queryKey: ["annotations", video.id] });
     }
   });
   // Fade old strokes.

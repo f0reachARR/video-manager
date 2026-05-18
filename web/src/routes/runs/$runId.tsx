@@ -237,9 +237,24 @@ function SyncPlayer({
   // Overlay (Annotation 追加 / ライブインク) — applies to the main angle.
   const [overlayMode, setOverlayMode] = useState<OverlayMode>("off");
   // Playback sync — independent from overlay mode. acceptSync controls whether
-  // *incoming* sync events nudge our playback. We always broadcast.
-  const [acceptSync, setAcceptSync] = useState(true);
+  // *incoming* sync events nudge our playback. Default OFF so opening a Run
+  // doesn't surprise the viewer by jumping their playback.
+  const [acceptSync, setAcceptSync] = useState(false);
   const [lastSyncSender, setLastSyncSender] = useState<string | null>(null);
+
+  // When the viewer disables sync receive, clear any leftover "syncing"
+  // indicator immediately so it doesn't linger from a previous reception.
+  useEffect(() => {
+    if (!acceptSync) setLastSyncSender(null);
+  }, [acceptSync]);
+
+  // Auto-clear the "他の視聴者から同期中" badge after a couple of seconds of
+  // no incoming events.
+  useEffect(() => {
+    if (!lastSyncSender) return;
+    const id = setTimeout(() => setLastSyncSender(null), 2000);
+    return () => clearTimeout(id);
+  }, [lastSyncSender]);
 
   // Single bidirectional WS to /ws/run/{runId} for playback.sync messages.
   // (Marker realtime uses a separate read-only subscription at the page level.)
@@ -266,8 +281,12 @@ function SyncPlayer({
         broadcast: false,
       });
     }
-    if (m.playing !== wsRef.current.playing) {
-      // Defer to togglePlay so video elements get .play()/.pause() correctly.
+    // Compare against the underlying <video>'s actual paused state rather
+    // than React state — autoplay might have been blocked on a prior attempt
+    // and we want to keep retrying play() every time the sender pings.
+    const mainEl = mainAngleId ? refs.current.get(mainAngleId) : null;
+    const actuallyPlaying = mainEl ? !mainEl.paused : false;
+    if (m.playing !== actuallyPlaying) {
       void applyExternalPlaying(m.playing);
     }
   });
@@ -396,20 +415,20 @@ function SyncPlayer({
   }, [videos, registerSeek]);
 
   const applyExternalPlaying = async (shouldPlay: boolean) => {
-    if (shouldPlay === wsRef.current.playing) return;
     if (shouldPlay) {
-      await Promise.all(
+      // play() is a no-op for an already-playing element, so it's safe to
+      // call repeatedly. Track per-video success — if every play() got
+      // rejected (autoplay blocked), leave React `playing` false so the next
+      // incoming sync ping will retry.
+      const results = await Promise.allSettled(
         videos.map(async (v) => {
           const el = refs.current.get(v.id);
-          if (!el) return;
-          try {
-            await el.play();
-          } catch {
-            /* autoplay rejection */
-          }
+          if (!el) throw new Error("video element not mounted");
+          await el.play();
         }),
       );
-      setPlaying(true);
+      const anyOk = results.some((r) => r.status === "fulfilled");
+      if (anyOk) setPlaying(true);
     } else {
       for (const v of videos) refs.current.get(v.id)?.pause();
       setPlaying(false);

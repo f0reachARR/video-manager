@@ -94,7 +94,7 @@ func run() error {
 		Markers:        &handler.Markers{Q: q, Hub: hub},
 		Tournaments:    &handler.Tournaments{Q: q},
 		Matches:        &handler.Matches{Q: q},
-		Annotations:    &handler.Annotations{Q: q},
+		Annotations:    &handler.Annotations{Q: q, Hub: hub},
 		ScoutingNotes:  &handler.ScoutingNotes{Q: q},
 		WS:             &handler.WS{Hub: hub, AllowedOrigins: cfg.AllowedOrigins},
 		Uploads:        &handler.Uploads{Q: q, Worker: workers},

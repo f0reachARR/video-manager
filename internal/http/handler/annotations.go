@@ -3,16 +3,43 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
+	"github.com/f0reachARR/video-manager/internal/realtime"
 )
 
 type Annotations struct {
-	Q *sqlc.Queries
+	Q   *sqlc.Queries
+	Hub *realtime.Hub
+}
+
+type annotationEvent struct {
+	Type       string        `json:"type"` // "annotation.created" | "annotation.updated" | "annotation.deleted"
+	VideoID    string        `json:"videoId"`
+	Annotation annotationDTO `json:"annotation"`
+}
+
+type annotationDeleteEvent struct {
+	Type         string `json:"type"`
+	VideoID      string `json:"videoId"`
+	AnnotationID string `json:"annotationId"`
+}
+
+func (h *Annotations) publish(videoID string, payload any) {
+	if h.Hub == nil {
+		return
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		slog.Warn("annotation event marshal failed", "error", err)
+		return
+	}
+	h.Hub.Publish("video:"+videoID, raw)
 }
 
 type annotationDTO struct {
@@ -162,7 +189,9 @@ func (h *Annotations) Create(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toAnnotationDTO(a))
+	dto := toAnnotationDTO(a)
+	h.publish(dto.VideoID, annotationEvent{Type: "annotation.created", VideoID: dto.VideoID, Annotation: dto})
+	writeJSON(w, http.StatusCreated, dto)
 }
 
 func (h *Annotations) Update(w http.ResponseWriter, r *http.Request) {
@@ -202,13 +231,25 @@ func (h *Annotations) Update(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toAnnotationDTO(a))
+	dto := toAnnotationDTO(a)
+	h.publish(dto.VideoID, annotationEvent{Type: "annotation.updated", VideoID: dto.VideoID, Annotation: dto})
+	writeJSON(w, http.StatusOK, dto)
 }
 
 func (h *Annotations) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUUIDParam(chi.URLParam(r, "annotationId"))
 	if err != nil {
 		badRequest(w, "invalid annotationId")
+		return
+	}
+	// Read first so we know which video to broadcast on after delete.
+	existing, err := h.Q.GetAnnotation(r.Context(), id)
+	if err != nil {
+		if isNoRows(err) {
+			notFound(w, "annotation not found")
+			return
+		}
+		internalError(w, err)
 		return
 	}
 	n, err := h.Q.DeleteAnnotation(r.Context(), id)
@@ -220,5 +261,11 @@ func (h *Annotations) Delete(w http.ResponseWriter, r *http.Request) {
 		notFound(w, "annotation not found")
 		return
 	}
+	videoID := uuidString(existing.VideoID)
+	h.publish(videoID, annotationDeleteEvent{
+		Type:         "annotation.deleted",
+		VideoID:      videoID,
+		AnnotationID: uuidString(id),
+	})
 	writeNoContent(w)
 }

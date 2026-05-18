@@ -3,6 +3,7 @@
 // and — when `canEdit` is true and a mode is active — captures pointer
 // events to create new annotations / strokes.
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type { Annotation } from "../lib/api/client";
 import { useAnnotations, useCreateAnnotation } from "../lib/queries";
@@ -60,11 +61,13 @@ export function RunVideoOverlay({
     );
   }, [ann.data, currentSec]);
 
+  const qc = useQueryClient();
+
   // Live ink — same wire format as AnnotatedPlayer so a /videos modal and a
   // Run detail tab can co-view strokes on the same video.
   const [strokes, setStrokes] = useState<RemoteStroke[]>([]);
   const publish = useWebSocketPublisher(`/ws/video/${videoId}`, (msg) => {
-    const m = msg as Partial<InkStrokeMessage>;
+    const m = msg as Partial<InkStrokeMessage> & { type?: string };
     if (
       m.type === "ink.stroke" &&
       Array.isArray(m.points) &&
@@ -79,6 +82,9 @@ export function RunVideoOverlay({
           receivedAt: Date.now(),
         },
       ]);
+    } else if (typeof m.type === "string" && m.type.startsWith("annotation.")) {
+      // Server-side broadcast for Annotation CRUD — refetch authoritative state.
+      qc.invalidateQueries({ queryKey: ["annotations", videoId] });
     }
   });
   useEffect(() => {
