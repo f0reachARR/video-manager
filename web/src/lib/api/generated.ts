@@ -11,10 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Liveness probe
-         * @description API プロセスが応答できることを返す。依存先のチェックは行わない。
-         */
+        /** Liveness probe */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -31,11 +28,521 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Readiness probe
-         * @description API が外部依存（PostgreSQL）に到達可能かを確認する。
-         */
+        /** Readiness probe (依存先到達確認) */
         get: operations["getReady"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** ユーザー一覧 */
+        get: operations["listUsers"];
+        put?: never;
+        /** ユーザー作成 */
+        post: operations["createUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        /** ユーザー取得 */
+        get: operations["getUser"];
+        put?: never;
+        post?: never;
+        /** ユーザー削除 */
+        delete: operations["deleteUser"];
+        options?: never;
+        head?: never;
+        /** ユーザー更新 */
+        patch: operations["updateUser"];
+        trace?: never;
+    };
+    "/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 機材一覧 */
+        get: operations["listDevices"];
+        put?: never;
+        /** 機材作成 */
+        post: operations["createDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{deviceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        /** 機材取得 */
+        get: operations["getDevice"];
+        put?: never;
+        post?: never;
+        /** 機材削除 */
+        delete: operations["deleteDevice"];
+        options?: never;
+        head?: never;
+        /** 機材更新（時計オフセット含む） */
+        patch: operations["updateDevice"];
+        trace?: never;
+    };
+    "/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** チーム一覧 */
+        get: operations["listTeams"];
+        put?: never;
+        /** チーム作成 */
+        post: operations["createTeam"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{teamId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: components["parameters"]["TeamId"];
+            };
+            cookie?: never;
+        };
+        /** チーム取得 */
+        get: operations["getTeam"];
+        put?: never;
+        post?: never;
+        /** チーム削除 */
+        delete: operations["deleteTeam"];
+        options?: never;
+        head?: never;
+        /** チーム更新 */
+        patch: operations["updateTeam"];
+        trace?: never;
+    };
+    "/robots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** ロボット一覧 */
+        get: operations["listRobots"];
+        put?: never;
+        /** ロボット作成 */
+        post: operations["createRobot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/robots/{robotId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robotId: components["parameters"]["RobotId"];
+            };
+            cookie?: never;
+        };
+        /** ロボット取得 */
+        get: operations["getRobot"];
+        put?: never;
+        post?: never;
+        /** ロボット削除 */
+        delete: operations["deleteRobot"];
+        options?: never;
+        head?: never;
+        /** ロボット更新 */
+        patch: operations["updateRobot"];
+        trace?: never;
+    };
+    "/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 課題一覧 */
+        get: operations["listScenarios"];
+        put?: never;
+        /** 課題作成 */
+        post: operations["createScenario"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenarios/{scenarioId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scenarioId: components["parameters"]["ScenarioId"];
+            };
+            cookie?: never;
+        };
+        /** 課題取得 */
+        get: operations["getScenario"];
+        put?: never;
+        post?: never;
+        /** 課題削除 */
+        delete: operations["deleteScenario"];
+        options?: never;
+        head?: never;
+        /** 課題更新 */
+        patch: operations["updateScenario"];
+        trace?: never;
+    };
+    "/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** タグ一覧 */
+        get: operations["listTags"];
+        put?: never;
+        /** タグ作成 */
+        post: operations["createTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tags/{tagId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tagId: components["parameters"]["TagId"];
+            };
+            cookie?: never;
+        };
+        /** タグ取得 */
+        get: operations["getTag"];
+        put?: never;
+        post?: never;
+        /** タグ削除 */
+        delete: operations["deleteTag"];
+        options?: never;
+        head?: never;
+        /** タグ更新 */
+        patch: operations["updateTag"];
+        trace?: never;
+    };
+    "/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** セッション一覧 */
+        get: operations["listSessions"];
+        put?: never;
+        /** セッション作成 */
+        post: operations["createSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        /** セッション取得 */
+        get: operations["getSession"];
+        put?: never;
+        post?: never;
+        /** セッション削除 */
+        delete: operations["deleteSession"];
+        options?: never;
+        head?: never;
+        /** セッション更新 */
+        patch: operations["updateSession"];
+        trace?: never;
+    };
+    "/sessions/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Session 候補（録画時刻に基づくグルーピング提案）
+         * @description アップロードされた未割当 Video の `recordedAt` から、既存 Session に
+         *     30 分以内のギャップで近接するもの、または新規 Session 候補を返す。
+         *     spec-devflow.md §6 で UI が確認ステップに使う。
+         */
+        get: operations["listSessionCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 動画一覧 */
+        get: operations["listVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/videos/{videoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        /** 動画取得 */
+        get: operations["getVideo"];
+        put?: never;
+        post?: never;
+        /** 動画削除（オブジェクトストレージのファイルも削除） */
+        delete: operations["deleteVideo"];
+        options?: never;
+        head?: never;
+        /** 動画メタデータ更新（recorded_at / time_offset_sec / session 紐付け） */
+        patch: operations["updateVideo"];
+        trace?: never;
+    };
+    "/videos/{videoId}/playback-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        /** 動画再生用の署名 URL を発行 */
+        get: operations["getVideoPlaybackUrl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/uploads/tus-hook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * tusd からの hook 受信
+         * @description tusd の pre-finish / post-finish hook を受け、Video レコード作成と
+         *     ffprobe ジョブ投入をトリガする。tusd のみが呼び出す内部エンドポイント。
+         */
+        post: operations["handleTusHook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run 一覧 */
+        get: operations["listRuns"];
+        put?: never;
+        /** Run 作成 */
+        post: operations["createRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        /** Run 取得（紐付け Video / Marker 含む） */
+        get: operations["getRun"];
+        put?: never;
+        post?: never;
+        /** Run 削除 */
+        delete: operations["deleteRun"];
+        options?: never;
+        head?: never;
+        /** Run 更新 */
+        patch: operations["updateRun"];
+        trace?: never;
+    };
+    "/runs/{runId}/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run にアングル動画を紐付ける */
+        post: operations["addRunVideo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{runId}/videos/{runVideoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+                runVideoId: components["parameters"]["RunVideoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Run からアングル動画を外す */
+        delete: operations["removeRunVideo"];
+        options?: never;
+        head?: never;
+        /** アングル動画の offset / angle ラベル更新 */
+        patch: operations["updateRunVideo"];
+        trace?: never;
+    };
+    "/runs/{runId}/markers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        /** Run の Marker 一覧 */
+        get: operations["listMarkers"];
+        put?: never;
+        /** Marker 作成 */
+        post: operations["createMarker"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/markers/{markerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                markerId: components["parameters"]["MarkerId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Marker 削除 */
+        delete: operations["deleteMarker"];
+        options?: never;
+        head?: never;
+        /** Marker 更新 */
+        patch: operations["updateMarker"];
+        trace?: never;
+    };
+    "/search/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run の横断検索
+         * @description spec-devflow.md §9 で扱う Phase 1 の検索条件。
+         *     期間 / Robot / Scenario / tags / Marker category / memo の組合せで Run を絞り込む。
+         */
+        get: operations["searchRuns"];
         put?: never;
         post?: never;
         delete?: never;
@@ -51,21 +558,469 @@ export interface components {
         HealthResponse: {
             /** @enum {string} */
             status: "ok";
-            /** @description アプリのバージョン */
             version: string;
         };
         ErrorResponse: {
             /** @description 機械可読なエラーコード */
             code: string;
-            /** @description 人間向けの説明 */
             message: string;
             details?: {
                 [key: string]: unknown;
             };
         };
+        Pagination: {
+            hasMore: boolean;
+            /** @description 次ページを取得するための cursor */
+            nextCursor?: string | null;
+        };
+        /**
+         * @description Session の表示モードヒント
+         * @enum {string}
+         */
+        SessionModeHint: "practice" | "pre_match";
+        /**
+         * @description Marker のカテゴリ。spec の `success | failure | note` を採用
+         * @enum {string}
+         */
+        MarkerCategory: "success" | "failure" | "note";
+        User: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description UI 上の識別色（HEX 文字列） */
+            color?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateUserRequest: {
+            name: string;
+            color?: string | null;
+        };
+        UpdateUserRequest: {
+            name?: string;
+            color?: string | null;
+        };
+        UserList: {
+            data: components["schemas"]["User"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        Device: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description 機材の時計ズレ（秒）。プラスなら機材時刻が進んでいる */
+            defaultTimeOffsetSec: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateDeviceRequest: {
+            name: string;
+            /** @default 0 */
+            defaultTimeOffsetSec: number;
+        };
+        UpdateDeviceRequest: {
+            name?: string;
+            defaultTimeOffsetSec?: number;
+        };
+        DeviceList: {
+            data: components["schemas"]["Device"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        Team: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            isOwn: boolean;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateTeamRequest: {
+            name: string;
+            /** @default false */
+            isOwn: boolean;
+        };
+        UpdateTeamRequest: {
+            name?: string;
+            isOwn?: boolean;
+        };
+        TeamList: {
+            data: components["schemas"]["Team"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        Robot: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            teamId: string;
+            name: string;
+            /** @description バージョン文字列。空文字列も可 */
+            version: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateRobotRequest: {
+            /** Format: uuid */
+            teamId: string;
+            name: string;
+            /** @default  */
+            version: string;
+        };
+        UpdateRobotRequest: {
+            name?: string;
+            version?: string;
+        };
+        RobotList: {
+            data: components["schemas"]["Robot"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        Scenario: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateScenarioRequest: {
+            name: string;
+            /** @default  */
+            description: string;
+        };
+        UpdateScenarioRequest: {
+            name?: string;
+            description?: string;
+        };
+        ScenarioList: {
+            data: components["schemas"]["Scenario"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        Tag: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            color?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateTagRequest: {
+            name: string;
+            color?: string | null;
+        };
+        UpdateTagRequest: {
+            name?: string;
+            color?: string | null;
+        };
+        TagList: {
+            data: components["schemas"]["Tag"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        Session: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: date-time */
+            startedAt?: string | null;
+            /** Format: date-time */
+            endedAt?: string | null;
+            location?: string | null;
+            modeHint: components["schemas"]["SessionModeHint"];
+            /** Format: uuid */
+            tournamentId?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateSessionRequest: {
+            name: string;
+            /** Format: date-time */
+            startedAt?: string | null;
+            /** Format: date-time */
+            endedAt?: string | null;
+            location?: string | null;
+            modeHint?: components["schemas"]["SessionModeHint"];
+            /** Format: uuid */
+            tournamentId?: string | null;
+        };
+        UpdateSessionRequest: {
+            name?: string;
+            /** Format: date-time */
+            startedAt?: string | null;
+            /** Format: date-time */
+            endedAt?: string | null;
+            location?: string | null;
+            modeHint?: components["schemas"]["SessionModeHint"];
+            /** Format: uuid */
+            tournamentId?: string | null;
+        };
+        SessionList: {
+            data: components["schemas"]["Session"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        SessionCandidate: {
+            /** @enum {string} */
+            type: "existing" | "new";
+            /** @description type=existing のとき、候補となる既存 Session */
+            session?: components["schemas"]["Session"];
+            /** @description 既存 Session との時間差（秒）。重なる場合は 0 */
+            gapSec?: number | null;
+            /** @description type=new のとき、提案する Session 名 */
+            suggestedName?: string | null;
+        };
+        SessionCandidateList: {
+            data: components["schemas"]["SessionCandidate"][];
+        };
+        Video: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            sessionId?: string | null;
+            /** Format: uuid */
+            deviceId?: string | null;
+            /** Format: uuid */
+            uploaderId?: string | null;
+            /** @description オブジェクトストレージのキー */
+            storageKey: string;
+            /** Format: date-time */
+            recordedAt?: string | null;
+            durationSec?: number | null;
+            /** @description 個別オフセット（Device default に対する追加補正） */
+            timeOffsetSec: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        UpdateVideoRequest: {
+            /** Format: uuid */
+            sessionId?: string | null;
+            /** Format: uuid */
+            deviceId?: string | null;
+            /** Format: date-time */
+            recordedAt?: string | null;
+            timeOffsetSec?: number;
+        };
+        VideoList: {
+            data: components["schemas"]["Video"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        PlaybackUrl: {
+            /** Format: uri */
+            url: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        TusHookRequest: {
+            /** @description tusd hook 種別（例 pre-finish / post-finish） */
+            type: string;
+            upload: {
+                /** @description tusd の Upload ID */
+                id: string;
+                /** @description バイト数 */
+                size: number;
+                offset?: number;
+                isFinal?: boolean;
+                /**
+                 * @description tus client から渡される metadata。期待するキー:
+                 *     `filename`, `filetype`, `deviceId`, `uploaderId`
+                 */
+                metaData: {
+                    [key: string]: string;
+                };
+                /** @description tusd S3 backend の保存先キーなど */
+                storage?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        TusHookResponse: {
+            /** @description tusd へのレスポンス指示（必要に応じて） */
+            httpResponse?: {
+                statusCode?: number;
+                body?: string;
+                headers?: {
+                    [key: string]: string;
+                };
+            };
+            /** @default false */
+            rejectUpload: boolean;
+            /**
+             * Format: uuid
+             * @description 作成された Video の ID（デバッグ用）
+             */
+            videoId?: string | null;
+        };
+        Run: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            sessionId: string;
+            /** Format: uuid */
+            teamId: string;
+            /** Format: uuid */
+            robotId: string;
+            /** Format: uuid */
+            scenarioId: string;
+            /** Format: uuid */
+            matchId?: string | null;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            endedAt: string;
+            score?: number | null;
+            memo: string;
+            /** @description getRun のみで埋まる。listRuns では省略 */
+            videos?: components["schemas"]["RunVideo"][];
+            tagIds?: string[];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateRunRequest: {
+            /** Format: uuid */
+            sessionId: string;
+            /** Format: uuid */
+            teamId: string;
+            /** Format: uuid */
+            robotId: string;
+            /** Format: uuid */
+            scenarioId: string;
+            /** Format: uuid */
+            matchId?: string | null;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            endedAt: string;
+            score?: number | null;
+            /** @default  */
+            memo: string;
+            tagIds?: string[];
+        };
+        UpdateRunRequest: {
+            /** Format: uuid */
+            robotId?: string;
+            /** Format: uuid */
+            scenarioId?: string;
+            /** Format: uuid */
+            matchId?: string | null;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            endedAt?: string;
+            score?: number | null;
+            memo?: string;
+            tagIds?: string[];
+        };
+        RunList: {
+            data: components["schemas"]["Run"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        RunVideo: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            videoId: string;
+            /** @description Video 内の開始秒 */
+            videoOffsetStartSec: number;
+            videoOffsetEndSec: number;
+            /** @description 例 "正面" / "コート横" / "drone" */
+            angleLabel: string;
+        };
+        AddRunVideoRequest: {
+            /** Format: uuid */
+            videoId: string;
+            videoOffsetStartSec: number;
+            videoOffsetEndSec: number;
+            /** @default  */
+            angleLabel: string;
+        };
+        UpdateRunVideoRequest: {
+            videoOffsetStartSec?: number;
+            videoOffsetEndSec?: number;
+            angleLabel?: string;
+        };
+        Marker: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            authorId?: string | null;
+            /** @description Run 開始からの秒数（spec §3.4） */
+            runOffsetSec: number;
+            label: string;
+            category: components["schemas"]["MarkerCategory"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateMarkerRequest: {
+            runOffsetSec: number;
+            /** @default  */
+            label: string;
+            category: components["schemas"]["MarkerCategory"];
+        };
+        UpdateMarkerRequest: {
+            runOffsetSec?: number;
+            label?: string;
+            category?: components["schemas"]["MarkerCategory"];
+        };
+        MarkerList: {
+            data: components["schemas"]["Marker"][];
+            pagination: components["schemas"]["Pagination"];
+        };
     };
-    responses: never;
-    parameters: never;
+    responses: {
+        /** @description リクエストが不正 */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description リソースが存在しない */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description 競合（重複や状態不一致） */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description バリデーション失敗 */
+        UnprocessableEntity: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+    };
+    parameters: {
+        /** @description 前回レスポンスの `pagination.nextCursor` */
+        Cursor: string;
+        /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+        Limit: number;
+        UserId: string;
+        DeviceId: string;
+        TeamId: string;
+        RobotId: string;
+        ScenarioId: string;
+        TagId: string;
+        SessionId: string;
+        VideoId: string;
+        RunId: string;
+        RunVideoId: string;
+        MarkerId: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -117,6 +1072,1387 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: {
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserList"];
+                };
+            };
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    listDevices: {
+        parameters: {
+            query?: {
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceList"];
+                };
+            };
+        };
+    };
+    createDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDeviceRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    getDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDeviceRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listTeams: {
+        parameters: {
+            query?: {
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamList"];
+                };
+            };
+        };
+    };
+    createTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTeamRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    getTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: components["parameters"]["TeamId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: components["parameters"]["TeamId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: components["parameters"]["TeamId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTeamRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listRobots: {
+        parameters: {
+            query?: {
+                /** @description チームで絞り込む */
+                teamId?: string;
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotList"];
+                };
+            };
+        };
+    };
+    createRobot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRobotRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Robot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getRobot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robotId: components["parameters"]["RobotId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Robot"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteRobot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robotId: components["parameters"]["RobotId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateRobot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robotId: components["parameters"]["RobotId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRobotRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Robot"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listScenarios: {
+        parameters: {
+            query?: {
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioList"];
+                };
+            };
+        };
+    };
+    createScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateScenarioRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scenarioId: components["parameters"]["ScenarioId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scenarioId: components["parameters"]["ScenarioId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scenarioId: components["parameters"]["ScenarioId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateScenarioRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listTags: {
+        parameters: {
+            query?: {
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagList"];
+                };
+            };
+        };
+    };
+    createTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTagRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tagId: components["parameters"]["TagId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tagId: components["parameters"]["TagId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tagId: components["parameters"]["TagId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTagRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listSessions: {
+        parameters: {
+            query?: {
+                /** @description モードで絞り込む */
+                modeHint?: components["schemas"]["SessionModeHint"];
+                tournamentId?: string;
+                /** @description 開始時刻の下限（含む） */
+                startedFrom?: string;
+                /** @description 開始時刻の上限（含む） */
+                startedTo?: string;
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionList"];
+                };
+            };
+        };
+    };
+    createSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    getSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listSessionCandidates: {
+        parameters: {
+            query: {
+                videoId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionCandidateList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listVideos: {
+        parameters: {
+            query?: {
+                sessionId?: string;
+                deviceId?: string;
+                /** @description true なら sessionId が未設定の動画のみ */
+                unassigned?: boolean;
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoList"];
+                };
+            };
+        };
+    };
+    getVideo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Video"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteVideo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateVideo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateVideoRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Video"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getVideoPlaybackUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackUrl"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    handleTusHook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TusHookRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TusHookResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    listRuns: {
+        parameters: {
+            query?: {
+                sessionId?: string;
+                teamId?: string;
+                robotId?: string;
+                scenarioId?: string;
+                matchId?: string;
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunList"];
+                };
+            };
+        };
+    };
+    createRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    getRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRunRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    addRunVideo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddRunVideoRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunVideo"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    removeRunVideo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+                runVideoId: components["parameters"]["RunVideoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateRunVideo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+                runVideoId: components["parameters"]["RunVideoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRunVideoRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunVideo"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listMarkers: {
+        parameters: {
+            query?: {
+                /** @description 複数指定可（カンマ区切り） */
+                category?: components["schemas"]["MarkerCategory"][];
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkerList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createMarker: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMarkerRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Marker"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteMarker: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                markerId: components["parameters"]["MarkerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateMarker: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                markerId: components["parameters"]["MarkerId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMarkerRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Marker"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    searchRuns: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                robotId?: string;
+                scenarioId?: string;
+                /** @description タグ ID（カンマ区切り、AND 条件） */
+                tagIds?: string[];
+                /** @description 含まれている Marker のカテゴリ（カンマ区切り、OR 条件） */
+                markerCategories?: components["schemas"]["MarkerCategory"][];
+                /** @description memo の全文検索（pg_trgm） */
+                q?: string;
+                /** @description 前回レスポンスの `pagination.nextCursor` */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunList"];
                 };
             };
         };

@@ -5,21 +5,63 @@ info:
   description: |
     Robocon test-run video manager HTTP API.
 
-    Phase 1 では health 系のみ。後続フェーズで sessions / videos / runs / markers
-    などのリソースを追加する。spec-devflow.md §3 を参照。
+    Phase 1 の主要リソース（masters / sessions / videos / runs / markers / search）を契約として定義する。
+    実装は spec-devflow.md §4〜§9 の順に handler / service / UI を縦断で積む。
+
+    ## 共通方針
+
+    - JSON フィールド名は camelCase
+    - ID は UUID 文字列
+    - 時刻は ISO 8601 (RFC 3339) タイムスタンプ
+    - 動画上の時間は秒単位（int = 整数秒、float = 小数秒）
+    - リスト系は `{ data: [...], pagination: {...} }` のエンベロープ
+    - ページングは cursor ベース (`?cursor=...&limit=...`)
+    - エラーは `ErrorResponse` で統一
+
 servers:
   - url: http://localhost:8080
     description: Local development
+  - url: /
+    description: Same-origin (production / docker)
+
+security:
+  - xUserId: []
+
 tags:
   - name: health
     description: Liveness / readiness probes
+  - name: users
+    description: ユーザー（チームメンバー）
+  - name: devices
+    description: 撮影機材と時計オフセット
+  - name: teams
+    description: チーム（自チームおよび対戦相手）
+  - name: robots
+    description: ロボット（機体・バージョン）
+  - name: scenarios
+    description: 走行課題
+  - name: tags
+    description: 自由付与タグ
+  - name: sessions
+    description: 撮影セッション
+  - name: videos
+    description: 動画ファイルと再生
+  - name: uploads
+    description: tusd hook と署名 URL
+  - name: runs
+    description: 試走（Run）とマルチアングル紐付け
+  - name: markers
+    description: Run 単位の時刻つきコメント
+  - name: search
+    description: 横断検索
+
 paths:
   /health:
     get:
       tags: [health]
       operationId: getHealth
+      security: []
       summary: Liveness probe
-      description: API プロセスが応答できることを返す。依存先のチェックは行わない。
       responses:
         "200":
           description: OK
@@ -27,12 +69,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
+
   /ready:
     get:
       tags: [health]
       operationId: getReady
-      summary: Readiness probe
-      description: API が外部依存（PostgreSQL）に到達可能かを確認する。
+      security: []
+      summary: Readiness probe (依存先到達確認)
       responses:
         "200":
           description: Ready
@@ -46,8 +89,1230 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  # ---------- Users ----------
+  /users:
+    get:
+      tags: [users]
+      operationId: listUsers
+      summary: ユーザー一覧
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserList"
+    post:
+      tags: [users]
+      operationId: createUser
+      summary: ユーザー作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /users/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [users]
+      operationId: getUser
+      summary: ユーザー取得
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [users]
+      operationId: updateUser
+      summary: ユーザー更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+    delete:
+      tags: [users]
+      operationId: deleteUser
+      summary: ユーザー削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------- Devices ----------
+  /devices:
+    get:
+      tags: [devices]
+      operationId: listDevices
+      summary: 機材一覧
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceList"
+    post:
+      tags: [devices]
+      operationId: createDevice
+      summary: 機材作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDeviceRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /devices/{deviceId}:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    get:
+      tags: [devices]
+      operationId: getDevice
+      summary: 機材取得
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [devices]
+      operationId: updateDevice
+      summary: 機材更新（時計オフセット含む）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDeviceRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [devices]
+      operationId: deleteDevice
+      summary: 機材削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------- Teams ----------
+  /teams:
+    get:
+      tags: [teams]
+      operationId: listTeams
+      summary: チーム一覧
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamList"
+    post:
+      tags: [teams]
+      operationId: createTeam
+      summary: チーム作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeamRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /teams/{teamId}:
+    parameters:
+      - $ref: "#/components/parameters/TeamId"
+    get:
+      tags: [teams]
+      operationId: getTeam
+      summary: チーム取得
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [teams]
+      operationId: updateTeam
+      summary: チーム更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTeamRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [teams]
+      operationId: deleteTeam
+      summary: チーム削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------- Robots ----------
+  /robots:
+    get:
+      tags: [robots]
+      operationId: listRobots
+      summary: ロボット一覧
+      parameters:
+        - name: teamId
+          in: query
+          description: チームで絞り込む
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RobotList"
+    post:
+      tags: [robots]
+      operationId: createRobot
+      summary: ロボット作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRobotRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Robot"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /robots/{robotId}:
+    parameters:
+      - $ref: "#/components/parameters/RobotId"
+    get:
+      tags: [robots]
+      operationId: getRobot
+      summary: ロボット取得
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Robot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [robots]
+      operationId: updateRobot
+      summary: ロボット更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRobotRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Robot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [robots]
+      operationId: deleteRobot
+      summary: ロボット削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------- Scenarios ----------
+  /scenarios:
+    get:
+      tags: [scenarios]
+      operationId: listScenarios
+      summary: 課題一覧
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioList"
+    post:
+      tags: [scenarios]
+      operationId: createScenario
+      summary: 課題作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScenarioRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /scenarios/{scenarioId}:
+    parameters:
+      - $ref: "#/components/parameters/ScenarioId"
+    get:
+      tags: [scenarios]
+      operationId: getScenario
+      summary: 課題取得
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [scenarios]
+      operationId: updateScenario
+      summary: 課題更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScenarioRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [scenarios]
+      operationId: deleteScenario
+      summary: 課題削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------- Tags ----------
+  /tags:
+    get:
+      tags: [tags]
+      operationId: listTags
+      summary: タグ一覧
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagList"
+    post:
+      tags: [tags]
+      operationId: createTag
+      summary: タグ作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTagRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /tags/{tagId}:
+    parameters:
+      - $ref: "#/components/parameters/TagId"
+    get:
+      tags: [tags]
+      operationId: getTag
+      summary: タグ取得
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [tags]
+      operationId: updateTag
+      summary: タグ更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTagRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [tags]
+      operationId: deleteTag
+      summary: タグ削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------- Sessions ----------
+  /sessions:
+    get:
+      tags: [sessions]
+      operationId: listSessions
+      summary: セッション一覧
+      parameters:
+        - name: modeHint
+          in: query
+          description: モードで絞り込む
+          required: false
+          schema:
+            $ref: "#/components/schemas/SessionModeHint"
+        - name: tournamentId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: startedFrom
+          in: query
+          description: 開始時刻の下限（含む）
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: startedTo
+          in: query
+          description: 開始時刻の上限（含む）
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionList"
+    post:
+      tags: [sessions]
+      operationId: createSession
+      summary: セッション作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /sessions/{sessionId}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [sessions]
+      operationId: getSession
+      summary: セッション取得
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [sessions]
+      operationId: updateSession
+      summary: セッション更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSessionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [sessions]
+      operationId: deleteSession
+      summary: セッション削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /sessions/candidates:
+    get:
+      tags: [sessions]
+      operationId: listSessionCandidates
+      summary: Session 候補（録画時刻に基づくグルーピング提案）
+      description: |
+        アップロードされた未割当 Video の `recordedAt` から、既存 Session に
+        30 分以内のギャップで近接するもの、または新規 Session 候補を返す。
+        spec-devflow.md §6 で UI が確認ステップに使う。
+      parameters:
+        - name: videoId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCandidateList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------- Videos ----------
+  /videos:
+    get:
+      tags: [videos]
+      operationId: listVideos
+      summary: 動画一覧
+      parameters:
+        - name: sessionId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: deviceId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: unassigned
+          in: query
+          description: true なら sessionId が未設定の動画のみ
+          required: false
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoList"
+
+  /videos/{videoId}:
+    parameters:
+      - $ref: "#/components/parameters/VideoId"
+    get:
+      tags: [videos]
+      operationId: getVideo
+      summary: 動画取得
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Video"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [videos]
+      operationId: updateVideo
+      summary: 動画メタデータ更新（recorded_at / time_offset_sec / session 紐付け）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateVideoRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Video"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [videos]
+      operationId: deleteVideo
+      summary: 動画削除（オブジェクトストレージのファイルも削除）
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /videos/{videoId}/playback-url:
+    parameters:
+      - $ref: "#/components/parameters/VideoId"
+    get:
+      tags: [videos]
+      operationId: getVideoPlaybackUrl
+      summary: 動画再生用の署名 URL を発行
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackUrl"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------- Uploads ----------
+  /uploads/tus-hook:
+    post:
+      tags: [uploads]
+      operationId: handleTusHook
+      summary: tusd からの hook 受信
+      description: |
+        tusd の pre-finish / post-finish hook を受け、Video レコード作成と
+        ffprobe ジョブ投入をトリガする。tusd のみが呼び出す内部エンドポイント。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TusHookRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TusHookResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ---------- Runs ----------
+  /runs:
+    get:
+      tags: [runs]
+      operationId: listRuns
+      summary: Run 一覧
+      parameters:
+        - name: sessionId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: teamId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: robotId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: scenarioId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: matchId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunList"
+    post:
+      tags: [runs]
+      operationId: createRun
+      summary: Run 作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRunRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /runs/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [runs]
+      operationId: getRun
+      summary: Run 取得（紐付け Video / Marker 含む）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [runs]
+      operationId: updateRun
+      summary: Run 更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRunRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [runs]
+      operationId: deleteRun
+      summary: Run 削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /runs/{runId}/videos:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [runs]
+      operationId: addRunVideo
+      summary: Run にアングル動画を紐付ける
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddRunVideoRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunVideo"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /runs/{runId}/videos/{runVideoId}:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/RunVideoId"
+    patch:
+      tags: [runs]
+      operationId: updateRunVideo
+      summary: アングル動画の offset / angle ラベル更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRunVideoRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunVideo"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [runs]
+      operationId: removeRunVideo
+      summary: Run からアングル動画を外す
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------- Markers ----------
+  /runs/{runId}/markers:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [markers]
+      operationId: listMarkers
+      summary: Run の Marker 一覧
+      parameters:
+        - name: category
+          in: query
+          description: 複数指定可（カンマ区切り）
+          required: false
+          explode: false
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/MarkerCategory"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkerList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [markers]
+      operationId: createMarker
+      summary: Marker 作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMarkerRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Marker"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /markers/{markerId}:
+    parameters:
+      - $ref: "#/components/parameters/MarkerId"
+    patch:
+      tags: [markers]
+      operationId: updateMarker
+      summary: Marker 更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMarkerRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Marker"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [markers]
+      operationId: deleteMarker
+      summary: Marker 削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------- Search ----------
+  /search/runs:
+    get:
+      tags: [search]
+      operationId: searchRuns
+      summary: Run の横断検索
+      description: |
+        spec-devflow.md §9 で扱う Phase 1 の検索条件。
+        期間 / Robot / Scenario / tags / Marker category / memo の組合せで Run を絞り込む。
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: robotId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: scenarioId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: tagIds
+          in: query
+          description: タグ ID（カンマ区切り、AND 条件）
+          required: false
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+        - name: markerCategories
+          in: query
+          description: 含まれている Marker のカテゴリ（カンマ区切り、OR 条件）
+          required: false
+          explode: false
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/MarkerCategory"
+        - name: q
+          in: query
+          description: memo の全文検索（pg_trgm）
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunList"
+
 components:
+  securitySchemes:
+    xUserId:
+      type: apiKey
+      in: header
+      name: X-User-Id
+      description: |
+        現在ユーザーの UUID。セルフホスト・全員同権限の前提のため
+        Phase 1 はクライアントが選択ユーザーを header で送る簡易方式。
+        将来正式な認証を入れたら securityScheme を差し替える。
+
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: 前回レスポンスの `pagination.nextCursor`
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: 1 レスポンスあたり最大件数（1〜200、既定 50）
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TeamId:
+      name: teamId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RobotId:
+      name: robotId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ScenarioId:
+      name: scenarioId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TagId:
+      name: tagId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    VideoId:
+      name: videoId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RunVideoId:
+      name: runVideoId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MarkerId:
+      name: markerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: リクエストが不正
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: リソースが存在しない
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: 競合（重複や状態不一致）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnprocessableEntity:
+      description: バリデーション失敗
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
   schemas:
+    # ---------- Common ----------
     HealthResponse:
       type: object
       required: [status, version]
@@ -57,7 +1322,7 @@ components:
           enum: [ok]
         version:
           type: string
-          description: アプリのバージョン
+
     ErrorResponse:
       type: object
       required: [code, message]
@@ -67,7 +1332,741 @@ components:
           description: 機械可読なエラーコード
         message:
           type: string
-          description: 人間向けの説明
         details:
           type: object
           additionalProperties: true
+
+    Pagination:
+      type: object
+      required: [hasMore]
+      properties:
+        hasMore:
+          type: boolean
+        nextCursor:
+          type: [string, "null"]
+          description: 次ページを取得するための cursor
+
+    # ---------- Enums ----------
+    SessionModeHint:
+      type: string
+      enum: [practice, pre_match]
+      description: Session の表示モードヒント
+
+    MarkerCategory:
+      type: string
+      enum: [success, failure, note]
+      description: Marker のカテゴリ。spec の `success | failure | note` を採用
+
+    # ---------- User ----------
+    User:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: [string, "null"]
+          description: UI 上の識別色（HEX 文字列）
+        createdAt:
+          type: string
+          format: date-time
+    CreateUserRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        color:
+          type: [string, "null"]
+    UpdateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        color:
+          type: [string, "null"]
+    UserList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ---------- Device ----------
+    Device:
+      type: object
+      required: [id, name, defaultTimeOffsetSec, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        defaultTimeOffsetSec:
+          type: integer
+          description: 機材の時計ズレ（秒）。プラスなら機材時刻が進んでいる
+        createdAt:
+          type: string
+          format: date-time
+    CreateDeviceRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        defaultTimeOffsetSec:
+          type: integer
+          default: 0
+    UpdateDeviceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        defaultTimeOffsetSec:
+          type: integer
+    DeviceList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Device"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ---------- Team ----------
+    Team:
+      type: object
+      required: [id, name, isOwn, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        isOwn:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    CreateTeamRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        isOwn:
+          type: boolean
+          default: false
+    UpdateTeamRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        isOwn:
+          type: boolean
+    TeamList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Team"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ---------- Robot ----------
+    Robot:
+      type: object
+      required: [id, teamId, name, version, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        version:
+          type: string
+          description: バージョン文字列。空文字列も可
+        createdAt:
+          type: string
+          format: date-time
+    CreateRobotRequest:
+      type: object
+      required: [teamId, name]
+      properties:
+        teamId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        version:
+          type: string
+          default: ""
+    UpdateRobotRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        version:
+          type: string
+    RobotList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Robot"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ---------- Scenario ----------
+    Scenario:
+      type: object
+      required: [id, name, description, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CreateScenarioRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          default: ""
+    UpdateScenarioRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+    ScenarioList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Scenario"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ---------- Tag ----------
+    Tag:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+    CreateTagRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        color:
+          type: [string, "null"]
+    UpdateTagRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        color:
+          type: [string, "null"]
+    TagList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ---------- Session ----------
+    Session:
+      type: object
+      required: [id, name, modeHint, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        endedAt:
+          type: [string, "null"]
+          format: date-time
+        location:
+          type: [string, "null"]
+        modeHint:
+          $ref: "#/components/schemas/SessionModeHint"
+        tournamentId:
+          type: [string, "null"]
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+    CreateSessionRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        endedAt:
+          type: [string, "null"]
+          format: date-time
+        location:
+          type: [string, "null"]
+        modeHint:
+          $ref: "#/components/schemas/SessionModeHint"
+        tournamentId:
+          type: [string, "null"]
+          format: uuid
+    UpdateSessionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        endedAt:
+          type: [string, "null"]
+          format: date-time
+        location:
+          type: [string, "null"]
+        modeHint:
+          $ref: "#/components/schemas/SessionModeHint"
+        tournamentId:
+          type: [string, "null"]
+          format: uuid
+    SessionList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+    SessionCandidate:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [existing, new]
+        session:
+          $ref: "#/components/schemas/Session"
+          description: type=existing のとき、候補となる既存 Session
+        gapSec:
+          type: [integer, "null"]
+          description: 既存 Session との時間差（秒）。重なる場合は 0
+        suggestedName:
+          type: [string, "null"]
+          description: type=new のとき、提案する Session 名
+    SessionCandidateList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionCandidate"
+
+    # ---------- Video ----------
+    Video:
+      type: object
+      required: [id, storageKey, timeOffsetSec, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: [string, "null"]
+          format: uuid
+        deviceId:
+          type: [string, "null"]
+          format: uuid
+        uploaderId:
+          type: [string, "null"]
+          format: uuid
+        storageKey:
+          type: string
+          description: オブジェクトストレージのキー
+        recordedAt:
+          type: [string, "null"]
+          format: date-time
+        durationSec:
+          type: [integer, "null"]
+        timeOffsetSec:
+          type: integer
+          description: 個別オフセット（Device default に対する追加補正）
+        createdAt:
+          type: string
+          format: date-time
+    UpdateVideoRequest:
+      type: object
+      properties:
+        sessionId:
+          type: [string, "null"]
+          format: uuid
+        deviceId:
+          type: [string, "null"]
+          format: uuid
+        recordedAt:
+          type: [string, "null"]
+          format: date-time
+        timeOffsetSec:
+          type: integer
+    VideoList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Video"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+    PlaybackUrl:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+
+    # ---------- Tus hook ----------
+    TusHookRequest:
+      type: object
+      required: [type, upload]
+      properties:
+        type:
+          type: string
+          description: tusd hook 種別（例 pre-finish / post-finish）
+        upload:
+          type: object
+          required: [id, size, metaData]
+          properties:
+            id:
+              type: string
+              description: tusd の Upload ID
+            size:
+              type: integer
+              description: バイト数
+            offset:
+              type: integer
+            isFinal:
+              type: boolean
+            metaData:
+              type: object
+              additionalProperties:
+                type: string
+              description: |
+                tus client から渡される metadata。期待するキー:
+                `filename`, `filetype`, `deviceId`, `uploaderId`
+            storage:
+              type: object
+              additionalProperties:
+                type: string
+              description: tusd S3 backend の保存先キーなど
+    TusHookResponse:
+      type: object
+      properties:
+        httpResponse:
+          type: object
+          description: tusd へのレスポンス指示（必要に応じて）
+          properties:
+            statusCode:
+              type: integer
+            body:
+              type: string
+            headers:
+              type: object
+              additionalProperties:
+                type: string
+        rejectUpload:
+          type: boolean
+          default: false
+        videoId:
+          type: [string, "null"]
+          format: uuid
+          description: 作成された Video の ID（デバッグ用）
+
+    # ---------- Run ----------
+    Run:
+      type: object
+      required: [id, sessionId, teamId, robotId, scenarioId, startedAt, endedAt, memo, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        robotId:
+          type: string
+          format: uuid
+        scenarioId:
+          type: string
+          format: uuid
+        matchId:
+          type: [string, "null"]
+          format: uuid
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        score:
+          type: [number, "null"]
+        memo:
+          type: string
+        videos:
+          type: array
+          description: getRun のみで埋まる。listRuns では省略
+          items:
+            $ref: "#/components/schemas/RunVideo"
+        tagIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        createdAt:
+          type: string
+          format: date-time
+    CreateRunRequest:
+      type: object
+      required: [sessionId, teamId, robotId, scenarioId, startedAt, endedAt]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        robotId:
+          type: string
+          format: uuid
+        scenarioId:
+          type: string
+          format: uuid
+        matchId:
+          type: [string, "null"]
+          format: uuid
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        score:
+          type: [number, "null"]
+        memo:
+          type: string
+          default: ""
+        tagIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    UpdateRunRequest:
+      type: object
+      properties:
+        robotId:
+          type: string
+          format: uuid
+        scenarioId:
+          type: string
+          format: uuid
+        matchId:
+          type: [string, "null"]
+          format: uuid
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        score:
+          type: [number, "null"]
+        memo:
+          type: string
+        tagIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    RunList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Run"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ---------- RunVideo ----------
+    RunVideo:
+      type: object
+      required: [id, runId, videoId, videoOffsetStartSec, videoOffsetEndSec, angleLabel]
+      properties:
+        id:
+          type: string
+          format: uuid
+        runId:
+          type: string
+          format: uuid
+        videoId:
+          type: string
+          format: uuid
+        videoOffsetStartSec:
+          type: integer
+          description: Video 内の開始秒
+        videoOffsetEndSec:
+          type: integer
+        angleLabel:
+          type: string
+          description: 例 "正面" / "コート横" / "drone"
+    AddRunVideoRequest:
+      type: object
+      required: [videoId, videoOffsetStartSec, videoOffsetEndSec]
+      properties:
+        videoId:
+          type: string
+          format: uuid
+        videoOffsetStartSec:
+          type: integer
+        videoOffsetEndSec:
+          type: integer
+        angleLabel:
+          type: string
+          default: ""
+    UpdateRunVideoRequest:
+      type: object
+      properties:
+        videoOffsetStartSec:
+          type: integer
+        videoOffsetEndSec:
+          type: integer
+        angleLabel:
+          type: string
+
+    # ---------- Marker ----------
+    Marker:
+      type: object
+      required: [id, runId, runOffsetSec, label, category, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        runId:
+          type: string
+          format: uuid
+        authorId:
+          type: [string, "null"]
+          format: uuid
+        runOffsetSec:
+          type: integer
+          description: Run 開始からの秒数（spec §3.4）
+        label:
+          type: string
+        category:
+          $ref: "#/components/schemas/MarkerCategory"
+        createdAt:
+          type: string
+          format: date-time
+    CreateMarkerRequest:
+      type: object
+      required: [runOffsetSec, category]
+      properties:
+        runOffsetSec:
+          type: integer
+        label:
+          type: string
+          default: ""
+        category:
+          $ref: "#/components/schemas/MarkerCategory"
+    UpdateMarkerRequest:
+      type: object
+      properties:
+        runOffsetSec:
+          type: integer
+        label:
+          type: string
+        category:
+          $ref: "#/components/schemas/MarkerCategory"
+    MarkerList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Marker"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
