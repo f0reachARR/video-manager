@@ -1,4 +1,3 @@
-import { Tooltip } from "@mantine/core";
 import { Node, mergeAttributes } from "@tiptap/core";
 import {
   NodeViewWrapper,
@@ -117,18 +116,22 @@ function MarkerLinkChip({ node }: NodeViewProps) {
     );
   }
 
+  // Use the native `title` attribute instead of Mantine <Tooltip> — Tooltip
+  // injects a wrapper element which violates HTML (the wrapper would land
+  // inside a <p>) and produces "div cannot be a descendant of p" warnings.
+  const tooltip = marker.label
+    ? `${formatMarkerTime(marker.runOffsetSec)} — ${marker.label}`
+    : formatMarkerTime(marker.runOffsetSec);
+
   return (
     <NodeViewWrapper
       as="span"
       onClick={onClick}
+      title={tooltip}
       style={inlineStyle(categoryColor[marker.category])}
     >
-      <Tooltip label={marker.label || formatMarkerTime(marker.runOffsetSec)} withArrow>
-        <span style={{ display: "inline-block" }}>
-          📍 {formatMarkerTime(marker.runOffsetSec)}
-          {marker.label && ` ${marker.label}`}
-        </span>
-      </Tooltip>
+      📍 {formatMarkerTime(marker.runOffsetSec)}
+      {marker.label ? ` ${marker.label}` : null}
     </NodeViewWrapper>
   );
 }

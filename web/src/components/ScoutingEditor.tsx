@@ -1,4 +1,4 @@
-import { Badge, Button, Group, Paper, Text } from "@mantine/core";
+import { Alert, Badge, Button, Group, Paper, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import Collaboration from "@tiptap/extension-collaboration";
@@ -80,6 +80,12 @@ export function ScoutingEditor({ noteId }: { noteId: string }) {
           📍 Marker を挿入
         </Button>
       </Group>
+      {status === "disconnected" && (
+        <Alert color="orange" mb="xs">
+          Hocuspocus に接続できません。 <code>docker compose up -d hocuspocus</code> で
+          コンテナが起動しているか、 {HOCUSPOCUS_URL} に到達できるか確認してください。
+        </Alert>
+      )}
       <div
         style={{
           minHeight: 200,

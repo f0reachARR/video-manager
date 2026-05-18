@@ -4,7 +4,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 load_env
 
-docker compose up -d postgres minio tusd
+docker compose up -d postgres minio tusd hocuspocus
 
 pids=()
 cleanup() {
