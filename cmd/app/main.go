@@ -15,6 +15,7 @@ import (
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
 	"github.com/f0reachARR/video-manager/internal/http/handler"
 	"github.com/f0reachARR/video-manager/internal/http/route"
+	"github.com/f0reachARR/video-manager/internal/realtime"
 	"github.com/f0reachARR/video-manager/internal/storage"
 	"github.com/f0reachARR/video-manager/internal/worker"
 )
@@ -59,6 +60,8 @@ func run() error {
 		return err
 	}
 
+	hub := realtime.NewHub()
+
 	workers, err := worker.Setup(ctx, database.Pool, q, store)
 	if err != nil {
 		return err
@@ -88,10 +91,11 @@ func run() error {
 		Sessions:       &handler.Sessions{Q: q},
 		Videos:         &handler.Videos{Q: q, Storage: store},
 		Runs:           &handler.Runs{Q: q},
-		Markers:        &handler.Markers{Q: q},
+		Markers:        &handler.Markers{Q: q, Hub: hub},
 		Tournaments:    &handler.Tournaments{Q: q},
 		Matches:        &handler.Matches{Q: q},
 		Annotations:    &handler.Annotations{Q: q},
+		WS:             &handler.WS{Hub: hub, AllowedOrigins: cfg.AllowedOrigins},
 		Uploads:        &handler.Uploads{Q: q, Worker: workers},
 		AllowedOrigins: cfg.AllowedOrigins,
 	})

@@ -25,6 +25,7 @@ type Deps struct {
 	Tournaments    *handler.Tournaments
 	Matches        *handler.Matches
 	Annotations    *handler.Annotations
+	WS             *handler.WS
 	Uploads        *handler.Uploads
 	AllowedOrigins []string
 }
@@ -161,6 +162,11 @@ func New(d Deps) http.Handler {
 	})
 
 	r.Post("/uploads/tus-hook", d.Uploads.TusHook)
+
+	if d.WS != nil {
+		r.Get("/ws/run/{runId}", d.WS.SubscribeRun)
+		r.Get("/ws/video/{videoId}", d.WS.SubscribeVideo)
+	}
 
 	return r
 }

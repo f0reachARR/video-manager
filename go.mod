@@ -22,6 +22,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1 // indirect
 	github.com/aws/smithy-go v1.25.1 // indirect
 	github.com/caarlos0/env/v11 v11.4.1 // indirect
+	github.com/coder/websocket v1.8.14 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-chi/chi/v5 v5.2.5 // indirect
 	github.com/go-chi/cors v1.2.2 // indirect

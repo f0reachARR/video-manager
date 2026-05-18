@@ -48,6 +48,8 @@ import {
   useUpdateRunVideo,
   useVideos,
 } from "../../lib/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { useTopicSubscription } from "../../lib/realtime";
 
 export const Route = createFileRoute("/runs/$runId")({
   component: RunDetailPage,
@@ -61,6 +63,16 @@ function RunDetailPage() {
   const scenarios = useScenarios();
   const allMarkers = useMarkers(runId);
   const navigate = useNavigate();
+  const qc = useQueryClient();
+
+  // Subscribe to the Run's realtime topic. Every event triggers a markers
+  // refetch — simple invalidate keeps state authoritative without needing to
+  // diff marker mutations client-side. Reconnects also refetch.
+  useTopicSubscription(
+    `/ws/run/${runId}`,
+    () => qc.invalidateQueries({ queryKey: ["markers", runId] }),
+    () => qc.invalidateQueries({ queryKey: ["markers", runId] }),
+  );
   const [addVideoOpen, { open: openAddVideo, close: closeAddVideo }] = useDisclosure(false);
   const [t, setT] = useState(0);
   const [runDurationSec, setRunDurationSec] = useState(0);

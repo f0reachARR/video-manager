@@ -2,8 +2,10 @@ package handler
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,10 +15,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
+	"github.com/f0reachARR/video-manager/internal/realtime"
 )
 
 type Markers struct {
-	Q *sqlc.Queries
+	Q   *sqlc.Queries
+	Hub *realtime.Hub
+}
+
+type markerEvent struct {
+	Type   string    `json:"type"` // "marker.created" | "marker.updated" | "marker.deleted"
+	RunID  string    `json:"runId"`
+	Marker markerDTO `json:"marker"`
+}
+
+type markerDeleteEvent struct {
+	Type     string `json:"type"`
+	RunID    string `json:"runId"`
+	MarkerID string `json:"markerId"`
+}
+
+func (h *Markers) publish(runID string, payload any) {
+	if h.Hub == nil {
+		return
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		slog.Warn("marker event marshal failed", "error", err)
+		return
+	}
+	h.Hub.Publish("run:"+runID, raw)
 }
 
 type markerDTO struct {
@@ -216,7 +244,9 @@ func (h *Markers) Create(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toMarkerDTO(m))
+	dto := toMarkerDTO(m)
+	h.publish(uuidString(runID), markerEvent{Type: "marker.created", RunID: uuidString(runID), Marker: dto})
+	writeJSON(w, http.StatusCreated, dto)
 }
 
 func (h *Markers) Update(w http.ResponseWriter, r *http.Request) {
@@ -252,13 +282,25 @@ func (h *Markers) Update(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toMarkerDTO(m))
+	dto := toMarkerDTO(m)
+	h.publish(dto.RunID, markerEvent{Type: "marker.updated", RunID: dto.RunID, Marker: dto})
+	writeJSON(w, http.StatusOK, dto)
 }
 
 func (h *Markers) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUUIDParam(chi.URLParam(r, "markerId"))
 	if err != nil {
 		badRequest(w, "invalid markerId")
+		return
+	}
+	// Read first so we know which run to publish on.
+	existing, err := h.Q.GetMarker(r.Context(), id)
+	if err != nil {
+		if isNoRows(err) {
+			notFound(w, "marker not found")
+			return
+		}
+		internalError(w, err)
 		return
 	}
 	n, err := h.Q.DeleteMarker(r.Context(), id)
@@ -270,5 +312,7 @@ func (h *Markers) Delete(w http.ResponseWriter, r *http.Request) {
 		notFound(w, "marker not found")
 		return
 	}
+	runID := uuidString(existing.RunID)
+	h.publish(runID, markerDeleteEvent{Type: "marker.deleted", RunID: runID, MarkerID: uuidString(id)})
 	writeNoContent(w)
 }
