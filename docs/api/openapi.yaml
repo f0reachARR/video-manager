@@ -58,6 +58,8 @@ tags:
     description: 大会 (Phase 2)
   - name: matches
     description: 試合 (Phase 2)
+  - name: annotations
+    description: Video 単位の永続描画 (Phase 2)
 
 paths:
   /health:
@@ -852,6 +854,78 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /videos/{videoId}/annotations:
+    parameters:
+      - $ref: "#/components/parameters/VideoId"
+    get:
+      tags: [annotations]
+      operationId: listAnnotations
+      summary: Video の Annotation 一覧
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnotationList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [annotations]
+      operationId: createAnnotation
+      summary: Annotation 作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAnnotationRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Annotation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /annotations/{annotationId}:
+    parameters:
+      - $ref: "#/components/parameters/AnnotationId"
+    patch:
+      tags: [annotations]
+      operationId: updateAnnotation
+      summary: Annotation 更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAnnotationRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Annotation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [annotations]
+      operationId: deleteAnnotation
+      summary: Annotation 削除
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /videos/{videoId}/thumbnail-url:
     parameters:
       - $ref: "#/components/parameters/VideoId"
@@ -1507,6 +1581,13 @@ components:
         format: uuid
     MatchIdPath:
       name: matchId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AnnotationId:
+      name: annotationId
       in: path
       required: true
       schema:
@@ -2429,3 +2510,90 @@ components:
             $ref: "#/components/schemas/Match"
         pagination:
           $ref: "#/components/schemas/Pagination"
+
+    # ---------- Annotation (Phase 2) ----------
+    AnnotationType:
+      type: string
+      enum: [point, arrow, rect, path, text]
+    Annotation:
+      type: object
+      required: [id, videoId, startOffsetSec, endOffsetSec, type, geometry, style, label, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        videoId:
+          type: string
+          format: uuid
+        authorId:
+          type: [string, "null"]
+          format: uuid
+        startOffsetSec:
+          type: number
+          description: 表示開始 (動画秒)
+        endOffsetSec:
+          type: number
+          description: 表示終了 (動画秒)
+        type:
+          $ref: "#/components/schemas/AnnotationType"
+        geometry:
+          type: object
+          additionalProperties: true
+          description: |
+            形状定義。type ごとに必要なキーが異なる:
+            - point: { x: 0..1, y: 0..1 }
+            - rect:  { x, y, w, h }      (すべて 0..1)
+            - arrow: { x1, y1, x2, y2 }
+            - path:  { points: [[x,y], ...] }
+            - text:  { x, y, fontSize? }
+        style:
+          type: object
+          additionalProperties: true
+          description: 描画スタイル (色、線幅 等)
+        label:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CreateAnnotationRequest:
+      type: object
+      required: [startOffsetSec, endOffsetSec, type, geometry]
+      properties:
+        startOffsetSec:
+          type: number
+        endOffsetSec:
+          type: number
+        type:
+          $ref: "#/components/schemas/AnnotationType"
+        geometry:
+          type: object
+          additionalProperties: true
+        style:
+          type: object
+          additionalProperties: true
+        label:
+          type: string
+          default: ""
+    UpdateAnnotationRequest:
+      type: object
+      properties:
+        startOffsetSec:
+          type: number
+        endOffsetSec:
+          type: number
+        geometry:
+          type: object
+          additionalProperties: true
+        style:
+          type: object
+          additionalProperties: true
+        label:
+          type: string
+    AnnotationList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Annotation"

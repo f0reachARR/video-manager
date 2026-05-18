@@ -412,6 +412,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/videos/{videoId}/annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        /** Video の Annotation 一覧 */
+        get: operations["listAnnotations"];
+        put?: never;
+        /** Annotation 作成 */
+        post: operations["createAnnotation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/annotations/{annotationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                annotationId: components["parameters"]["AnnotationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Annotation 削除 */
+        delete: operations["deleteAnnotation"];
+        options?: never;
+        head?: never;
+        /** Annotation 更新 */
+        patch: operations["updateAnnotation"];
+        trace?: never;
+    };
     "/videos/{videoId}/thumbnail-url": {
         parameters: {
             query?: never;
@@ -1158,6 +1198,66 @@ export interface components {
             data: components["schemas"]["Match"][];
             pagination: components["schemas"]["Pagination"];
         };
+        /** @enum {string} */
+        AnnotationType: "point" | "arrow" | "rect" | "path" | "text";
+        Annotation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            videoId: string;
+            /** Format: uuid */
+            authorId?: string | null;
+            /** @description 表示開始 (動画秒) */
+            startOffsetSec: number;
+            /** @description 表示終了 (動画秒) */
+            endOffsetSec: number;
+            type: components["schemas"]["AnnotationType"];
+            /**
+             * @description 形状定義。type ごとに必要なキーが異なる:
+             *     - point: { x: 0..1, y: 0..1 }
+             *     - rect:  { x, y, w, h }      (すべて 0..1)
+             *     - arrow: { x1, y1, x2, y2 }
+             *     - path:  { points: [[x,y], ...] }
+             *     - text:  { x, y, fontSize? }
+             */
+            geometry: {
+                [key: string]: unknown;
+            };
+            /** @description 描画スタイル (色、線幅 等) */
+            style: {
+                [key: string]: unknown;
+            };
+            label: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateAnnotationRequest: {
+            startOffsetSec: number;
+            endOffsetSec: number;
+            type: components["schemas"]["AnnotationType"];
+            geometry: {
+                [key: string]: unknown;
+            };
+            style?: {
+                [key: string]: unknown;
+            };
+            /** @default  */
+            label: string;
+        };
+        UpdateAnnotationRequest: {
+            startOffsetSec?: number;
+            endOffsetSec?: number;
+            geometry?: {
+                [key: string]: unknown;
+            };
+            style?: {
+                [key: string]: unknown;
+            };
+            label?: string;
+        };
+        AnnotationList: {
+            data: components["schemas"]["Annotation"][];
+        };
     };
     responses: {
         /** @description リクエストが不正 */
@@ -1215,6 +1315,7 @@ export interface components {
         MarkerId: string;
         TournamentId: string;
         MatchIdPath: string;
+        AnnotationId: string;
     };
     requestBodies: never;
     headers: never;
@@ -2299,6 +2400,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlaybackUrl"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listAnnotations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAnnotationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    deleteAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                annotationId: components["parameters"]["AnnotationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                annotationId: components["parameters"]["AnnotationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAnnotationRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"];
                 };
             };
             404: components["responses"]["NotFound"];

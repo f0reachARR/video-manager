@@ -25,6 +25,9 @@ import {
   type CreateMatchRequest,
   type MatchListParams,
   type UpdateMatchRequest,
+  annotationsApi,
+  type CreateAnnotationRequest,
+  type UpdateAnnotationRequest,
   type CreateMarkerRequest,
   type MarkerCategory,
   type MarkerListParams,
@@ -419,6 +422,39 @@ export const useDeleteTag = () => {
   return useMutation({
     mutationFn: (id: string) => tagsApi.remove(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tags }),
+  });
+};
+
+// ---- Annotations ----
+export const useAnnotations = (videoId: string | null | undefined) =>
+  useQuery({
+    queryKey: ["annotations", videoId ?? ""] as const,
+    queryFn: () => annotationsApi.list(videoId as string),
+    enabled: !!videoId,
+  });
+
+export const useCreateAnnotation = (videoId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateAnnotationRequest) => annotationsApi.create(videoId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["annotations", videoId] }),
+  });
+};
+
+export const useUpdateAnnotation = (videoId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateAnnotationRequest }) =>
+      annotationsApi.update(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["annotations", videoId] }),
+  });
+};
+
+export const useDeleteAnnotation = (videoId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => annotationsApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["annotations", videoId] }),
   });
 };
 

@@ -61,6 +61,12 @@ export type CreateTournamentRequest = components["schemas"]["CreateTournamentReq
 export type UpdateTournamentRequest = components["schemas"]["UpdateTournamentRequest"];
 export type TournamentList = components["schemas"]["TournamentList"];
 
+export type Annotation = components["schemas"]["Annotation"];
+export type AnnotationType = components["schemas"]["AnnotationType"];
+export type AnnotationList = components["schemas"]["AnnotationList"];
+export type CreateAnnotationRequest = components["schemas"]["CreateAnnotationRequest"];
+export type UpdateAnnotationRequest = components["schemas"]["UpdateAnnotationRequest"];
+
 export type Match = components["schemas"]["Match"];
 export type CreateMatchRequest = components["schemas"]["CreateMatchRequest"];
 export type UpdateMatchRequest = components["schemas"]["UpdateMatchRequest"];
@@ -368,6 +374,24 @@ export const searchApi = {
         q: p.q,
       })}`,
     ),
+};
+
+// ---- Annotations ----
+export const annotationsApi = {
+  list: (videoId: string) =>
+    request<AnnotationList>(`/videos/${videoId}/annotations`),
+  create: (videoId: string, body: CreateAnnotationRequest) =>
+    request<Annotation>(`/videos/${videoId}/annotations`, {
+      method: "POST",
+      json: body,
+    }),
+  update: (annotationId: string, body: UpdateAnnotationRequest) =>
+    request<Annotation>(`/annotations/${annotationId}`, {
+      method: "PATCH",
+      json: body,
+    }),
+  remove: (annotationId: string) =>
+    request<void>(`/annotations/${annotationId}`, { method: "DELETE" }),
 };
 
 // ---- Tournaments ----

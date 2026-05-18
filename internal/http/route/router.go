@@ -24,6 +24,7 @@ type Deps struct {
 	Markers        *handler.Markers
 	Tournaments    *handler.Tournaments
 	Matches        *handler.Matches
+	Annotations    *handler.Annotations
 	Uploads        *handler.Uploads
 	AllowedOrigins []string
 }
@@ -114,6 +115,8 @@ func New(d Deps) http.Handler {
 		r.Delete("/{videoId}", d.Videos.Delete)
 		r.Get("/{videoId}/playback-url", d.Videos.PlaybackURL)
 		r.Get("/{videoId}/thumbnail-url", d.Videos.ThumbnailURL)
+		r.Get("/{videoId}/annotations", d.Annotations.List)
+		r.Post("/{videoId}/annotations", d.Annotations.Create)
 	})
 
 	r.Route("/runs", func(r chi.Router) {
@@ -150,6 +153,11 @@ func New(d Deps) http.Handler {
 	r.Route("/markers", func(r chi.Router) {
 		r.Patch("/{markerId}", d.Markers.Update)
 		r.Delete("/{markerId}", d.Markers.Delete)
+	})
+
+	r.Route("/annotations", func(r chi.Router) {
+		r.Patch("/{annotationId}", d.Annotations.Update)
+		r.Delete("/{annotationId}", d.Annotations.Delete)
 	})
 
 	r.Post("/uploads/tus-hook", d.Uploads.TusHook)

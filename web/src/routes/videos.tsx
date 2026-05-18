@@ -1,6 +1,5 @@
 import {
   ActionIcon,
-  Alert,
   Badge,
   Button,
   FileButton,
@@ -19,10 +18,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { Upload } from "tus-js-client";
 
+import { AnnotatedPlayer } from "../components/AnnotatedPlayer";
 import { ResourcePage } from "../components/ResourcePage";
 import { SessionAssignModal } from "../components/SessionAssignModal";
 import { VideoMetadataModal } from "../components/VideoMetadataModal";
-import { ApiError, type Video, videosApi } from "../lib/api/client";
+import { type Video, videosApi } from "../lib/api/client";
 import { useCurrentUserId } from "../lib/currentUser";
 import {
   useDeleteVideo,
@@ -439,27 +439,9 @@ function VideoActions({ video }: { video: Video }) {
 }
 
 function PlaybackModal({ video, onClose }: { video: Video; onClose: () => void }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const requested = useRef(false);
-
-  if (!requested.current) {
-    requested.current = true;
-    videosApi
-      .playbackUrl(video.id)
-      .then((r) => setUrl(r.url))
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : String(e)));
-  }
-
   return (
-    <Modal opened onClose={onClose} title="動画再生" size="xl">
-      {error && <Alert color="red">{error}</Alert>}
-      {!error && !url && <Text>署名 URL を取得中...</Text>}
-      {url && (
-        <video controls style={{ width: "100%", maxHeight: "70vh" }} src={url}>
-          <track kind="captions" />
-        </video>
-      )}
+    <Modal opened onClose={onClose} title="動画再生 + Annotation" size="xl">
+      <AnnotatedPlayer video={video} />
     </Modal>
   );
 }
