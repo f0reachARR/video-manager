@@ -5,10 +5,7 @@
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Annotation } from "../lib/api/client";
-import {
-  useAnnotations,
-  useCreateAnnotation,
-} from "../lib/queries";
+import { useAnnotations, useCreateAnnotation } from "../lib/queries";
 import { useWebSocketPublisher } from "../lib/realtime";
 
 export type OverlayMode = "off" | "addPoint" | "liveInk";
@@ -68,7 +65,11 @@ export function RunVideoOverlay({
   const [strokes, setStrokes] = useState<RemoteStroke[]>([]);
   const publish = useWebSocketPublisher(`/ws/video/${videoId}`, (msg) => {
     const m = msg as Partial<InkStrokeMessage>;
-    if (m.type === "ink.stroke" && Array.isArray(m.points) && typeof m.color === "string") {
+    if (
+      m.type === "ink.stroke" &&
+      Array.isArray(m.points) &&
+      typeof m.color === "string"
+    ) {
       setStrokes((cur) => [
         ...cur,
         {
@@ -123,7 +124,12 @@ export function RunVideoOverlay({
     publish({ type: "ink.stroke", color: myInkColor, points: pts });
     setStrokes((cur) => [
       ...cur,
-      { type: "ink.stroke", color: myInkColor, points: pts, receivedAt: Date.now() },
+      {
+        type: "ink.stroke",
+        color: myInkColor,
+        points: pts,
+        receivedAt: Date.now(),
+      },
     ]);
     inkBufferRef.current = [];
   };
@@ -171,7 +177,12 @@ export function RunVideoOverlay({
         // way the underlying <video> controls keep working.
         pointerEvents: interactive ? "auto" : "none",
         touchAction: interactive ? "none" : undefined,
-        cursor: mode === "addPoint" ? "crosshair" : mode === "liveInk" ? "crosshair" : "default",
+        cursor:
+          mode === "addPoint"
+            ? "crosshair"
+            : mode === "liveInk"
+              ? "crosshair"
+              : "default",
       }}
       onClick={handleClick}
       onPointerDown={onPointerDown}
@@ -258,12 +269,11 @@ function LiveInkLayer({ strokes }: { strokes: RemoteStroke[] }) {
             key={i}
             d={d}
             stroke={s.color}
-            strokeWidth="0.005"
+            strokeWidth={0.005}
             strokeLinecap="round"
             strokeLinejoin="round"
             fill="none"
             opacity={opacity}
-            vectorEffect="non-scaling-stroke"
           />
         );
       })}
