@@ -23,8 +23,21 @@ import {
   useCreateAnnotation,
   useDeleteAnnotation,
 } from "../lib/queries";
+import { useTopicSubscription, useWebSocketPublisher } from "../lib/realtime";
 
-type Mode = "off" | "addPoint";
+type Mode = "off" | "addPoint" | "liveInk";
+
+type InkPoint = [number, number]; // x,y in 0..1
+type InkStrokeMessage = {
+  type: "ink.stroke";
+  color: string;
+  points: InkPoint[];
+};
+type RemoteStroke = InkStrokeMessage & { receivedAt: number };
+
+const INK_FADE_MS = 4000;
+// Random per-tab color so multiple viewers' strokes stay distinguishable.
+const myInkColor = `hsl(${Math.floor(Math.random() * 360)} 80% 55%)`;
 
 export function AnnotatedPlayer({ video }: { video: Video }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -39,6 +52,28 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
   const ann = useAnnotations(video.id);
   const create = useCreateAnnotation(video.id);
   const del = useDeleteAnnotation(video.id);
+
+  // Live ink: ephemeral strokes broadcast over WS, fade after a few seconds.
+  const publish = useWebSocketPublisher(`/ws/video/${video.id}`);
+  const [strokes, setStrokes] = useState<RemoteStroke[]>([]);
+  useTopicSubscription(`/ws/video/${video.id}`, (msg) => {
+    const m = msg as Partial<InkStrokeMessage>;
+    if (m.type === "ink.stroke" && Array.isArray(m.points) && typeof m.color === "string") {
+      setStrokes((cur) => [
+        ...cur,
+        { type: "ink.stroke", color: m.color!, points: m.points!, receivedAt: Date.now() },
+      ]);
+    }
+  });
+  // Fade old strokes.
+  useEffect(() => {
+    if (strokes.length === 0) return;
+    const t = setTimeout(() => {
+      const cutoff = Date.now() - INK_FADE_MS;
+      setStrokes((cur) => cur.filter((s) => s.receivedAt > cutoff));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [strokes]);
 
   if (!requested.current) {
     requested.current = true;
@@ -97,6 +132,61 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
     }
   };
 
+  // Live-ink pointer handlers — only active in mode "liveInk".
+  const inkBufferRef = useRef<InkPoint[]>([]);
+  const inkDrawingRef = useRef(false);
+  const inkContainerRef = useRef<HTMLDivElement>(null);
+
+  const pointToNormalized = (e: React.PointerEvent): InkPoint | null => {
+    const el = inkContainerRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+    return [x, y];
+  };
+
+  const flushStroke = () => {
+    const pts = inkBufferRef.current;
+    if (pts.length < 2) {
+      inkBufferRef.current = [];
+      return;
+    }
+    publish({ type: "ink.stroke", color: myInkColor, points: pts });
+    // Also render locally without round-tripping through the server.
+    setStrokes((cur) => [
+      ...cur,
+      { type: "ink.stroke", color: myInkColor, points: pts, receivedAt: Date.now() },
+    ]);
+    inkBufferRef.current = [];
+  };
+
+  const onInkDown = (e: React.PointerEvent) => {
+    if (mode !== "liveInk") return;
+    const p = pointToNormalized(e);
+    if (!p) return;
+    inkDrawingRef.current = true;
+    inkBufferRef.current = [p];
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+  const onInkMove = (e: React.PointerEvent) => {
+    if (mode !== "liveInk" || !inkDrawingRef.current) return;
+    const p = pointToNormalized(e);
+    if (!p) return;
+    inkBufferRef.current.push(p);
+    // Periodically flush so strokes appear "live" to others.
+    if (inkBufferRef.current.length >= 8) {
+      flushStroke();
+      inkBufferRef.current = [p];
+    }
+  };
+  const onInkUp = () => {
+    if (!inkDrawingRef.current) return;
+    inkDrawingRef.current = false;
+    flushStroke();
+  };
+
   const [exportError, setExportError] = useState<string | null>(null);
 
   const exportPng = async () => {
@@ -144,17 +234,24 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
       {!error && !url && <Text>署名 URL を取得中...</Text>}
       {url && (
         <div
+          ref={inkContainerRef}
           style={{
             position: "relative",
             background: "#000",
-            cursor: mode === "addPoint" ? "crosshair" : "default",
+            cursor:
+              mode === "addPoint" ? "crosshair" : mode === "liveInk" ? "crosshair" : "default",
+            touchAction: mode === "liveInk" ? "none" : undefined,
           }}
           onClick={onCanvasClick}
+          onPointerDown={onInkDown}
+          onPointerMove={onInkMove}
+          onPointerUp={onInkUp}
+          onPointerCancel={onInkUp}
         >
           <video
             ref={videoRef}
             src={url}
-            controls
+            controls={mode !== "liveInk"}
             crossOrigin="anonymous"
             style={{ width: "100%", maxHeight: "60vh", display: "block" }}
           >
@@ -172,6 +269,7 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
             {visible.map((a) => (
               <AnnotationOverlay key={a.id} a={a} />
             ))}
+            <LiveInkLayer strokes={strokes} />
           </div>
         </div>
       )}
@@ -184,6 +282,14 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
           onClick={() => setMode((m) => (m === "addPoint" ? "off" : "addPoint"))}
         >
           {mode === "addPoint" ? "クリックして配置..." : "📍 Point を追加"}
+        </Button>
+        <Button
+          size="xs"
+          variant={mode === "liveInk" ? "filled" : "default"}
+          color={mode === "liveInk" ? "grape" : undefined}
+          onClick={() => setMode((m) => (m === "liveInk" ? "off" : "liveInk"))}
+        >
+          {mode === "liveInk" ? "ライブインク中" : "✏️ ライブインク"}
         </Button>
         {mode === "addPoint" && (
           <TextInput
@@ -264,6 +370,46 @@ function drawAnnotation(
     default:
       return;
   }
+}
+
+function LiveInkLayer({ strokes }: { strokes: RemoteStroke[] }) {
+  if (strokes.length === 0) return null;
+  // Render an SVG layer sized to the parent. ViewBox is 0..1 so points map
+  // directly. Older strokes fade via opacity.
+  return (
+    <svg
+      viewBox="0 0 1 1"
+      preserveAspectRatio="none"
+      style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+    >
+      {strokes.map((s, idx) => {
+        const age = Date.now() - s.receivedAt;
+        const alpha = Math.max(0, 1 - age / INK_FADE_MS);
+        const d = pointsToPath(s.points);
+        return (
+          <path
+            key={`${s.receivedAt}-${idx}`}
+            d={d}
+            stroke={s.color}
+            strokeOpacity={alpha}
+            strokeWidth={0.005}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+function pointsToPath(points: InkPoint[]): string {
+  if (points.length === 0) return "";
+  let d = `M ${points[0][0]} ${points[0][1]}`;
+  for (let i = 1; i < points.length; i++) {
+    d += ` L ${points[i][0]} ${points[i][1]}`;
+  }
+  return d;
 }
 
 function AnnotationOverlay({ a }: { a: Annotation }) {
