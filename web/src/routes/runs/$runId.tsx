@@ -49,8 +49,14 @@ import {
   useVideos,
 } from "../../lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
-import { useTopicSubscription, useWebSocketPublisher } from "../../lib/realtime";
-import { RunVideoOverlay, type OverlayMode } from "../../components/RunVideoOverlay";
+import {
+  useTopicSubscription,
+  useWebSocketPublisher,
+} from "../../lib/realtime";
+import {
+  RunVideoOverlay,
+  type OverlayMode,
+} from "../../components/RunVideoOverlay";
 
 // Random per-tab id so we can distinguish our own playback.sync echoes from
 // other viewers' messages.
@@ -91,7 +97,8 @@ function RunDetailPage() {
     },
     () => qc.invalidateQueries({ queryKey: ["markers", runId] }),
   );
-  const [addVideoOpen, { open: openAddVideo, close: closeAddVideo }] = useDisclosure(false);
+  const [addVideoOpen, { open: openAddVideo, close: closeAddVideo }] =
+    useDisclosure(false);
   const [t, setT] = useState(0);
   const [runDurationSec, setRunDurationSec] = useState(0);
   const seekRef = useRef<(sec: number) => void>(() => {});
@@ -106,7 +113,9 @@ function RunDetailPage() {
   if (run.error || !run.data) {
     return (
       <Alert color="red" m="md">
-        {run.error instanceof ApiError ? run.error.body.message : (run.error as Error)?.message}
+        {run.error instanceof ApiError
+          ? run.error.body.message
+          : (run.error as Error)?.message}
       </Alert>
     );
   }
@@ -117,7 +126,11 @@ function RunDetailPage() {
       <Group justify="space-between">
         <Stack gap={4}>
           <Group gap="sm">
-            <Button size="xs" variant="subtle" onClick={() => navigate({ to: "/runs" })}>
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={() => navigate({ to: "/runs" })}
+            >
               ← Run 一覧
             </Button>
             <Title order={2}>Run 詳細</Title>
@@ -170,8 +183,14 @@ function RunDetailPage() {
       </Title>
       <RunMetadataEditor
         run={r}
-        robotOptions={(robots.data?.data ?? []).map((x) => ({ value: x.id, label: x.name }))}
-        scenarioOptions={(scenarios.data?.data ?? []).map((x) => ({ value: x.id, label: x.name }))}
+        robotOptions={(robots.data?.data ?? []).map((x) => ({
+          value: x.id,
+          label: x.name,
+        }))}
+        scenarioOptions={(scenarios.data?.data ?? []).map((x) => ({
+          value: x.id,
+          label: x.name,
+        }))}
         onSave={(body) => updateRun.mutate({ id: r.id, body })}
         saving={updateRun.isPending}
       />
@@ -224,7 +243,10 @@ function SyncPlayer({
 
   // Single bidirectional WS to /ws/run/{runId} for playback.sync messages.
   // (Marker realtime uses a separate read-only subscription at the page level.)
-  const wsRef = useRef<{ playing: boolean; t: number }>({ playing: false, t: 0 });
+  const wsRef = useRef<{ playing: boolean; t: number }>({
+    playing: false,
+    t: 0,
+  });
   wsRef.current = { playing, t };
   const publishPlayback = useWebSocketPublisher(`/ws/run/${run.id}`, (msg) => {
     const m = msg as Partial<PlaybackSyncMsg>;
@@ -240,7 +262,9 @@ function SyncPlayer({
     setLastSyncSender(m.senderId ?? null);
     if (drift > 0.5) {
       // Don't re-broadcast a seek we just received — that would feedback-loop.
-      seek(Math.min(runDurationSec, Math.max(0, targetT)), { broadcast: false });
+      seek(Math.min(runDurationSec, Math.max(0, targetT)), {
+        broadcast: false,
+      });
     }
     if (m.playing !== wsRef.current.playing) {
       // Defer to togglePlay so video elements get .play()/.pause() correctly.
@@ -284,7 +308,9 @@ function SyncPlayer({
       return;
     }
     const d = Math.max(
-      ...videos.map((v) => Math.max(0, v.videoOffsetEndSec - v.videoOffsetStartSec)),
+      ...videos.map((v) =>
+        Math.max(0, v.videoOffsetEndSec - v.videoOffsetStartSec),
+      ),
     );
     setRunDurationSec(d);
     onDurationChange(d);
@@ -345,7 +371,8 @@ function SyncPlayer({
     };
     animationRef.current = requestAnimationFrame(tick);
     return () => {
-      if (animationRef.current !== null) cancelAnimationFrame(animationRef.current);
+      if (animationRef.current !== null)
+        cancelAnimationFrame(animationRef.current);
     };
   }, [playing, mainAngleId, runDurationSec, videos]);
 
@@ -389,7 +416,10 @@ function SyncPlayer({
     }
   };
 
-  const broadcastPlayback = (override?: { tSec?: number; playing?: boolean }) => {
+  const broadcastPlayback = (override?: {
+    tSec?: number;
+    playing?: boolean;
+  }) => {
     publishPlayback({
       type: "playback.sync",
       senderId: SENDER_ID,
@@ -519,7 +549,9 @@ function SyncPlayer({
             setOverlayMode((m) => (m === "addPoint" ? "off" : "addPoint"))
           }
         >
-          {overlayMode === "addPoint" ? "クリックして配置..." : "📍 Annotation を追加"}
+          {overlayMode === "addPoint"
+            ? "クリックして配置..."
+            : "📍 Annotation を追加"}
         </Button>
         <Button
           size="xs"
@@ -548,7 +580,11 @@ function SyncPlayer({
       </Group>
 
       <Group>
-        <Button onClick={togglePlay} size="sm" variant={playing ? "outline" : "filled"}>
+        <Button
+          onClick={togglePlay}
+          size="sm"
+          variant={playing ? "outline" : "filled"}
+        >
           {playing ? "⏸ Pause" : "▶ Play"}
         </Button>
         <Text size="sm" ff="monospace" w={120}>
@@ -648,7 +684,8 @@ function AngleVideo({
           style={{
             position: "relative",
             // Live ink mode hides the native controls to free up pointer space.
-            touchAction: isMain && overlayMode === "liveInk" ? "none" : undefined,
+            touchAction:
+              isMain && overlayMode === "liveInk" ? "none" : undefined,
           }}
         >
           <video
@@ -656,8 +693,12 @@ function AngleVideo({
             src={angle.url}
             muted={!isMain}
             playsInline
-            controls={isMain && overlayMode !== "liveInk"}
-            style={{ width: "100%", maxHeight: isMain ? "60vh" : "150px", background: "#000", display: "block" }}
+            style={{
+              width: "100%",
+              maxHeight: isMain ? "60vh" : "150px",
+              background: "#000",
+              display: "block",
+            }}
           >
             <track kind="captions" />
           </video>
@@ -732,16 +773,30 @@ function MarkersSection({
       <Group justify="space-between" mt="md">
         <Title order={4}>Markers ({markers.length})</Title>
         <Group gap="xs">
-          <Chip.Group multiple value={filter} onChange={(v) => setFilter(v as MarkerCategory[])}>
+          <Chip.Group
+            multiple
+            value={filter}
+            onChange={(v) => setFilter(v as MarkerCategory[])}
+          >
             <Group gap={4}>
               {markerCategories.map((c) => (
-                <Chip key={c} value={c} size="xs" color={markerCategoryColor[c]}>
+                <Chip
+                  key={c}
+                  value={c}
+                  size="xs"
+                  color={markerCategoryColor[c]}
+                >
                   {markerCategoryLabel[c]}
                 </Chip>
               ))}
             </Group>
           </Chip.Group>
-          <Button size="xs" variant="default" onClick={openAdd} disabled={durationSec === 0}>
+          <Button
+            size="xs"
+            variant="default"
+            onClick={openAdd}
+            disabled={durationSec === 0}
+          >
             ＋ 詳細追加
           </Button>
         </Group>
@@ -774,7 +829,10 @@ function MarkersSection({
         <Card withBorder p="xs">
           <div style={{ position: "relative", height: 24 }}>
             {markers.map((m) => {
-              const pct = Math.max(0, Math.min(100, (m.runOffsetSec / durationSec) * 100));
+              const pct = Math.max(
+                0,
+                Math.min(100, (m.runOffsetSec / durationSec) * 100),
+              );
               return (
                 <button
                   type="button"
@@ -815,7 +873,11 @@ function MarkersSection({
           {markers.map((m) => (
             <Table.Tr key={m.id}>
               <Table.Td>
-                <Button size="compact-xs" variant="subtle" onClick={() => onSeek(m.runOffsetSec)}>
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  onClick={() => onSeek(m.runOffsetSec)}
+                >
                   {formatTime(m.runOffsetSec)}
                 </Button>
               </Table.Td>
@@ -825,11 +887,21 @@ function MarkersSection({
                 </Badge>
               </Table.Td>
               <Table.Td>
-                <Text size="sm">{m.label || <Text component="span" c="dimmed" size="xs">（無し）</Text>}</Text>
+                <Text size="sm">
+                  {m.label || (
+                    <Text component="span" c="dimmed" size="xs">
+                      （無し）
+                    </Text>
+                  )}
+                </Text>
               </Table.Td>
               <Table.Td>
                 <Group gap={4} justify="flex-end">
-                  <ActionIcon variant="subtle" onClick={() => setEditing(m)} aria-label="編集">
+                  <ActionIcon
+                    variant="subtle"
+                    onClick={() => setEditing(m)}
+                    aria-label="編集"
+                  >
                     ✏️
                   </ActionIcon>
                   <ActionIcon
@@ -837,7 +909,8 @@ function MarkersSection({
                     color="red"
                     loading={deleteMarker.isPending}
                     onClick={() => {
-                      if (confirm("Marker を削除しますか？")) deleteMarker.mutate(m.id);
+                      if (confirm("Marker を削除しますか？"))
+                        deleteMarker.mutate(m.id);
                     }}
                     aria-label="削除"
                   >
@@ -862,7 +935,11 @@ function MarkersSection({
       {addOpen && (
         <MarkerEditModal
           mode="create"
-          initial={{ runOffsetSec: Math.round(currentSec), label: "", category: "note" }}
+          initial={{
+            runOffsetSec: Math.round(currentSec),
+            label: "",
+            category: "note",
+          }}
           durationSec={durationSec}
           onClose={closeAdd}
           onSubmit={(body) => {
@@ -907,14 +984,22 @@ function MarkerEditModal({
   initial: { runOffsetSec: number; label: string; category: MarkerCategory };
   durationSec: number;
   onClose: () => void;
-  onSubmit: (body: { runOffsetSec: number; label: string; category: MarkerCategory }) => void;
+  onSubmit: (body: {
+    runOffsetSec: number;
+    label: string;
+    category: MarkerCategory;
+  }) => void;
   saving: boolean;
 }) {
   const [offset, setOffset] = useState<number>(initial.runOffsetSec);
   const [label, setLabel] = useState<string>(initial.label);
   const [category, setCategory] = useState<MarkerCategory>(initial.category);
   return (
-    <Modal opened onClose={onClose} title={mode === "create" ? "Marker 追加" : "Marker 編集"}>
+    <Modal
+      opened
+      onClose={onClose}
+      title={mode === "create" ? "Marker 追加" : "Marker 編集"}
+    >
       <Stack>
         <NumberInput
           label="位置 (秒、Run 開始から)"
@@ -925,7 +1010,10 @@ function MarkerEditModal({
         />
         <Select
           label="Category"
-          data={markerCategories.map((c) => ({ value: c, label: markerCategoryLabel[c] }))}
+          data={markerCategories.map((c) => ({
+            value: c,
+            label: markerCategoryLabel[c],
+          }))}
           value={category}
           onChange={(v) => v && setCategory(v as MarkerCategory)}
         />
@@ -941,7 +1029,13 @@ function MarkerEditModal({
           </Button>
           <Button
             loading={saving}
-            onClick={() => onSubmit({ runOffsetSec: Math.max(0, Math.round(offset)), label, category })}
+            onClick={() =>
+              onSubmit({
+                runOffsetSec: Math.max(0, Math.round(offset)),
+                label,
+                category,
+              })
+            }
           >
             {mode === "create" ? "追加" : "保存"}
           </Button>
@@ -1130,7 +1224,11 @@ function AddVideoModal({ run, onClose }: { run: Run; onClose: () => void }) {
           <Button variant="default" onClick={onClose}>
             キャンセル
           </Button>
-          <Button onClick={submit} disabled={!videoId} loading={addRunVideo.isPending}>
+          <Button
+            onClick={submit}
+            disabled={!videoId}
+            loading={addRunVideo.isPending}
+          >
             追加
           </Button>
         </Group>
@@ -1172,7 +1270,12 @@ function RunMetadataEditor({
   return (
     <Stack>
       <Group grow>
-        <Select label="Robot" data={robotOptions} value={robotId} onChange={(v) => v && setRobotId(v)} />
+        <Select
+          label="Robot"
+          data={robotOptions}
+          value={robotId}
+          onChange={(v) => v && setRobotId(v)}
+        />
         <Select
           label="Scenario"
           data={scenarioOptions}
@@ -1186,7 +1289,13 @@ function RunMetadataEditor({
         onChange={(v) => setScore(typeof v === "number" ? v : "")}
         allowDecimal
       />
-      <Textarea label="Memo" value={memo} onChange={(e) => setMemo(e.currentTarget.value)} autosize minRows={2} />
+      <Textarea
+        label="Memo"
+        value={memo}
+        onChange={(e) => setMemo(e.currentTarget.value)}
+        autosize
+        minRows={2}
+      />
       <Group justify="flex-end">
         <Button
           disabled={!dirty}
