@@ -32,6 +32,49 @@ export const Route = createFileRoute("/runs/")({
   component: RunsPage,
 });
 
+function DateTimeWithQuickAdjust({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: Date | null;
+  onChange: (v: Date | null) => void;
+}) {
+  const adjust = (deltaSec: number) => {
+    const base = value ?? new Date();
+    onChange(new Date(base.getTime() + deltaSec * 1000));
+  };
+  return (
+    <Stack gap={4}>
+      <DateTimePicker
+        label={label}
+        value={value}
+        onChange={(v) => onChange(v ? new Date(v) : null)}
+        required
+        withSeconds
+      />
+      <Group gap={4}>
+        <Button size="compact-xs" variant="default" onClick={() => onChange(new Date())}>
+          現在
+        </Button>
+        <Button size="compact-xs" variant="default" onClick={() => adjust(-60)}>
+          -1m
+        </Button>
+        <Button size="compact-xs" variant="default" onClick={() => adjust(60)}>
+          +1m
+        </Button>
+        <Button size="compact-xs" variant="default" onClick={() => adjust(-10)}>
+          -10s
+        </Button>
+        <Button size="compact-xs" variant="default" onClick={() => adjust(10)}>
+          +10s
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
+
 function RunsPage() {
   const runs = useRuns();
   const sessions = useSessions();
@@ -211,18 +254,16 @@ function RunCreateModal({ opened, onClose }: { opened: boolean; onClose: () => v
           onChange={setScenarioId}
           required
         />
-        <Group grow>
-          <DateTimePicker
+        <Group grow align="flex-start">
+          <DateTimeWithQuickAdjust
             label="開始"
             value={startedAt}
-            onChange={(v) => setStartedAt(v ? new Date(v) : null)}
-            required
+            onChange={setStartedAt}
           />
-          <DateTimePicker
+          <DateTimeWithQuickAdjust
             label="終了"
             value={endedAt}
-            onChange={(v) => setEndedAt(v ? new Date(v) : null)}
-            required
+            onChange={setEndedAt}
           />
         </Group>
         <NumberInput

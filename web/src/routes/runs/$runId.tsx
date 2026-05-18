@@ -59,6 +59,7 @@ function RunDetailPage() {
   const updateRun = useUpdateRun();
   const robots = useRobots();
   const scenarios = useScenarios();
+  const allMarkers = useMarkers(runId);
   const navigate = useNavigate();
   const [addVideoOpen, { open: openAddVideo, close: closeAddVideo }] = useDisclosure(false);
   const [t, setT] = useState(0);
@@ -105,6 +106,7 @@ function RunDetailPage() {
         registerSeek={(fn) => {
           seekRef.current = fn;
         }}
+        markers={allMarkers.data?.data ?? []}
       />
 
       <MarkersSection
@@ -151,12 +153,14 @@ function SyncPlayer({
   onTChange,
   onDurationChange,
   registerSeek,
+  markers,
 }: {
   run: Run;
   t: number;
   onTChange: (sec: number) => void;
   onDurationChange: (sec: number) => void;
   registerSeek: (fn: (sec: number) => void) => void;
+  markers: Marker[];
 }) {
   const videos = run.videos ?? [];
   const [urls, setUrls] = useState<Map<string, string>>(new Map());
@@ -383,15 +387,50 @@ function SyncPlayer({
         <Text size="sm" ff="monospace" w={120}>
           {formatTime(t)} / {formatTime(runDurationSec)}
         </Text>
-        <Slider
-          flex={1}
-          value={t}
-          min={0}
-          max={runDurationSec || 1}
-          step={0.1}
-          onChange={seek}
-          label={(v) => formatTime(v)}
-        />
+        <div style={{ flex: 1, position: "relative" }}>
+          <Slider
+            value={t}
+            min={0}
+            max={runDurationSec || 1}
+            step={0.1}
+            onChange={seek}
+            label={(v) => formatTime(v)}
+          />
+          {/* Marker overlay — pointer-events:none so the slider stays draggable. */}
+          {runDurationSec > 0 && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+              }}
+            >
+              {markers.map((m) => {
+                const pct = Math.max(
+                  0,
+                  Math.min(100, (m.runOffsetSec / runDurationSec) * 100),
+                );
+                return (
+                  <div
+                    key={m.id}
+                    title={`${formatTime(m.runOffsetSec)} ${m.category}${m.label ? ` — ${m.label}` : ""}`}
+                    style={{
+                      position: "absolute",
+                      left: `${pct}%`,
+                      top: "50%",
+                      transform: "translate(-50%, -50%)",
+                      width: 4,
+                      height: 18,
+                      background: `var(--mantine-color-${markerCategoryColor[m.category]}-6)`,
+                      borderRadius: 2,
+                      boxShadow: "0 0 0 1px rgba(255,255,255,0.6)",
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
       </Group>
     </Stack>
   );
