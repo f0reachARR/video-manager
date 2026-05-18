@@ -8,11 +8,15 @@ import {
   useHocuspocusSyncStatus,
 } from "@hocuspocus/provider-react";
 import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
 
 import { MarkerLink } from "./MarkerLink";
 import { MarkerPickerModal } from "./MarkerPickerModal";
+import "./ScoutingEditor.css";
+import { useCurrentUserId } from "../lib/currentUser";
+import { useUser } from "../lib/queries";
 
 const HOCUSPOCUS_URL: string =
   (import.meta.env.VITE_HOCUSPOCUS_URL as string | undefined) ??
@@ -30,6 +34,13 @@ export function ScoutingEditor({ noteId }: { noteId: string }) {
   );
 }
 
+// Deterministic fallback color when the current user has no color attribute.
+function fallbackColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return `hsl(${Math.abs(h) % 360} 70% 45%)`;
+}
+
 function ScoutingEditorInner() {
   // The provider-react hooks take care of provider lifecycle (Y.Doc creation,
   // WebSocket connect, status / sync events, cleanup on unmount). We only
@@ -38,6 +49,14 @@ function ScoutingEditorInner() {
   const status = useHocuspocusConnectionStatus();
   const synced = useHocuspocusSyncStatus();
 
+  const userId = useCurrentUserId();
+  const userQuery = useUser(userId);
+  const me = userQuery.data;
+  const userInfo = {
+    name: me?.name ?? "匿名",
+    color: me?.color ?? fallbackColor(userId ?? "anon"),
+  };
+
   const editor = useEditor(
     {
       extensions: [
@@ -45,16 +64,29 @@ function ScoutingEditorInner() {
         // disable StarterKit's so we don't end up with two stacks.
         StarterKit.configure({ undoRedo: false }),
         Collaboration.configure({ document: provider.document }),
+        CollaborationCaret.configure({ provider, user: userInfo }),
         MarkerLink,
       ],
     },
     [provider],
   );
 
+  // If the current user changes after the editor mounts, update the awareness
+  // metadata in-place rather than recreating the editor.
+  if (editor) {
+    const ext = editor.extensionManager.extensions.find(
+      (e) => e.name === "collaborationCaret",
+    );
+    if (ext && (ext.options.user?.name !== userInfo.name ||
+      ext.options.user?.color !== userInfo.color)) {
+      editor.commands.updateUser?.(userInfo);
+    }
+  }
+
   const [pickerOpen, { open: openPicker, close: closePicker }] = useDisclosure(false);
 
   return (
-    <Paper withBorder p="sm">
+    <Paper withBorder p="sm" className="scouting-editor">
       <Group justify="space-between" mb="xs">
         <Group gap="xs">
           <Text size="xs" c="dimmed">

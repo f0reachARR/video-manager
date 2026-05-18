@@ -1,0 +1,50 @@
+/* TipTap editor (ScoutingEditor) — keep the in-editor text black regardless of
+   Mantine theme, and hide the default focus outline that the contenteditable
+   <div> gets when it receives focus (the surrounding <Paper> already conveys
+   "this is the editor"). */
+.scouting-editor .tiptap {
+  color: #000;
+  outline: none;
+}
+.scouting-editor .tiptap:focus,
+.scouting-editor .tiptap:focus-visible,
+.scouting-editor .tiptap.ProseMirror-focused {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Collaboration-caret styles. Colors come from `currentColor`, which is set
+   per-caret from the user's color attribute. */
+.scouting-editor .collaboration-carets__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  word-break: normal;
+  pointer-events: none;
+}
+.scouting-editor .collaboration-carets__label {
+  position: absolute;
+  top: -1.35em;
+  left: -1px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 3px 3px 3px 0;
+  white-space: nowrap;
+  background: currentColor;
+}
+.scouting-editor .collaboration-carets__label::after {
+  /* The text inside the label inherits color:#fff but the background uses
+     currentColor — re-set the text color on the label content itself. */
+  color: #fff;
+}
+.scouting-editor .collaboration-carets__selection {
+  background-color: currentColor;
+  opacity: 0.25;
+  pointer-events: none;
+}

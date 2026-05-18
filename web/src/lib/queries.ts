@@ -224,6 +224,13 @@ export const useDeleteVideo = () => {
 };
 
 // ---- Users ----
+export const useUser = (id: string | null | undefined) =>
+  useQuery({
+    queryKey: ["users", "detail", id ?? ""] as const,
+    queryFn: () => usersApi.get(id as string),
+    enabled: !!id,
+  });
+
 export const useUsers = () =>
   useQuery({ queryKey: queryKeys.users, queryFn: () => usersApi.list({ limit: 200 }) });
 
