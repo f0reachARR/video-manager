@@ -1,0 +1,12 @@
+{
+  "name": "video-manager",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Robocon test-run video manager (root workspace).",
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build",
+    "lint:openapi": "./scripts/lint-openapi.sh",
+    "gen:api": "./scripts/gen-api-client.sh"
+  }
+}

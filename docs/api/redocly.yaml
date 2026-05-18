@@ -1,0 +1,12 @@
+extends:
+  - minimal
+rules:
+  # セルフホスト前提のため認証は Phase 1 では未定義
+  security-defined: off
+  # 4xx 必須は health 系では不要（503 は /ready のみ）
+  operation-4xx-response: off
+  # 開発用 localhost を許容
+  no-server-example.com: off
+  no-server-trailing-slash: warn
+  # 4xx-problem-details は Phase 1 では強制しない
+  operation-4xx-problem-details-rfc7807: off

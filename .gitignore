@@ -1,0 +1,37 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Go
+/bin/
+*.exe
+*.test
+*.out
+vendor/
+
+# Node
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+
+# Vite / build outputs
+web/dist/
+web/.vite/
+web/stats.html
+
+# Generated (TanStack Router)
+web/src/routeTree.gen.ts
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Docker volumes (if mounted locally)
+.data/
+
+# Coverage
+coverage.out
+*.lcov

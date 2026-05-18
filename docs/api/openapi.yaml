@@ -1,0 +1,73 @@
+openapi: 3.1.0
+info:
+  title: Video Manager API
+  version: 0.1.0
+  description: |
+    Robocon test-run video manager HTTP API.
+
+    Phase 1 では health 系のみ。後続フェーズで sessions / videos / runs / markers
+    などのリソースを追加する。spec-devflow.md §3 を参照。
+servers:
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: health
+    description: Liveness / readiness probes
+paths:
+  /health:
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Liveness probe
+      description: API プロセスが応答できることを返す。依存先のチェックは行わない。
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      tags: [health]
+      operationId: getReady
+      summary: Readiness probe
+      description: API が外部依存（PostgreSQL）に到達可能かを確認する。
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Dependency not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        version:
+          type: string
+          description: アプリのバージョン
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: 機械可読なエラーコード
+        message:
+          type: string
+          description: 人間向けの説明
+        details:
+          type: object
+          additionalProperties: true
