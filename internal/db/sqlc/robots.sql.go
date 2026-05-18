@@ -36,6 +36,35 @@ func (q *Queries) CreateRobot(ctx context.Context, arg CreateRobotParams) (Robot
 	return i, err
 }
 
+const deleteRobot = `-- name: DeleteRobot :execrows
+DELETE FROM robots WHERE id = $1
+`
+
+func (q *Queries) DeleteRobot(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRobot, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getRobot = `-- name: GetRobot :one
+SELECT id, team_id, name, version, created_at FROM robots WHERE id = $1
+`
+
+func (q *Queries) GetRobot(ctx context.Context, id pgtype.UUID) (Robot, error) {
+	row := q.db.QueryRow(ctx, getRobot, id)
+	var i Robot
+	err := row.Scan(
+		&i.ID,
+		&i.TeamID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listRobotsByTeam = `-- name: ListRobotsByTeam :many
 SELECT id, team_id, name, version, created_at FROM robots WHERE team_id = $1 ORDER BY name, version
 `
@@ -64,4 +93,80 @@ func (q *Queries) ListRobotsByTeam(ctx context.Context, teamID pgtype.UUID) ([]R
 		return nil, err
 	}
 	return items, nil
+}
+
+const listRobotsPage = `-- name: ListRobotsPage :many
+SELECT id, team_id, name, version, created_at
+FROM robots
+WHERE
+  ($2::uuid IS NULL OR team_id = $2::uuid)
+  AND ($3::timestamptz IS NULL OR (created_at, id) > ($3::timestamptz, $4::uuid))
+ORDER BY created_at ASC, id ASC
+LIMIT $1
+`
+
+type ListRobotsPageParams struct {
+	Limit           int32
+	TeamID          pgtype.UUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        pgtype.UUID
+}
+
+func (q *Queries) ListRobotsPage(ctx context.Context, arg ListRobotsPageParams) ([]Robot, error) {
+	rows, err := q.db.Query(ctx, listRobotsPage,
+		arg.Limit,
+		arg.TeamID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Robot
+	for rows.Next() {
+		var i Robot
+		if err := rows.Scan(
+			&i.ID,
+			&i.TeamID,
+			&i.Name,
+			&i.Version,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateRobot = `-- name: UpdateRobot :one
+UPDATE robots
+SET
+  name = COALESCE($1, name),
+  version = COALESCE($2, version)
+WHERE id = $3
+RETURNING id, team_id, name, version, created_at
+`
+
+type UpdateRobotParams struct {
+	Name    *string
+	Version *string
+	ID      pgtype.UUID
+}
+
+func (q *Queries) UpdateRobot(ctx context.Context, arg UpdateRobotParams) (Robot, error) {
+	row := q.db.QueryRow(ctx, updateRobot, arg.Name, arg.Version, arg.ID)
+	var i Robot
+	err := row.Scan(
+		&i.ID,
+		&i.TeamID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+	)
+	return i, err
 }

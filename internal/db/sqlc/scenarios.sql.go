@@ -7,6 +7,8 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createScenario = `-- name: CreateScenario :one
@@ -22,6 +24,34 @@ type CreateScenarioParams struct {
 
 func (q *Queries) CreateScenario(ctx context.Context, arg CreateScenarioParams) (Scenario, error) {
 	row := q.db.QueryRow(ctx, createScenario, arg.Name, arg.Description)
+	var i Scenario
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteScenario = `-- name: DeleteScenario :execrows
+DELETE FROM scenarios WHERE id = $1
+`
+
+func (q *Queries) DeleteScenario(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteScenario, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getScenario = `-- name: GetScenario :one
+SELECT id, name, description, created_at FROM scenarios WHERE id = $1
+`
+
+func (q *Queries) GetScenario(ctx context.Context, id pgtype.UUID) (Scenario, error) {
+	row := q.db.QueryRow(ctx, getScenario, id)
 	var i Scenario
 	err := row.Scan(
 		&i.ID,
@@ -59,4 +89,70 @@ func (q *Queries) ListScenarios(ctx context.Context) ([]Scenario, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listScenariosPage = `-- name: ListScenariosPage :many
+SELECT id, name, description, created_at
+FROM scenarios
+WHERE ($2::timestamptz IS NULL OR (created_at, id) > ($2::timestamptz, $3::uuid))
+ORDER BY created_at ASC, id ASC
+LIMIT $1
+`
+
+type ListScenariosPageParams struct {
+	Limit           int32
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        pgtype.UUID
+}
+
+func (q *Queries) ListScenariosPage(ctx context.Context, arg ListScenariosPageParams) ([]Scenario, error) {
+	rows, err := q.db.Query(ctx, listScenariosPage, arg.Limit, arg.CursorCreatedAt, arg.CursorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Scenario
+	for rows.Next() {
+		var i Scenario
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateScenario = `-- name: UpdateScenario :one
+UPDATE scenarios
+SET
+  name = COALESCE($1, name),
+  description = COALESCE($2, description)
+WHERE id = $3
+RETURNING id, name, description, created_at
+`
+
+type UpdateScenarioParams struct {
+	Name        *string
+	Description *string
+	ID          pgtype.UUID
+}
+
+func (q *Queries) UpdateScenario(ctx context.Context, arg UpdateScenarioParams) (Scenario, error) {
+	row := q.db.QueryRow(ctx, updateScenario, arg.Name, arg.Description, arg.ID)
+	var i Scenario
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
 }

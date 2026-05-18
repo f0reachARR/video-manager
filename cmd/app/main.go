@@ -12,6 +12,7 @@ import (
 
 	"github.com/f0reachARR/video-manager/internal/config"
 	"github.com/f0reachARR/video-manager/internal/db"
+	"github.com/f0reachARR/video-manager/internal/db/sqlc"
 	"github.com/f0reachARR/video-manager/internal/http/handler"
 	"github.com/f0reachARR/video-manager/internal/http/route"
 )
@@ -41,11 +42,20 @@ func run() error {
 	}
 	defer database.Close()
 
+	q := sqlc.New(database.Pool)
+
 	router := route.New(route.Deps{
 		Health: &handler.Health{
 			Version: cfg.AppVersion,
 			DB:      database,
 		},
+		Users:          &handler.Users{Q: q},
+		Devices:        &handler.Devices{Q: q},
+		Teams:          &handler.Teams{Q: q},
+		Robots:         &handler.Robots{Q: q},
+		Scenarios:      &handler.Scenarios{Q: q},
+		Tags:           &handler.Tags{Q: q},
+		Sessions:       &handler.Sessions{Q: q},
 		AllowedOrigins: cfg.AllowedOrigins,
 	})
 

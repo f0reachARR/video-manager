@@ -7,6 +7,8 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createDevice = `-- name: CreateDevice :one
@@ -22,6 +24,34 @@ type CreateDeviceParams struct {
 
 func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error) {
 	row := q.db.QueryRow(ctx, createDevice, arg.Name, arg.DefaultTimeOffsetSec)
+	var i Device
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.DefaultTimeOffsetSec,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteDevice = `-- name: DeleteDevice :execrows
+DELETE FROM devices WHERE id = $1
+`
+
+func (q *Queries) DeleteDevice(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDevice, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getDevice = `-- name: GetDevice :one
+SELECT id, name, default_time_offset_sec, created_at FROM devices WHERE id = $1
+`
+
+func (q *Queries) GetDevice(ctx context.Context, id pgtype.UUID) (Device, error) {
+	row := q.db.QueryRow(ctx, getDevice, id)
 	var i Device
 	err := row.Scan(
 		&i.ID,
@@ -59,4 +89,70 @@ func (q *Queries) ListDevices(ctx context.Context) ([]Device, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listDevicesPage = `-- name: ListDevicesPage :many
+SELECT id, name, default_time_offset_sec, created_at
+FROM devices
+WHERE ($2::timestamptz IS NULL OR (created_at, id) > ($2::timestamptz, $3::uuid))
+ORDER BY created_at ASC, id ASC
+LIMIT $1
+`
+
+type ListDevicesPageParams struct {
+	Limit           int32
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        pgtype.UUID
+}
+
+func (q *Queries) ListDevicesPage(ctx context.Context, arg ListDevicesPageParams) ([]Device, error) {
+	rows, err := q.db.Query(ctx, listDevicesPage, arg.Limit, arg.CursorCreatedAt, arg.CursorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Device
+	for rows.Next() {
+		var i Device
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DefaultTimeOffsetSec,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateDevice = `-- name: UpdateDevice :one
+UPDATE devices
+SET
+  name = COALESCE($1, name),
+  default_time_offset_sec = COALESCE($2, default_time_offset_sec)
+WHERE id = $3
+RETURNING id, name, default_time_offset_sec, created_at
+`
+
+type UpdateDeviceParams struct {
+	Name                 *string
+	DefaultTimeOffsetSec *int32
+	ID                   pgtype.UUID
+}
+
+func (q *Queries) UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error) {
+	row := q.db.QueryRow(ctx, updateDevice, arg.Name, arg.DefaultTimeOffsetSec, arg.ID)
+	var i Device
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.DefaultTimeOffsetSec,
+		&i.CreatedAt,
+	)
+	return i, err
 }

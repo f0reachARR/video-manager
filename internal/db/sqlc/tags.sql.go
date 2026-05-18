@@ -7,6 +7,8 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createTag = `-- name: CreateTag :one
@@ -22,6 +24,34 @@ type CreateTagParams struct {
 
 func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error) {
 	row := q.db.QueryRow(ctx, createTag, arg.Name, arg.Color)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Color,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteTag = `-- name: DeleteTag :execrows
+DELETE FROM tags WHERE id = $1
+`
+
+func (q *Queries) DeleteTag(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTag, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getTag = `-- name: GetTag :one
+SELECT id, name, color, created_at FROM tags WHERE id = $1
+`
+
+func (q *Queries) GetTag(ctx context.Context, id pgtype.UUID) (Tag, error) {
+	row := q.db.QueryRow(ctx, getTag, id)
 	var i Tag
 	err := row.Scan(
 		&i.ID,
@@ -59,4 +89,76 @@ func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listTagsPage = `-- name: ListTagsPage :many
+SELECT id, name, color, created_at
+FROM tags
+WHERE ($2::timestamptz IS NULL OR (created_at, id) > ($2::timestamptz, $3::uuid))
+ORDER BY created_at ASC, id ASC
+LIMIT $1
+`
+
+type ListTagsPageParams struct {
+	Limit           int32
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        pgtype.UUID
+}
+
+func (q *Queries) ListTagsPage(ctx context.Context, arg ListTagsPageParams) ([]Tag, error) {
+	rows, err := q.db.Query(ctx, listTagsPage, arg.Limit, arg.CursorCreatedAt, arg.CursorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Tag
+	for rows.Next() {
+		var i Tag
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Color,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateTag = `-- name: UpdateTag :one
+UPDATE tags
+SET
+  name = COALESCE($1, name),
+  color = CASE WHEN $2::bool THEN $3 ELSE color END
+WHERE id = $4
+RETURNING id, name, color, created_at
+`
+
+type UpdateTagParams struct {
+	Name     *string
+	ColorSet bool
+	Color    *string
+	ID       pgtype.UUID
+}
+
+func (q *Queries) UpdateTag(ctx context.Context, arg UpdateTagParams) (Tag, error) {
+	row := q.db.QueryRow(ctx, updateTag,
+		arg.Name,
+		arg.ColorSet,
+		arg.Color,
+		arg.ID,
+	)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Color,
+		&i.CreatedAt,
+	)
+	return i, err
 }

@@ -7,6 +7,8 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createTeam = `-- name: CreateTeam :one
@@ -32,12 +34,40 @@ func (q *Queries) CreateTeam(ctx context.Context, arg CreateTeamParams) (Team, e
 	return i, err
 }
 
+const deleteTeam = `-- name: DeleteTeam :execrows
+DELETE FROM teams WHERE id = $1
+`
+
+func (q *Queries) DeleteTeam(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTeam, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getOwnTeam = `-- name: GetOwnTeam :one
 SELECT id, name, is_own, created_at FROM teams WHERE is_own LIMIT 1
 `
 
 func (q *Queries) GetOwnTeam(ctx context.Context) (Team, error) {
 	row := q.db.QueryRow(ctx, getOwnTeam)
+	var i Team
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.IsOwn,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTeam = `-- name: GetTeam :one
+SELECT id, name, is_own, created_at FROM teams WHERE id = $1
+`
+
+func (q *Queries) GetTeam(ctx context.Context, id pgtype.UUID) (Team, error) {
+	row := q.db.QueryRow(ctx, getTeam, id)
 	var i Team
 	err := row.Scan(
 		&i.ID,
@@ -75,4 +105,70 @@ func (q *Queries) ListTeams(ctx context.Context) ([]Team, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listTeamsPage = `-- name: ListTeamsPage :many
+SELECT id, name, is_own, created_at
+FROM teams
+WHERE ($2::timestamptz IS NULL OR (created_at, id) > ($2::timestamptz, $3::uuid))
+ORDER BY created_at ASC, id ASC
+LIMIT $1
+`
+
+type ListTeamsPageParams struct {
+	Limit           int32
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        pgtype.UUID
+}
+
+func (q *Queries) ListTeamsPage(ctx context.Context, arg ListTeamsPageParams) ([]Team, error) {
+	rows, err := q.db.Query(ctx, listTeamsPage, arg.Limit, arg.CursorCreatedAt, arg.CursorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Team
+	for rows.Next() {
+		var i Team
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.IsOwn,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateTeam = `-- name: UpdateTeam :one
+UPDATE teams
+SET
+  name = COALESCE($1, name),
+  is_own = COALESCE($2, is_own)
+WHERE id = $3
+RETURNING id, name, is_own, created_at
+`
+
+type UpdateTeamParams struct {
+	Name  *string
+	IsOwn *bool
+	ID    pgtype.UUID
+}
+
+func (q *Queries) UpdateTeam(ctx context.Context, arg UpdateTeamParams) (Team, error) {
+	row := q.db.QueryRow(ctx, updateTeam, arg.Name, arg.IsOwn, arg.ID)
+	var i Team
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.IsOwn,
+		&i.CreatedAt,
+	)
+	return i, err
 }

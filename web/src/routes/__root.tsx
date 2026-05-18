@@ -1,19 +1,64 @@
-import { AppShell, Title } from "@mantine/core";
+import { AppShell, Group, NavLink, ScrollArea, Stack, Title } from "@mantine/core";
 import type { QueryClient } from "@tanstack/react-query";
-import { Outlet, createRootRouteWithContext } from "@tanstack/react-router";
+import {
+  Link,
+  Outlet,
+  createRootRouteWithContext,
+  useMatchRoute,
+} from "@tanstack/react-router";
+
+import { CurrentUserPicker } from "../components/CurrentUserPicker";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: RootLayout,
 });
 
+const navItems = [
+  { to: "/", label: "ホーム" },
+  { to: "/sessions", label: "セッション" },
+  { to: "/users", label: "ユーザー" },
+  { to: "/teams", label: "チーム" },
+  { to: "/robots", label: "ロボット" },
+  { to: "/devices", label: "機材" },
+  { to: "/scenarios", label: "シナリオ" },
+  { to: "/tags", label: "タグ" },
+] as const;
+
 function RootLayout() {
+  const matchRoute = useMatchRoute();
   return (
-    <AppShell header={{ height: 56 }} padding="md">
-      <AppShell.Header
-        style={{ display: "flex", alignItems: "center", paddingInline: 16 }}
-      >
-        <Title order={4}>Video Manager</Title>
+    <AppShell
+      header={{ height: 56 }}
+      navbar={{ width: 220, breakpoint: "sm" }}
+      padding="md"
+    >
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between">
+          <Title order={4}>Video Manager</Title>
+          <CurrentUserPicker />
+        </Group>
       </AppShell.Header>
+      <AppShell.Navbar p="xs">
+        <AppShell.Section grow component={ScrollArea}>
+          <Stack gap={2}>
+            {navItems.map((item) => {
+              const active =
+                item.to === "/"
+                  ? !!matchRoute({ to: "/", fuzzy: false })
+                  : !!matchRoute({ to: item.to, fuzzy: true });
+              return (
+                <NavLink
+                  key={item.to}
+                  component={Link}
+                  to={item.to}
+                  label={item.label}
+                  active={active}
+                />
+              );
+            })}
+          </Stack>
+        </AppShell.Section>
+      </AppShell.Navbar>
       <AppShell.Main>
         <Outlet />
       </AppShell.Main>

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 )
@@ -21,11 +20,6 @@ type healthResponse struct {
 	Version string `json:"version"`
 }
 
-type errorResponse struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
 func (h *Health) Live(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Version: h.Version})
 }
@@ -35,17 +29,8 @@ func (h *Health) Ready(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := h.DB.Ping(ctx); err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, errorResponse{
-			Code:    "db_unavailable",
-			Message: err.Error(),
-		})
+		writeError(w, http.StatusServiceUnavailable, "db_unavailable", err.Error(), nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Version: h.Version})
-}
-
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
 }

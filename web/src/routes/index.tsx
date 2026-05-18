@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { fetchHealth, fetchReady } from "../lib/api/client";
+import { useCurrentUserId } from "../lib/currentUser";
 
 export const Route = createFileRoute("/")({
   component: IndexPage,
@@ -11,13 +12,30 @@ export const Route = createFileRoute("/")({
 function IndexPage() {
   const health = useQuery({ queryKey: ["health"], queryFn: fetchHealth });
   const ready = useQuery({ queryKey: ["ready"], queryFn: fetchReady });
+  const currentUserId = useCurrentUserId();
 
   return (
     <Stack maw={720}>
       <Title order={2}>Hello, Video Manager</Title>
       <Text c="dimmed">
-        Phase 1 §1 の土台確認用ページ。Go API から /health と /ready を取得しています。
+        Phase 1 §4 までの管理 UI が動きます。左のナビからマスタとセッションを操作してください。
       </Text>
+
+      <Card withBorder>
+        <Stack gap="xs">
+          <Title order={4}>現在のユーザー</Title>
+          {currentUserId ? (
+            <Text size="sm">
+              X-User-Id: <code>{currentUserId}</code>
+            </Text>
+          ) : (
+            <Alert color="yellow">
+              ヘッダーの「現在のユーザー」が未設定です。/users
+              でユーザーを作成して選択してください。
+            </Alert>
+          )}
+        </Stack>
+      </Card>
 
       <Card withBorder>
         <Stack gap="xs">

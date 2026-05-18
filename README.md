@@ -2,8 +2,8 @@
 
 ロボコン テストラン動画整理アプリ。詳細は [spec.md](spec.md) を参照。
 
-このリポジトリは現在 [spec-devflow.md](spec-devflow.md) §1「リポジトリ土台」までを実装した段階。
-動画アップロード・Run・Marker などの本機能は §2 以降で順次追加する。
+このリポジトリは現在 [spec-devflow.md](spec-devflow.md) §4「動画なしの管理 UI」までを実装した段階。
+動画アップロード・Run・Marker などの本機能は §5 以降で順次追加する。
 
 ## 必要ツール
 
@@ -72,8 +72,8 @@ docker compose up -d
 
 ## 次のステップ
 
-[spec-devflow.md](spec-devflow.md) §3「API 契約を決める」へ進む。
+[spec-devflow.md](spec-devflow.md) §5「アップロード経路を最小実装する」へ進む。
 
-- `docs/api/openapi.yaml` に Phase 1 の主要リソース（sessions / videos / runs / markers）を追加
-- 生成スクリプトを通して TS 型を更新
-- Go 側 handler / service を順に立ち上げる
+- tusd + MinIO/S3 で 1 ファイル PUT → DB の videos 行作成までを通す
+- フロントに ServiceWorker + IndexedDB の最小キューを置く
+- `/uploads/tus-hook` を Go 側で実装し、storage_key の確定を行う
