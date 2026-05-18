@@ -61,6 +61,10 @@ export type CreateTournamentRequest = components["schemas"]["CreateTournamentReq
 export type UpdateTournamentRequest = components["schemas"]["UpdateTournamentRequest"];
 export type TournamentList = components["schemas"]["TournamentList"];
 
+export type ScoutingNote = components["schemas"]["ScoutingNote"];
+export type CreateScoutingNoteRequest = components["schemas"]["CreateScoutingNoteRequest"];
+export type ScoutingNoteList = components["schemas"]["ScoutingNoteList"];
+
 export type Annotation = components["schemas"]["Annotation"];
 export type AnnotationType = components["schemas"]["AnnotationType"];
 export type AnnotationList = components["schemas"]["AnnotationList"];
@@ -374,6 +378,21 @@ export const searchApi = {
         q: p.q,
       })}`,
     ),
+};
+
+// ---- ScoutingNotes ----
+export const scoutingNotesApi = {
+  listByMatch: (matchId: string) =>
+    request<ScoutingNoteList>(`/matches/${matchId}/scouting-notes`),
+  create: (matchId: string, body: CreateScoutingNoteRequest) =>
+    request<ScoutingNote>(`/matches/${matchId}/scouting-notes`, {
+      method: "POST",
+      json: body,
+    }),
+  get: (noteId: string) =>
+    request<ScoutingNote>(`/scouting-notes/${noteId}`),
+  remove: (noteId: string) =>
+    request<void>(`/scouting-notes/${noteId}`, { method: "DELETE" }),
 };
 
 // ---- Annotations ----

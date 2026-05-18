@@ -432,6 +432,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/matches/{matchId}/scouting-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matchId: components["parameters"]["MatchIdPath"];
+            };
+            cookie?: never;
+        };
+        /** Match 配下の ScoutingNote 一覧 */
+        get: operations["listScoutingNotes"];
+        put?: never;
+        /**
+         * ScoutingNote を新規作成
+         * @description 本文は Hocuspocus が WS 経由で更新する。同じ (matchId, targetTeamId)
+         *     の組が既に存在する場合は 409 を返す。
+         */
+        post: operations["createScoutingNote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scouting-notes/{noteId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                noteId: components["parameters"]["ScoutingNoteId"];
+            };
+            cookie?: never;
+        };
+        /** ScoutingNote 取得 (メタデータ + plain_text のみ) */
+        get: operations["getScoutingNote"];
+        put?: never;
+        post?: never;
+        /** ScoutingNote 削除 */
+        delete: operations["deleteScoutingNote"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/annotations/{annotationId}": {
         parameters: {
             query?: never;
@@ -1258,6 +1302,27 @@ export interface components {
         AnnotationList: {
             data: components["schemas"]["Annotation"][];
         };
+        ScoutingNote: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            matchId: string;
+            /** Format: uuid */
+            targetTeamId: string;
+            /** @description Hocuspocus が yjs ドキュメントから派生して書き込む検索用テキスト */
+            plainText: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateScoutingNoteRequest: {
+            /** Format: uuid */
+            targetTeamId: string;
+        };
+        ScoutingNoteList: {
+            data: components["schemas"]["ScoutingNote"][];
+        };
     };
     responses: {
         /** @description リクエストが不正 */
@@ -1316,6 +1381,7 @@ export interface components {
         TournamentId: string;
         MatchIdPath: string;
         AnnotationId: string;
+        ScoutingNoteId: string;
     };
     requestBodies: never;
     headers: never;
@@ -2455,6 +2521,109 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    listScoutingNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matchId: components["parameters"]["MatchIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoutingNoteList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createScoutingNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matchId: components["parameters"]["MatchIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateScoutingNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoutingNote"];
+                };
+            };
+            /** @description 既に存在する */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getScoutingNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                noteId: components["parameters"]["ScoutingNoteId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoutingNote"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteScoutingNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                noteId: components["parameters"]["ScoutingNoteId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     deleteAnnotation: {
