@@ -2,8 +2,8 @@
 
 ロボコン テストラン動画整理アプリ。詳細は [spec.md](spec.md) を参照。
 
-このリポジトリは現在 [spec-devflow.md](spec-devflow.md) §4「動画なしの管理 UI」までを実装した段階。
-動画アップロード・Run・Marker などの本機能は §5 以降で順次追加する。
+このリポジトリは現在 [spec-devflow.md](spec-devflow.md) §5「アップロード経路を最小実装」までを実装した段階。
+ffprobe / Session 候補・Run・Marker などの本機能は §6 以降で順次追加する。
 
 ## 必要ツール
 
@@ -33,9 +33,9 @@ docker compose up -d
 | SPA (Vite) | 5173 | `/api/*` を 8080 にプロキシ |
 | Go API | 8080 | `/health`, `/ready` |
 | PostgreSQL | 5432 | `video / video / video_manager` |
-| MinIO API | 9000 | S3 互換 |
+| MinIO API | 9000 | S3 互換。Go API がここで署名 URL を発行 |
 | MinIO Console | 9001 | `minio / minio123` |
-| tusd | 1080 | Phase 1 §1 では疎通確認のみ |
+| tusd | 1080 | S3 backend で MinIO に保存。post-finish hook で Go API に通知 |
 
 ## スクリプト
 
@@ -72,8 +72,9 @@ docker compose up -d
 
 ## 次のステップ
 
-[spec-devflow.md](spec-devflow.md) §5「アップロード経路を最小実装する」へ進む。
+[spec-devflow.md](spec-devflow.md) §6「メタデータ抽出と Session 候補を作る」へ進む。
 
-- tusd + MinIO/S3 で 1 ファイル PUT → DB の videos 行作成までを通す
-- フロントに ServiceWorker + IndexedDB の最小キューを置く
-- `/uploads/tus-hook` を Go 側で実装し、storage_key の確定を行う
+- worker / river ジョブを起動し、アップロード後に ffprobe を回す
+- `recorded_at` と `duration_sec` を Video に反映する
+- Device の `time_offset_sec` を適用したうえで Session 候補を計算
+- 未割当の Video に Session を割り当てる確認 UI を作る

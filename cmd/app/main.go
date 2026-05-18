@@ -15,6 +15,7 @@ import (
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
 	"github.com/f0reachARR/video-manager/internal/http/handler"
 	"github.com/f0reachARR/video-manager/internal/http/route"
+	"github.com/f0reachARR/video-manager/internal/storage"
 )
 
 func main() {
@@ -44,6 +45,19 @@ func run() error {
 
 	q := sqlc.New(database.Pool)
 
+	store, err := storage.New(ctx, storage.Config{
+		Endpoint:     cfg.S3Endpoint,
+		Region:       cfg.S3Region,
+		Bucket:       cfg.S3Bucket,
+		AccessKey:    cfg.S3AccessKey,
+		SecretKey:    cfg.S3SecretKey,
+		UsePathStyle: cfg.S3UsePathStyle,
+		PresignTTL:   cfg.S3PresignTTL,
+	})
+	if err != nil {
+		return err
+	}
+
 	router := route.New(route.Deps{
 		Health: &handler.Health{
 			Version: cfg.AppVersion,
@@ -56,6 +70,8 @@ func run() error {
 		Scenarios:      &handler.Scenarios{Q: q},
 		Tags:           &handler.Tags{Q: q},
 		Sessions:       &handler.Sessions{Q: q},
+		Videos:         &handler.Videos{Q: q, Storage: store},
+		Uploads:        &handler.Uploads{Q: q},
 		AllowedOrigins: cfg.AllowedOrigins,
 	})
 

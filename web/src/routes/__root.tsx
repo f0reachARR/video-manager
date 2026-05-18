@@ -16,6 +16,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 const navItems = [
   { to: "/", label: "ホーム" },
   { to: "/sessions", label: "セッション" },
+  { to: "/videos", label: "動画" },
   { to: "/users", label: "ユーザー" },
   { to: "/teams", label: "チーム" },
   { to: "/robots", label: "ロボット" },

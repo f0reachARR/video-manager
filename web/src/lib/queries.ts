@@ -6,6 +6,9 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  type UpdateVideoRequest,
+  type VideoListParams,
+  videosApi,
   type CreateDeviceRequest,
   type CreateRobotRequest,
   type CreateScenarioRequest,
@@ -39,6 +42,31 @@ export const queryKeys = {
   scenarios: ["scenarios"] as const,
   tags: ["tags"] as const,
   sessions: (params: SessionListParams = {}) => ["sessions", params] as const,
+  videos: (params: VideoListParams = {}) => ["videos", params] as const,
+};
+
+// ---- Videos ----
+export const useVideos = (params: VideoListParams = {}) =>
+  useQuery({
+    queryKey: queryKeys.videos(params),
+    queryFn: () => videosApi.list({ limit: 200, ...params }),
+  });
+
+export const useUpdateVideo = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateVideoRequest }) =>
+      videosApi.update(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["videos"] }),
+  });
+};
+
+export const useDeleteVideo = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => videosApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["videos"] }),
+  });
 };
 
 // ---- Users ----

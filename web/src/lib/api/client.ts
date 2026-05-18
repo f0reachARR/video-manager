@@ -34,6 +34,11 @@ export type CreateTagRequest = components["schemas"]["CreateTagRequest"];
 export type UpdateTagRequest = components["schemas"]["UpdateTagRequest"];
 export type TagList = components["schemas"]["TagList"];
 
+export type Video = components["schemas"]["Video"];
+export type UpdateVideoRequest = components["schemas"]["UpdateVideoRequest"];
+export type VideoList = components["schemas"]["VideoList"];
+export type PlaybackUrl = components["schemas"]["PlaybackUrl"];
+
 export type Session = components["schemas"]["Session"];
 export type CreateSessionRequest = components["schemas"]["CreateSessionRequest"];
 export type UpdateSessionRequest = components["schemas"]["UpdateSessionRequest"];
@@ -207,6 +212,32 @@ export const tagsApi = {
     request<Tag>(`/tags/${id}`, { method: "PATCH", json: body }),
   remove: (id: string) =>
     request<void>(`/tags/${id}`, { method: "DELETE" }),
+};
+
+// ---- Videos ----
+export type VideoListParams = PageParams & {
+  sessionId?: string;
+  deviceId?: string;
+  unassigned?: boolean;
+};
+export const videosApi = {
+  list: (p: VideoListParams = {}) =>
+    request<VideoList>(
+      `/videos${qs({
+        cursor: p.cursor,
+        limit: p.limit,
+        sessionId: p.sessionId,
+        deviceId: p.deviceId,
+        unassigned: p.unassigned === true ? "true" : undefined,
+      })}`,
+    ),
+  get: (id: string) => request<Video>(`/videos/${id}`),
+  update: (id: string, body: UpdateVideoRequest) =>
+    request<Video>(`/videos/${id}`, { method: "PATCH", json: body }),
+  remove: (id: string) =>
+    request<void>(`/videos/${id}`, { method: "DELETE" }),
+  playbackUrl: (id: string) =>
+    request<PlaybackUrl>(`/videos/${id}/playback-url`),
 };
 
 // ---- Sessions ----

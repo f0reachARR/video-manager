@@ -51,7 +51,11 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	if body == nil {
 		return
 	}
-	if err := json.NewEncoder(w).Encode(body); err != nil {
+	enc := json.NewEncoder(w)
+	// We serve URLs (presigned, etc.) where escaping `&` to `&` corrupts
+	// query strings for naive clients. The output is consumed as JSON anyway.
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(body); err != nil {
 		slog.Error("write json failed", "error", err)
 	}
 }
