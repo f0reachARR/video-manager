@@ -6,6 +6,7 @@ import {
   FileButton,
   Group,
   Modal,
+  Paper,
   Progress,
   Select,
   Stack,
@@ -43,8 +44,11 @@ type UploadItem = {
   fileName: string;
   size: number;
   progress: number;
-  state: "uploading" | "done" | "error";
+  bytesUploaded: number;
+  startedAt: number;
+  state: "uploading" | "done" | "error" | "canceled";
   error?: string;
+  upload: Upload;
 };
 
 function VideosPage() {
@@ -54,6 +58,7 @@ function VideosPage() {
   const currentUserId = useCurrentUserId();
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   const deviceNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -66,41 +71,86 @@ function VideosPage() {
     return m;
   }, [sessions.data]);
 
-  const startUpload = (file: File) => {
-    const id = crypto.randomUUID();
-    setUploads((u) => [
-      ...u,
-      { id, fileName: file.name, size: file.size, progress: 0, state: "uploading" },
-    ]);
+  const buildUpload = (
+    file: File,
+    onState: (patch: Partial<UploadItem>) => void,
+  ) => {
     const meta: Record<string, string> = {
       filename: file.name,
       filetype: file.type || "application/octet-stream",
     };
     if (deviceId) meta.deviceId = deviceId;
     if (currentUserId) meta.uploaderId = currentUserId;
-    const upload = new Upload(file, {
+    return new Upload(file, {
       endpoint: TUSD_ENDPOINT,
-      retryDelays: [0, 1000, 3000, 5000],
+      retryDelays: [0, 1000, 3000, 5000, 10000],
       chunkSize: 8 * 1024 * 1024,
+      // urlStorage default (localStorage) + removeFingerprintOnSuccess lets
+      // an interrupted upload resume across page reloads.
+      removeFingerprintOnSuccess: true,
       metadata: meta,
       onError(err) {
-        setUploads((u) =>
-          u.map((it) => (it.id === id ? { ...it, state: "error", error: err.message } : it)),
-        );
+        onState({ state: "error", error: err.message });
       },
       onProgress(sent, total) {
         const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
-        setUploads((u) => u.map((it) => (it.id === id ? { ...it, progress: pct } : it)));
+        onState({ progress: pct, bytesUploaded: sent });
       },
       onSuccess() {
-        setUploads((u) =>
-          u.map((it) => (it.id === id ? { ...it, state: "done", progress: 100 } : it)),
-        );
-        // Give tusd's hook a brief moment to hit the API, then refresh the list.
+        onState({ state: "done", progress: 100 });
         setTimeout(() => videos.refetch(), 800);
       },
     });
-    upload.start();
+  };
+
+  const startUpload = (file: File) => {
+    const id = crypto.randomUUID();
+    const item: UploadItem = {
+      id,
+      fileName: file.name,
+      size: file.size,
+      progress: 0,
+      bytesUploaded: 0,
+      startedAt: Date.now(),
+      state: "uploading",
+      upload: buildUpload(file, (patch) =>
+        setUploads((u) => u.map((it) => (it.id === id ? { ...it, ...patch } : it))),
+      ),
+    };
+    setUploads((u) => [...u, item]);
+    item.upload.start();
+  };
+
+  const startUploadMany = (files: FileList | File[]) => {
+    for (const f of Array.from(files)) {
+      if (f.size === 0) continue;
+      startUpload(f);
+    }
+  };
+
+  const cancelUpload = (id: string) => {
+    const target = uploads.find((u) => u.id === id);
+    if (!target) return;
+    target.upload.abort().catch(() => {});
+    setUploads((u) => u.map((it) => (it.id === id ? { ...it, state: "canceled" } : it)));
+  };
+
+  const retryUpload = (id: string) => {
+    setUploads((u) =>
+      u.map((it) =>
+        it.id === id
+          ? { ...it, state: "uploading", error: undefined, startedAt: Date.now() }
+          : it,
+      ),
+    );
+    const target = uploads.find((u) => u.id === id);
+    if (!target) return;
+    // tus-js-client supports resume by re-running start() on the existing upload.
+    target.upload.start();
+  };
+
+  const clearFinished = () => {
+    setUploads((u) => u.filter((it) => it.state === "uploading"));
   };
 
   const list = videos.data?.data ?? [];
@@ -124,16 +174,46 @@ function VideosPage() {
             w={200}
             size="sm"
           />
-          <FileButton onChange={(f) => f && startUpload(f)} accept="video/*">
-            {(props) => <Button {...props}>＋ 動画をアップロード</Button>}
+          <FileButton onChange={(files) => files && startUploadMany(files)} accept="video/*" multiple>
+            {(props) => <Button {...props}>＋ 動画を選択</Button>}
           </FileButton>
+          <MobileCaptureButton onPicked={startUpload} />
         </Group>
       }
     >
       <Stack>
+        <Paper
+          withBorder
+          p="lg"
+          style={{
+            borderStyle: "dashed",
+            background: dragging ? "var(--mantine-color-blue-0)" : undefined,
+            transition: "background 120ms",
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            if (e.dataTransfer?.files?.length) startUploadMany(e.dataTransfer.files);
+          }}
+        >
+          <Text ta="center" c={dragging ? "blue" : "dimmed"}>
+            動画ファイルをここにドラッグ&ドロップ
+          </Text>
+        </Paper>
+
         {uploads.length > 0 && (
           <Stack gap="xs">
-            <Title order={5}>アップロード状況</Title>
+            <Group justify="space-between">
+              <Title order={5}>アップロード状況 ({uploads.length})</Title>
+              <Button size="xs" variant="subtle" onClick={clearFinished}>
+                完了/失敗をクリア
+              </Button>
+            </Group>
             {uploads.map((u) => (
               <Group key={u.id} gap="md" wrap="nowrap">
                 <Text size="sm" flex={1} truncate>
@@ -144,16 +224,34 @@ function VideosPage() {
                 </Text>
                 <Progress
                   value={u.progress}
-                  color={u.state === "error" ? "red" : u.state === "done" ? "green" : "blue"}
+                  color={
+                    u.state === "error" ? "red"
+                    : u.state === "canceled" ? "gray"
+                    : u.state === "done" ? "green"
+                    : "blue"
+                  }
                   miw={200}
                   size="sm"
                   flex={1}
                 />
-                <Text size="xs" w={80} ta="right">
-                  {u.state === "uploading" && `${u.progress}%`}
+                <Text size="xs" w={130} ta="right">
+                  {u.state === "uploading" && `${u.progress}% · ${formatRate(u)}`}
                   {u.state === "done" && "完了"}
+                  {u.state === "canceled" && "中止"}
                   {u.state === "error" && (u.error ?? "失敗")}
                 </Text>
+                <Group gap={4} w={70} justify="flex-end">
+                  {u.state === "uploading" && (
+                    <ActionIcon size="sm" variant="subtle" color="red" onClick={() => cancelUpload(u.id)} aria-label="中止">
+                      ✕
+                    </ActionIcon>
+                  )}
+                  {(u.state === "error" || u.state === "canceled") && (
+                    <ActionIcon size="sm" variant="subtle" onClick={() => retryUpload(u.id)} aria-label="再試行">
+                      ↻
+                    </ActionIcon>
+                  )}
+                </Group>
               </Group>
             ))}
           </Stack>
@@ -217,6 +315,36 @@ function VideosPage() {
       </Stack>
     </ResourcePage>
   );
+}
+
+function MobileCaptureButton({ onPicked }: { onPicked: (file: File) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="video/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.currentTarget.files?.[0];
+          if (f) onPicked(f);
+          e.currentTarget.value = "";
+        }}
+      />
+      <Button variant="default" onClick={() => inputRef.current?.click()}>
+        📷 撮影
+      </Button>
+    </>
+  );
+}
+
+function formatRate(u: UploadItem): string {
+  const elapsed = (Date.now() - u.startedAt) / 1000;
+  if (elapsed <= 0 || u.bytesUploaded <= 0) return "—";
+  const mbps = u.bytesUploaded / elapsed / (1024 * 1024);
+  return `${mbps.toFixed(1)} MB/s`;
 }
 
 function VideoActions({ video }: { video: Video }) {
