@@ -1662,10 +1662,6 @@ function AnglesTimeline({
   const update = useUpdateRunVideo();
   const trackRef = useRef<HTMLDivElement>(null);
 
-  if (videos.length === 0 || durationSec <= 0) return null;
-
-  const pxPerSec = (rect: DOMRect) => rect.width / durationSec;
-
   type DragKind = "move" | "trim-start" | "trim-end";
   type DragState = {
     rvId: string;
@@ -1675,9 +1671,16 @@ function AnglesTimeline({
     initVStart: number;
     initVEnd: number;
   } | null;
+  // These hooks must come before the early-return below; otherwise toggling
+  // videos.length between 0 and >0 changes the hook count and React throws
+  // "Rendered more hooks than during the previous render."
   const dragRef = useRef<DragState>(null);
   // Pending offsets while dragging — committed on pointerup.
   const [pending, setPending] = useState<Map<string, { runOff: number; vStart: number; vEnd: number }>>(new Map());
+
+  if (videos.length === 0 || durationSec <= 0) return null;
+
+  const pxPerSec = (rect: DOMRect) => rect.width / durationSec;
 
   const onPointerDown =
     (rv: RunVideo, kind: DragKind) => (e: React.PointerEvent) => {
