@@ -31,6 +31,7 @@ import {
   type MarkerCategory,
   type Run,
   type RunVideo,
+  type User,
   videosApi,
 } from "../../lib/api/client";
 import {
@@ -46,8 +47,10 @@ import {
   useUpdateMarker,
   useUpdateRun,
   useUpdateRunVideo,
+  useUsers,
   useVideos,
 } from "../../lib/queries";
+import { useCurrentUserId } from "../../lib/currentUser";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useTopicSubscription,
@@ -58,17 +61,59 @@ import {
   type OverlayMode,
 } from "../../components/RunVideoOverlay";
 
-// Random per-tab id so we can distinguish our own playback.sync echoes from
-// other viewers' messages.
+// Random per-tab id — distinguishes our own presence echoes from other viewers'.
 const SENDER_ID = `v_${Math.random().toString(36).slice(2, 10)}`;
 
-type PlaybackSyncMsg = {
-  type: "playback.sync";
+// Per-Run presence wire format. Each viewer emits ticks every 500ms; receivers
+// build a Map<senderId, Presence> from them. Stale entries (>3s) are pruned.
+type PresenceTick = {
+  type: "presence.tick";
   senderId: string;
+  userId: string | null;
   tSec: number;
   playing: boolean;
+  isBroadcaster: boolean;
   ts: number;
 };
+
+type Presence = {
+  senderId: string;
+  userId: string | null;
+  tSec: number;
+  playing: boolean;
+  isBroadcaster: boolean;
+  ts: number;
+  lastSeen: number;
+};
+
+const PRESENCE_TICK_MS = 500;
+const PRESENCE_STALE_MS = 3000;
+
+// Deterministic fallback color when a presence has no associated user (or the
+// user has no `color` field set).
+function senderColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (h * 31 + seed.charCodeAt(i)) | 0;
+  }
+  return `hsl(${Math.abs(h) % 360} 70% 50%)`;
+}
+
+function presenceColor(p: { userId: string | null; senderId: string }, users: Map<string, User>): string {
+  if (p.userId) {
+    const u = users.get(p.userId);
+    if (u?.color) return u.color;
+  }
+  return senderColor(p.senderId);
+}
+
+function presenceLabel(p: { userId: string | null; senderId: string }, users: Map<string, User>): string {
+  if (p.userId) {
+    const u = users.get(p.userId);
+    if (u?.name) return u.name;
+  }
+  return `匿名 (${p.senderId.slice(-4)})`;
+}
 
 export const Route = createFileRoute("/runs/$runId")({
   component: RunDetailPage,
@@ -236,58 +281,106 @@ function SyncPlayer({
 
   // Overlay (Annotation 追加 / ライブインク) — applies to the main angle.
   const [overlayMode, setOverlayMode] = useState<OverlayMode>("off");
-  // Playback sync — independent from overlay mode. acceptSync controls whether
-  // *incoming* sync events nudge our playback. Default OFF so opening a Run
-  // doesn't surprise the viewer by jumping their playback.
-  const [acceptSync, setAcceptSync] = useState(false);
-  const [lastSyncSender, setLastSyncSender] = useState<string | null>(null);
 
-  // When the viewer disables sync receive, clear any leftover "syncing"
-  // indicator immediately so it doesn't linger from a previous reception.
-  useEffect(() => {
-    if (!acceptSync) setLastSyncSender(null);
-  }, [acceptSync]);
+  // Presence + follow state. Each viewer emits a `presence.tick` every
+  // PRESENCE_TICK_MS. `presences` is the map of *other* viewers we've seen
+  // recently. `myBroadcasting` is whether we've claimed the "follow me" slot.
+  // `followTarget` is the senderId we're tracking (null = independent).
+  const currentUserId = useCurrentUserId();
+  const usersQ = useUsers();
+  const usersById = useMemo(() => {
+    const m = new Map<string, User>();
+    for (const u of usersQ.data?.data ?? []) m.set(u.id, u);
+    return m;
+  }, [usersQ.data]);
 
-  // Auto-clear the "他の視聴者から同期中" badge after a couple of seconds of
-  // no incoming events.
-  useEffect(() => {
-    if (!lastSyncSender) return;
-    const id = setTimeout(() => setLastSyncSender(null), 2000);
-    return () => clearTimeout(id);
-  }, [lastSyncSender]);
+  const [presences, setPresences] = useState<Map<string, Presence>>(new Map());
+  const [myBroadcasting, setMyBroadcasting] = useState(false);
+  const [followTarget, setFollowTarget] = useState<string | null>(null);
+  // "broadcaster" means the follow was auto-set because someone else claimed
+  // the slot; we should auto-release when they release. "individual" means the
+  // viewer explicitly chose to track this person; it sticks until cleared.
+  const followModeRef = useRef<"broadcaster" | "individual" | null>(null);
 
-  // Single bidirectional WS to /ws/run/{runId} for playback.sync messages.
-  // (Marker realtime uses a separate read-only subscription at the page level.)
-  const wsRef = useRef<{ playing: boolean; t: number }>({
-    playing: false,
-    t: 0,
-  });
-  wsRef.current = { playing, t };
-  const publishPlayback = useWebSocketPublisher(`/ws/run/${run.id}`, (msg) => {
-    const m = msg as Partial<PlaybackSyncMsg>;
-    if (m.type !== "playback.sync" || m.senderId === SENDER_ID) return;
-    if (!acceptSync) return;
+  // Refs mirror React state so the long-lived WS handler closure can read
+  // current values without re-subscribing.
+  const myBroadcastingRef = useRef(false);
+  myBroadcastingRef.current = myBroadcasting;
+  const followTargetRef = useRef<string | null>(null);
+  followTargetRef.current = followTarget;
+  const playingRef = useRef(false);
+  playingRef.current = playing;
+  const lastTRef = lastT; // already a ref
+  const runDurationRef = useRef(0);
+  runDurationRef.current = runDurationSec;
+  const mainAngleIdRef = useRef<string | null>(null);
+  mainAngleIdRef.current = mainAngleId;
+
+  // Tracks who is currently broadcasting so we can detect "new claim" vs
+  // "continuing" ticks. Updated from the WS handler.
+  const broadcasterRef = useRef<string | null>(null);
+
+  const publishPresence = useWebSocketPublisher(`/ws/run/${run.id}`, (msg) => {
+    const m = msg as Partial<PresenceTick> & { type?: string };
+    if (m.type !== "presence.tick") return;
+    if (typeof m.senderId !== "string" || m.senderId === SENDER_ID) return;
     if (typeof m.tSec !== "number" || typeof m.playing !== "boolean") return;
-    // Estimate one-way latency from sender's timestamp, then nudge if drift
-    // > 0.5s. Don't fight the sender on every tick — only catch up when we
-    // diverge meaningfully.
-    const latency = Math.max(0, (Date.now() - (m.ts ?? Date.now())) / 1000);
-    const targetT = m.tSec + (m.playing ? latency : 0);
-    const drift = Math.abs(targetT - wsRef.current.t);
-    setLastSyncSender(m.senderId ?? null);
-    if (drift > 0.5) {
-      // Don't re-broadcast a seek we just received — that would feedback-loop.
-      seek(Math.min(runDurationSec, Math.max(0, targetT)), {
-        broadcast: false,
-      });
+    const tick: Presence = {
+      senderId: m.senderId,
+      userId: m.userId ?? null,
+      tSec: m.tSec,
+      playing: m.playing,
+      isBroadcaster: !!m.isBroadcaster,
+      ts: typeof m.ts === "number" ? m.ts : Date.now(),
+      lastSeen: Date.now(),
+    };
+    setPresences((prev) => {
+      const next = new Map(prev);
+      next.set(tick.senderId, tick);
+      return next;
+    });
+
+    // Broadcaster transitions (new claim / release).
+    if (tick.isBroadcaster) {
+      if (broadcasterRef.current !== tick.senderId) {
+        // Someone (else) just claimed the slot.
+        broadcasterRef.current = tick.senderId;
+        // Yield if we were claiming too — last-write-wins.
+        if (myBroadcastingRef.current) setMyBroadcasting(false);
+        // Auto-follow the new broadcaster.
+        followModeRef.current = "broadcaster";
+        setFollowTarget(tick.senderId);
+      }
+    } else if (broadcasterRef.current === tick.senderId) {
+      // The previous broadcaster has released.
+      broadcasterRef.current = null;
+      if (
+        followModeRef.current === "broadcaster" &&
+        followTargetRef.current === tick.senderId
+      ) {
+        followModeRef.current = null;
+        setFollowTarget(null);
+      }
     }
-    // Compare against the underlying <video>'s actual paused state rather
-    // than React state — autoplay might have been blocked on a prior attempt
-    // and we want to keep retrying play() every time the sender pings.
-    const mainEl = mainAngleId ? refs.current.get(mainAngleId) : null;
-    const actuallyPlaying = mainEl ? !mainEl.paused : false;
-    if (m.playing !== actuallyPlaying) {
-      void applyExternalPlaying(m.playing);
+
+    // If we're following this sender, nudge our playback to match.
+    if (followTargetRef.current === tick.senderId) {
+      const latency = Math.max(0, (Date.now() - tick.ts) / 1000);
+      const targetT = tick.tSec + (tick.playing ? latency : 0);
+      const drift = Math.abs(targetT - lastTRef.current);
+      if (drift > 0.5) {
+        seek(
+          Math.min(runDurationRef.current, Math.max(0, targetT)),
+          { broadcast: false },
+        );
+      }
+      const mainEl = mainAngleIdRef.current
+        ? refs.current.get(mainAngleIdRef.current)
+        : null;
+      const actuallyPlaying = mainEl ? !mainEl.paused : false;
+      if (tick.playing !== actuallyPlaying) {
+        void applyExternalPlaying(tick.playing);
+      }
     }
   });
 
@@ -404,7 +497,7 @@ function SyncPlayer({
       el.currentTime = v.videoOffsetStartSec + newT;
     }
     if (opts.broadcast !== false) {
-      broadcastPlayback({ tSec: newT });
+      broadcastPresence();
     }
   };
 
@@ -435,42 +528,65 @@ function SyncPlayer({
     }
   };
 
-  const broadcastPlayback = (override?: {
-    tSec?: number;
-    playing?: boolean;
-  }) => {
-    publishPlayback({
-      type: "playback.sync",
+  const broadcastPresence = () => {
+    publishPresence({
+      type: "presence.tick",
       senderId: SENDER_ID,
-      tSec: override?.tSec ?? wsRef.current.t,
-      playing: override?.playing ?? wsRef.current.playing,
+      userId: currentUserId,
+      tSec: lastTRef.current,
+      playing: playingRef.current,
+      isBroadcaster: myBroadcastingRef.current,
       ts: Date.now(),
-    } satisfies PlaybackSyncMsg);
+    } satisfies PresenceTick);
   };
 
-  // Clear the "他の視聴者から同期中" hint after a moment of silence so the
-  // badge reflects fresh activity, not stale state.
+  // Periodic presence emission — always on, not just while playing, so other
+  // viewers know our position when paused too.
   useEffect(() => {
-    if (!lastSyncSender) return;
-    const id = setTimeout(() => setLastSyncSender(null), 2000);
-    return () => clearTimeout(id);
-  }, [lastSyncSender]);
-
-  // Periodic broadcast while playing so late joiners catch up; on local seek /
-  // play / pause we always send immediately.
-  useEffect(() => {
-    if (!playing) return;
-    const id = setInterval(() => broadcastPlayback(), 500);
+    const id = setInterval(() => broadcastPresence(), PRESENCE_TICK_MS);
     return () => clearInterval(id);
-    // broadcastPlayback closes over publishPlayback (stable) and reads via ref.
+    // broadcastPresence reads via refs and publishPresence is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing]);
+  }, []);
+
+  // Prune stale presence entries; clear follow if the followed user vanished.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const cutoff = Date.now() - PRESENCE_STALE_MS;
+      setPresences((prev) => {
+        let dirty = false;
+        const next = new Map(prev);
+        for (const [k, v] of next) {
+          if (v.lastSeen < cutoff) {
+            next.delete(k);
+            dirty = true;
+          }
+        }
+        return dirty ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // If the user we were following disappeared from `presences`, drop follow.
+  useEffect(() => {
+    if (!followTarget) return;
+    if (!presences.has(followTarget)) {
+      followModeRef.current = null;
+      setFollowTarget(null);
+      if (broadcasterRef.current === followTarget) {
+        broadcasterRef.current = null;
+      }
+    }
+  }, [followTarget, presences]);
 
   const togglePlay = async () => {
     if (playing) {
       for (const v of videos) refs.current.get(v.id)?.pause();
       setPlaying(false);
-      broadcastPlayback({ playing: false });
+      // Local play state has changed; emit immediately so other viewers see it.
+      playingRef.current = false;
+      broadcastPresence();
       return;
     }
     // Sync to current t and play together.
@@ -491,7 +607,8 @@ function SyncPlayer({
       }),
     );
     setPlaying(true);
-    broadcastPlayback({ playing: true });
+    playingRef.current = true;
+    broadcastPresence();
   };
 
   if (videos.length === 0) {
@@ -582,20 +699,33 @@ function SyncPlayer({
         >
           {overlayMode === "liveInk" ? "ライブインク中" : "✏️ ライブインク"}
         </Button>
-        <Chip
-          checked={acceptSync}
-          onChange={setAcceptSync}
-          variant="light"
-          color="blue"
-          size="xs"
-        >
-          再生位置を同期 (受信)
-        </Chip>
-        {lastSyncSender && acceptSync && (
-          <Badge size="xs" color="blue" variant="dot">
-            他の視聴者から同期中
-          </Badge>
-        )}
+        <SyncControls
+          presences={presences}
+          usersById={usersById}
+          myBroadcasting={myBroadcasting}
+          followTarget={followTarget}
+          onToggleBroadcast={() => {
+            setMyBroadcasting((cur) => {
+              const next = !cur;
+              myBroadcastingRef.current = next;
+              if (next) {
+                // We're claiming the slot — drop any prior follow target.
+                followModeRef.current = null;
+                setFollowTarget(null);
+                broadcasterRef.current = SENDER_ID;
+              } else if (broadcasterRef.current === SENDER_ID) {
+                broadcasterRef.current = null;
+              }
+              // Send immediately so other viewers see the new state.
+              broadcastPresence();
+              return next;
+            });
+          }}
+          onUnfollow={() => {
+            followModeRef.current = null;
+            setFollowTarget(null);
+          }}
+        />
       </Group>
 
       <Group>
@@ -652,9 +782,146 @@ function SyncPlayer({
               })}
             </div>
           )}
+          {/* Presence dots — each other viewer's playback position. Click to follow. */}
+          {runDurationSec > 0 && (
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: -18,
+                height: 16,
+              }}
+            >
+              {[...presences.values()].map((p) => {
+                const pct = Math.max(
+                  0,
+                  Math.min(100, (p.tSec / runDurationSec) * 100),
+                );
+                const color = presenceColor(p, usersById);
+                const name = presenceLabel(p, usersById);
+                const isFollowed = followTarget === p.senderId;
+                return (
+                  <button
+                    type="button"
+                    key={p.senderId}
+                    onClick={() => {
+                      if (isFollowed) {
+                        followModeRef.current = null;
+                        setFollowTarget(null);
+                      } else {
+                        followModeRef.current = "individual";
+                        setFollowTarget(p.senderId);
+                      }
+                    }}
+                    title={`${name} — ${formatTime(p.tSec)}${p.isBroadcaster ? " (全員に追従させ中)" : ""}${isFollowed ? "（追従中。クリックで解除）" : "（クリックで追従）"}`}
+                    style={{
+                      position: "absolute",
+                      left: `${pct}%`,
+                      top: 0,
+                      transform: "translateX(-50%)",
+                      width: p.isBroadcaster ? 16 : 12,
+                      height: p.isBroadcaster ? 16 : 12,
+                      borderRadius: "50%",
+                      background: color,
+                      border: isFollowed
+                        ? "2px solid #fff"
+                        : p.isBroadcaster
+                          ? "2px solid #fff"
+                          : "1px solid rgba(255,255,255,0.7)",
+                      boxShadow: p.isBroadcaster
+                        ? `0 0 0 2px ${color}`
+                        : "0 0 0 1px rgba(0,0,0,0.3)",
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                    aria-label={`follow ${name}`}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
       </Group>
     </Stack>
+  );
+}
+
+function SyncControls({
+  presences,
+  usersById,
+  myBroadcasting,
+  followTarget,
+  onToggleBroadcast,
+  onUnfollow,
+}: {
+  presences: Map<string, Presence>;
+  usersById: Map<string, User>;
+  myBroadcasting: boolean;
+  followTarget: string | null;
+  onToggleBroadcast: () => void;
+  onUnfollow: () => void;
+}) {
+  // The "current broadcaster" is whoever among visible presences has
+  // isBroadcaster=true. If nobody, the slot is free.
+  const currentBroadcaster = useMemo(() => {
+    for (const p of presences.values()) {
+      if (p.isBroadcaster) return p;
+    }
+    return null;
+  }, [presences]);
+
+  const someoneElseBroadcasting =
+    currentBroadcaster !== null && !myBroadcasting;
+  const followedPresence = followTarget ? presences.get(followTarget) : null;
+
+  return (
+    <>
+      <Button
+        size="xs"
+        variant={myBroadcasting ? "filled" : "default"}
+        color={myBroadcasting ? "blue" : undefined}
+        onClick={onToggleBroadcast}
+      >
+        {myBroadcasting
+          ? "🛰 自分に追従中 (停止)"
+          : someoneElseBroadcasting
+            ? "🛰 自分に追従させる (奪う)"
+            : "🛰 全員に追従させる"}
+      </Button>
+      {someoneElseBroadcasting && currentBroadcaster && (
+        <Badge
+          size="xs"
+          color="blue"
+          variant="dot"
+          style={{
+            background: presenceColor(currentBroadcaster, usersById),
+            color: "#fff",
+          }}
+        >
+          {presenceLabel(currentBroadcaster, usersById)} に全員追従中
+        </Badge>
+      )}
+      {followedPresence && !myBroadcasting && (
+        <Badge
+          size="xs"
+          color="cyan"
+          variant="light"
+          rightSection={
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              onClick={onUnfollow}
+              style={{ marginLeft: 4 }}
+            >
+              ×
+            </Button>
+          }
+        >
+          {presenceLabel(followedPresence, usersById)} を追従中
+        </Badge>
+      )}
+    </>
   );
 }
 
