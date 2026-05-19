@@ -16,9 +16,10 @@ import {
   Title,
 } from "@mantine/core";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Video } from "../../lib/api/client";
+import { videosApi } from "../../lib/api/client";
 import { useCreateRun } from "../../features/runs/api/queries";
 import { useRobots } from "../../features/robots/api/queries";
 import { useScenarios } from "../../features/scenarios/api/queries";
@@ -132,6 +133,23 @@ function NewFromVideosPage() {
   // --- Regions ----------------------------------------------------------
   const [regions, setRegions] = useState<Region[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Preview playhead in wall-clock seconds from t0. Snapped to the selected
+  // region's start whenever the selection changes (or the region's start is
+  // dragged past the current playhead).
+  const [previewT, setPreviewT] = useState(0);
+  const selectedRegion = useMemo(
+    () => regions.find((r) => r.id === selectedId) ?? null,
+    [regions, selectedId],
+  );
+  useEffect(() => {
+    if (!selectedRegion) return;
+    setPreviewT((cur) =>
+      cur < selectedRegion.startSec || cur > selectedRegion.endSec
+        ? selectedRegion.startSec
+        : cur,
+    );
+  }, [selectedRegion?.id, selectedRegion?.startSec, selectedRegion?.endSec]);
 
   const trackRef = useRef<HTMLDivElement>(null);
   type DragKind = "create" | "move" | "resize-start" | "resize-end";
@@ -417,6 +435,7 @@ function NewFromVideosPage() {
               bandOf={bandOf}
               regions={regions}
               selectedId={selectedId}
+              previewT={previewT}
               trackRef={trackRef}
               angleLabels={angleLabels}
               onAngleLabelChange={(id, label) =>
@@ -430,6 +449,17 @@ function NewFromVideosPage() {
             />
           </Stack>
         </Card>
+
+        {selectedRegion && (
+          <RegionPreview
+            region={selectedRegion}
+            videos={placeable}
+            bandOf={bandOf}
+            angleLabels={angleLabels}
+            previewT={previewT}
+            onPreviewTChange={setPreviewT}
+          />
+        )}
 
         <Card withBorder p="sm">
           <Stack gap="xs">
@@ -601,6 +631,7 @@ function Timeline({
   bandOf,
   regions,
   selectedId,
+  previewT,
   trackRef,
   angleLabels,
   onAngleLabelChange,
@@ -616,6 +647,7 @@ function Timeline({
   bandOf: (v: Video) => { startSec: number; endSec: number };
   regions: Region[];
   selectedId: string | null;
+  previewT: number;
   trackRef: React.RefObject<HTMLDivElement | null>;
   angleLabels: Record<string, string>;
   onAngleLabelChange: (videoId: string, label: string) => void;
@@ -675,6 +707,25 @@ function Timeline({
           +{formatTime(totalSec)}
         </Text>
       </Box>
+
+      {/* Preview playhead — vertical line at the current preview time.
+          Hidden when there's no selection (previewT=0 with no region). */}
+      {selectedId !== null && (
+        <Box
+          style={{
+            position: "absolute",
+            left: `calc(${LABEL_GUTTER}px + (100% - ${LABEL_GUTTER}px) * ${Math.min(1, Math.max(0, previewT / totalSec))})`,
+            top: HEADER_HEIGHT,
+            height: videos.length * LANE_HEIGHT,
+            width: 2,
+            transform: "translateX(-1px)",
+            background: "var(--mantine-color-red-6)",
+            opacity: 0.85,
+            pointerEvents: "none",
+            zIndex: 3,
+          }}
+        />
+      )}
 
       {/* Region overlays — drawn over the lanes, semi-transparent so videos
           stay visible underneath. */}
@@ -826,5 +877,256 @@ function Timeline({
         })}
       </Stack>
     </Box>
+  );
+}
+
+// Synced multi-angle preview for the currently selected region. Plays the
+// region's wall-clock window: each video is steered to its local time
+// (videoOffsetStart + (t - videoStartAbs)); videos whose band doesn't cover
+// the current t show "NO VIDEO" instead. The scrubber spans the region.
+function RegionPreview({
+  region,
+  videos,
+  bandOf,
+  angleLabels,
+  previewT,
+  onPreviewTChange,
+}: {
+  region: Region;
+  videos: Video[];
+  bandOf: (v: Video) => { startSec: number; endSec: number };
+  angleLabels: Record<string, string>;
+  previewT: number;
+  onPreviewTChange: (t: number) => void;
+}) {
+  const overlapping = useMemo(
+    () =>
+      videos.filter((v) => {
+        const b = bandOf(v);
+        return b.endSec > region.startSec && b.startSec < region.endSec;
+      }),
+    [videos, region.startSec, region.endSec, bandOf],
+  );
+
+  const [urls, setUrls] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    let canceled = false;
+    overlapping.forEach(async (v) => {
+      if (urls.has(v.id)) return;
+      try {
+        const r = await videosApi.playbackUrl(v.id);
+        if (!canceled) setUrls((m) => new Map(m).set(v.id, r.url));
+      } catch {
+        // Playback URL is best-effort; the lane just won't load.
+      }
+    });
+    return () => {
+      canceled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlapping]);
+
+  const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const [playing, setPlaying] = useState(false);
+
+  // The play loop is wall-clock anchored, decoupled from any single video's
+  // currentTime. This lets us play through gaps where one camera isn't
+  // recording without the whole timeline freezing.
+  useEffect(() => {
+    if (!playing) return;
+    const wallStart = performance.now();
+    const tStart = previewT;
+    let raf = 0;
+    const tick = () => {
+      const elapsed = (performance.now() - wallStart) / 1000;
+      const next = tStart + elapsed;
+      if (next >= region.endSec) {
+        onPreviewTChange(region.endSec);
+        setPlaying(false);
+        return;
+      }
+      onPreviewTChange(next);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, region.endSec]);
+
+  // Steer each video element whenever t changes. Out-of-range videos pause;
+  // in-range videos snap to their local time on big drift and play/pause to
+  // match the global "playing" state.
+  useEffect(() => {
+    for (const v of overlapping) {
+      const el = videoRefs.current.get(v.id);
+      if (!el) continue;
+      const b = bandOf(v);
+      const inRange = previewT >= b.startSec && previewT <= b.endSec;
+      if (!inRange) {
+        if (!el.paused) el.pause();
+        continue;
+      }
+      const localT = previewT - b.startSec;
+      const drift = Math.abs(el.currentTime - localT);
+      const tolerance = playing ? 0.3 : 0.05;
+      if (drift > tolerance) {
+        try {
+          el.currentTime = localT;
+        } catch {
+          // Some sources reject seeks before metadata; ignore — next tick retries.
+        }
+      }
+      if (playing && el.paused) el.play().catch(() => {});
+      if (!playing && !el.paused) el.pause();
+    }
+  }, [previewT, playing, overlapping, bandOf]);
+
+  const handleScrubber = useCallback(
+    (value: number) => {
+      setPlaying(false);
+      onPreviewTChange(value);
+    },
+    [onPreviewTChange],
+  );
+
+  const localPreview = previewT - region.startSec;
+  const regionDur = Math.max(0.01, region.endSec - region.startSec);
+
+  return (
+    <Card withBorder p="sm">
+      <Stack gap="xs">
+        <Group justify="space-between">
+          <Text size="sm" fw={500}>
+            プレビュー (選択中の区間)
+          </Text>
+          <Text size="xs" c="dimmed" ff="monospace">
+            {formatTime(Math.max(0, localPreview))} /{" "}
+            {formatTime(regionDur)}
+          </Text>
+        </Group>
+        {overlapping.length === 0 ? (
+          <Text size="sm" c="dimmed">
+            この区間に重なる動画がありません。
+          </Text>
+        ) : (
+          <Box
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 8,
+            }}
+          >
+            {overlapping.map((v) => {
+              const b = bandOf(v);
+              const inRange =
+                previewT >= b.startSec && previewT <= b.endSec;
+              const url = urls.get(v.id);
+              const label =
+                angleLabels[v.id]?.trim() ||
+                v.displayName?.trim() ||
+                v.storageKey.slice(0, 16);
+              return (
+                <Box
+                  key={v.id}
+                  style={{
+                    position: "relative",
+                    aspectRatio: "16 / 9",
+                    background: "black",
+                    borderRadius: 4,
+                    overflow: "hidden",
+                  }}
+                >
+                  {url ? (
+                    <video
+                      ref={(el) => {
+                        if (el) videoRefs.current.set(v.id, el);
+                        else videoRefs.current.delete(v.id);
+                      }}
+                      src={url}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                      }}
+                    />
+                  ) : (
+                    <Box
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "rgba(255,255,255,0.5)",
+                        fontSize: 12,
+                      }}
+                    >
+                      loading…
+                    </Box>
+                  )}
+                  {!inRange && (
+                    <Box
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "rgba(0,0,0,0.75)",
+                        color: "white",
+                        fontSize: 14,
+                        fontWeight: 600,
+                        letterSpacing: 1,
+                      }}
+                    >
+                      NO VIDEO
+                    </Box>
+                  )}
+                  <Text
+                    size="xs"
+                    style={{
+                      position: "absolute",
+                      bottom: 4,
+                      left: 6,
+                      color: "white",
+                      textShadow: "0 0 4px rgba(0,0,0,0.8)",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    {label}
+                  </Text>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+        <Group gap="xs" align="center">
+          <Button
+            size="xs"
+            variant={playing ? "filled" : "default"}
+            onClick={() => {
+              if (previewT >= region.endSec - 0.05)
+                onPreviewTChange(region.startSec);
+              setPlaying((p) => !p);
+            }}
+          >
+            {playing ? "■ 停止" : "▶ 再生"}
+          </Button>
+          <input
+            type="range"
+            min={region.startSec}
+            max={region.endSec}
+            step={0.05}
+            value={previewT}
+            onChange={(e) => handleScrubber(Number(e.target.value))}
+            style={{ flex: 1 }}
+          />
+        </Group>
+      </Stack>
+    </Card>
   );
 }
