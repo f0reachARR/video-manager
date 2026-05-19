@@ -7,9 +7,10 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useAnnotations, useCreateAnnotation } from "../api/queries";
 import { AnnotationLayer } from "../lib/shapes";
+import { useShapeDrawing, type DrawMode } from "../lib/useShapeDrawing";
 import { useWebSocketPublisher } from "../../../lib/realtime";
 
-export type OverlayMode = "off" | "addPoint" | "liveInk";
+export type OverlayMode = DrawMode;
 
 type InkPoint = [number, number];
 type InkStrokeMessage = {
@@ -100,25 +101,25 @@ export function RunVideoOverlay({
   // user is allowed to edit (main angle).
   const interactive = canEdit && mode !== "off";
 
-  const handleClick: React.MouseEventHandler<HTMLDivElement> = (e) => {
-    if (mode !== "addPoint" || !canEdit) return;
-    const containerEl = containerRef.current;
-    const videoEl = videoRef.current;
-    if (!containerEl || !videoEl) return;
-    const rect = containerEl.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return;
-    const t = videoEl.currentTime;
-    create.mutate({
-      startOffsetSec: t,
-      endOffsetSec: t + 3,
-      type: "point",
-      geometry: { x, y } as never,
-      label: draftLabel,
-    });
-  };
+  // Persistent shape modes (point/rect/arrow/text) go through the shared
+  // drawing hook so AnnotatedPlayer + RunVideoOverlay stay aligned.
+  const {
+    draft,
+    onPointerDown: onShapePointerDown,
+    onPointerMove: onShapePointerMove,
+    onPointerUp: onShapePointerUp,
+  } = useShapeDrawing({
+    mode: canEdit ? mode : "off",
+    containerRef,
+    videoRef,
+    label: draftLabel,
+    onCreate: (body) => {
+      create.mutate(body as never);
+    },
+  });
 
+  // Live ink uses its own buffered-stroke flow because it broadcasts over
+  // WebSocket instead of writing to the API.
   const inkBufferRef = useRef<InkPoint[]>([]);
   const inkDrawingRef = useRef(false);
   const flushStroke = () => {
@@ -148,7 +149,7 @@ export function RunVideoOverlay({
     if (x < 0 || x > 1 || y < 0 || y > 1) return null;
     return [x, y];
   };
-  const onPointerDown = (e: React.PointerEvent) => {
+  const onInkDown = (e: React.PointerEvent) => {
     if (mode !== "liveInk" || !canEdit) return;
     const p = pointToNormalized(e);
     if (!p) return;
@@ -156,7 +157,7 @@ export function RunVideoOverlay({
     inkBufferRef.current = [p];
     (e.target as Element).setPointerCapture?.(e.pointerId);
   };
-  const onPointerMove = (e: React.PointerEvent) => {
+  const onInkMove = (e: React.PointerEvent) => {
     if (mode !== "liveInk" || !canEdit || !inkDrawingRef.current) return;
     const p = pointToNormalized(e);
     if (!p) return;
@@ -168,10 +169,25 @@ export function RunVideoOverlay({
       ];
     }
   };
-  const onPointerUp = () => {
+  const onInkUp = () => {
     if (!inkDrawingRef.current) return;
     inkDrawingRef.current = false;
     flushStroke();
+  };
+
+  // Unified pointer handlers — dispatch to shape drawing or live ink
+  // depending on the active mode.
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (mode === "liveInk") onInkDown(e);
+    else onShapePointerDown(e);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (mode === "liveInk") onInkMove(e);
+    else onShapePointerMove(e);
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (mode === "liveInk") onInkUp();
+    else onShapePointerUp(e);
   };
 
   return (
@@ -183,20 +199,14 @@ export function RunVideoOverlay({
         // way the underlying <video> controls keep working.
         pointerEvents: interactive ? "auto" : "none",
         touchAction: interactive ? "none" : undefined,
-        cursor:
-          mode === "addPoint"
-            ? "crosshair"
-            : mode === "liveInk"
-              ? "crosshair"
-              : "default",
+        cursor: interactive ? "crosshair" : "default",
       }}
-      onClick={handleClick}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <AnnotationLayer annotations={visibleAnnotations} />
+      <AnnotationLayer annotations={visibleAnnotations} draft={draft} />
       <LiveInkLayer strokes={strokes} />
     </div>
   );

@@ -9,6 +9,7 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  TextInput,
 } from "@mantine/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -28,6 +29,7 @@ import {
   RunVideoOverlay,
   type OverlayMode,
 } from "../../annotations/components/RunVideoOverlay";
+import { modeHint } from "../../annotations/lib/useShapeDrawing";
 import { markerCategoryColor } from "../../markers/lib/category";
 import { formatTime } from "../lib/format";
 import {
@@ -85,6 +87,9 @@ export function SyncPlayer({
 
   // Overlay (Annotation 追加 / ライブインク) — applies to the main angle.
   const [overlayMode, setOverlayMode] = useState<OverlayMode>("off");
+  // Label / text content for the shape that's about to be created (used by
+  // point as an optional label, by text as the required content).
+  const [overlayLabel, setOverlayLabel] = useState("");
 
   const currentUserId = useCurrentUserId();
   const usersQ = useUsers();
@@ -400,6 +405,7 @@ export function SyncPlayer({
               angle={mainAngle}
               isMain
               overlayMode={overlayMode}
+              overlayLabel={overlayLabel}
               runT={t}
               registerRef={(el) => {
                 if (el) refs.current.set(mainAngle.rv.id, el);
@@ -442,28 +448,54 @@ export function SyncPlayer({
       )}
 
       <Group gap="xs" wrap="wrap">
-        <Button
-          size="xs"
-          variant={overlayMode === "addPoint" ? "filled" : "default"}
-          color={overlayMode === "addPoint" ? "teal" : undefined}
-          onClick={() =>
-            setOverlayMode((m) => (m === "addPoint" ? "off" : "addPoint"))
-          }
-        >
-          {overlayMode === "addPoint"
-            ? "クリックして配置..."
-            : "📍 Annotation を追加"}
-        </Button>
-        <Button
-          size="xs"
-          variant={overlayMode === "liveInk" ? "filled" : "default"}
-          color={overlayMode === "liveInk" ? "grape" : undefined}
-          onClick={() =>
-            setOverlayMode((m) => (m === "liveInk" ? "off" : "liveInk"))
-          }
-        >
-          {overlayMode === "liveInk" ? "ライブインク中" : "✏️ ライブインク"}
-        </Button>
+        <ShapeToolButton
+          mode="point"
+          current={overlayMode}
+          onClick={setOverlayMode}
+          label="📍 Point"
+          color="yellow"
+        />
+        <ShapeToolButton
+          mode="rect"
+          current={overlayMode}
+          onClick={setOverlayMode}
+          label="▭ Rect"
+          color="red"
+        />
+        <ShapeToolButton
+          mode="arrow"
+          current={overlayMode}
+          onClick={setOverlayMode}
+          label="➝ Arrow"
+          color="teal"
+        />
+        <ShapeToolButton
+          mode="text"
+          current={overlayMode}
+          onClick={setOverlayMode}
+          label="🅣 Text"
+          color="blue"
+        />
+        <ShapeToolButton
+          mode="liveInk"
+          current={overlayMode}
+          onClick={setOverlayMode}
+          label="✏️ ライブインク"
+          color="grape"
+        />
+        {(overlayMode === "point" ||
+          overlayMode === "rect" ||
+          overlayMode === "arrow" ||
+          overlayMode === "text") && (
+          <TextInput
+            size="xs"
+            placeholder={overlayMode === "text" ? "テキスト (必須)" : "ラベル (任意)"}
+            value={overlayLabel}
+            onChange={(e) => setOverlayLabel(e.currentTarget.value)}
+            w={200}
+            required={overlayMode === "text"}
+          />
+        )}
         <SyncControls
           presences={presence.presences}
           usersById={usersById}
@@ -673,6 +705,7 @@ function AngleVideo({
   onSelectMain,
   registerRef,
   overlayMode,
+  overlayLabel,
   runT,
 }: {
   angle: LoadedAngle;
@@ -680,6 +713,7 @@ function AngleVideo({
   onSelectMain?: () => void;
   registerRef: (el: HTMLVideoElement | null) => void;
   overlayMode: OverlayMode;
+  overlayLabel?: string;
   runT: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -770,9 +804,40 @@ function AngleVideo({
             containerRef={containerRef}
             mode={isMain ? overlayMode : "off"}
             canEdit={!!isMain}
+            draftLabel={overlayLabel}
           />
         </div>
       </Stack>
     </Card>
+  );
+}
+
+// Single tool button used by the overlay toolbar. Highlights when active
+// and toggles off on a second click so the user can leave drawing mode
+// without hunting for an explicit cancel.
+function ShapeToolButton({
+  mode,
+  current,
+  onClick,
+  label,
+  color,
+}: {
+  mode: OverlayMode;
+  current: OverlayMode;
+  onClick: (next: OverlayMode) => void;
+  label: string;
+  color: string;
+}) {
+  const active = current === mode;
+  return (
+    <Button
+      size="xs"
+      variant={active ? "filled" : "default"}
+      color={active ? color : undefined}
+      onClick={() => onClick(active ? "off" : mode)}
+      title={modeHint(mode)}
+    >
+      {label}
+    </Button>
   );
 }

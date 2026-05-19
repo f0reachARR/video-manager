@@ -24,17 +24,18 @@ import {
   useCreateAnnotation,
   useDeleteAnnotation,
 } from "../api/queries";
+import { AnnotationLayer, drawAnnotation } from "../lib/shapes";
 import {
-  AnnotationLayer,
-  type Draft,
-  drawAnnotation,
-} from "../lib/shapes";
+  type DrawMode,
+  modeHint,
+  useShapeDrawing,
+} from "../lib/useShapeDrawing";
 import {
   useTopicSubscription,
   useWebSocketPublisher,
 } from "../../../lib/realtime";
 
-type Mode = "off" | "point" | "rect" | "arrow" | "text" | "liveInk";
+type Mode = DrawMode;
 
 type InkPoint = [number, number];
 type InkStrokeMessage = {
@@ -47,10 +48,6 @@ type RemoteStroke = InkStrokeMessage & { receivedAt: number };
 const INK_FADE_MS = 4000;
 // Random per-tab color so multiple viewers' strokes stay distinguishable.
 const myInkColor = `hsl(${Math.floor(Math.random() * 360)} 80% 55%)`;
-
-// Drag threshold below which we treat a pointer interaction as a "click"
-// instead of a drag. Used by rect/arrow to ignore accidental taps.
-const DRAG_MIN = 0.01;
 
 export function AnnotatedPlayer({ video }: { video: Video }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -132,52 +129,33 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
     );
   }, [ann.data, currentSec]);
 
-  // --- Shape drawing state ---------------------------------------------
-  // draft is the geometry currently being drawn for rect/arrow; null when
-  // idle or when mode is point/text/liveInk (those create on a single
-  // click instead of a drag).
-  const [draft, setDraft] = useState<Draft>(null);
-  const draftRef = useRef<Draft>(null);
-  draftRef.current = draft;
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const pointToNormalized = (e: React.PointerEvent): InkPoint | null => {
-    const el = containerRef.current;
-    if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-    return [x, y];
-  };
-
-  // Single-click create for point and text. Same path for both — the only
-  // diff is the type tag and that text uses the label as its content.
-  const placeClick = (p: InkPoint) => {
-    const t = videoRef.current?.currentTime ?? 0;
-    if (mode !== "point" && mode !== "text") return;
-    if (mode === "text" && !draftLabel.trim()) {
-      // Text without a label is invisible, so require one.
-      return;
-    }
-    create.mutate(
-      {
-        startOffsetSec: t,
-        endOffsetSec: t + 3,
-        type: mode,
-        geometry: { x: p[0], y: p[1] } as never,
-        label: draftLabel,
-      },
-      {
+  // Persistent shape modes (point / rect / arrow / text) go through the
+  // shared hook so AnnotatedPlayer and the Run-detail overlay stay aligned.
+  const {
+    draft,
+    onPointerDown: onShapePointerDown,
+    onPointerMove: onShapePointerMove,
+    onPointerUp: onShapePointerUp,
+  } = useShapeDrawing({
+    mode,
+    containerRef,
+    videoRef,
+    label: draftLabel,
+    onCreate: (body) => {
+      create.mutate(body as never, {
         onSuccess: () => {
           setMode("off");
           setDraftLabel("");
         },
-      },
-    );
-  };
+      });
+    },
+  });
 
   // --- Live ink ---------------------------------------------------------
+  // Live ink stays inline because it broadcasts strokes over WebSocket
+  // instead of writing to the API.
   const inkBufferRef = useRef<InkPoint[]>([]);
   const inkDrawingRef = useRef(false);
   const flushStroke = () => {
@@ -198,121 +176,51 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
     ]);
     inkBufferRef.current = [];
   };
-
-  // --- Unified pointer handlers ----------------------------------------
-  const pointerOriginRef = useRef<InkPoint | null>(null);
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (mode === "off") return;
+  const pointToNormalized = (e: React.PointerEvent): InkPoint | null => {
+    const el = containerRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+    return [x, y];
+  };
+  const onInkDown = (e: React.PointerEvent) => {
+    if (mode !== "liveInk") return;
     const p = pointToNormalized(e);
     if (!p) return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
-    pointerOriginRef.current = p;
-    if (mode === "rect") {
-      setDraft({
-        kind: "rect",
-        startX: p[0],
-        startY: p[1],
-        geom: { x: p[0], y: p[1], w: 0, h: 0 },
-      });
-    } else if (mode === "arrow") {
-      setDraft({
-        kind: "arrow",
-        geom: { x1: p[0], y1: p[1], x2: p[0], y2: p[1] },
-      });
-    } else if (mode === "liveInk") {
-      inkDrawingRef.current = true;
-      inkBufferRef.current = [p];
-    }
-    // point/text are handled in pointerUp so a stray click doesn't fire on
-    // pointerdown if the user actually meant to drag.
+    inkDrawingRef.current = true;
+    inkBufferRef.current = [p];
   };
-
-  const onPointerMove = (e: React.PointerEvent) => {
+  const onInkMove = (e: React.PointerEvent) => {
+    if (mode !== "liveInk" || !inkDrawingRef.current) return;
     const p = pointToNormalized(e);
     if (!p) return;
-    const d = draftRef.current;
-    if (d?.kind === "rect") {
-      const x = Math.min(p[0], d.startX);
-      const y = Math.min(p[1], d.startY);
-      const w = Math.abs(p[0] - d.startX);
-      const h = Math.abs(p[1] - d.startY);
-      setDraft({ ...d, geom: { x, y, w, h } });
-    } else if (d?.kind === "arrow") {
-      setDraft({ ...d, geom: { ...d.geom, x2: p[0], y2: p[1] } });
-    } else if (mode === "liveInk" && inkDrawingRef.current) {
-      inkBufferRef.current.push(p);
-      if (inkBufferRef.current.length >= 8) {
-        flushStroke();
-        inkBufferRef.current = [p];
-      }
+    inkBufferRef.current.push(p);
+    if (inkBufferRef.current.length >= 8) {
+      flushStroke();
+      inkBufferRef.current = [p];
     }
   };
+  const onInkUp = () => {
+    if (!inkDrawingRef.current) return;
+    inkDrawingRef.current = false;
+    flushStroke();
+  };
 
+  // --- Unified pointer handlers ----------------------------------------
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (mode === "liveInk") onInkDown(e);
+    else onShapePointerDown(e);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (mode === "liveInk") onInkMove(e);
+    else onShapePointerMove(e);
+  };
   const onPointerUp = (e: React.PointerEvent) => {
-    const origin = pointerOriginRef.current;
-    pointerOriginRef.current = null;
-    const p = pointToNormalized(e) ?? origin;
-    const d = draftRef.current;
-    const t = videoRef.current?.currentTime ?? 0;
-
-    if (mode === "point" || mode === "text") {
-      if (p) placeClick(p);
-      return;
-    }
-    if (d?.kind === "rect") {
-      if (d.geom.w >= DRAG_MIN && d.geom.h >= DRAG_MIN) {
-        create.mutate(
-          {
-            startOffsetSec: t,
-            endOffsetSec: t + 3,
-            type: "rect",
-            geometry: d.geom as never,
-            label: draftLabel,
-          },
-          {
-            onSuccess: () => {
-              setMode("off");
-              setDraftLabel("");
-              setDraft(null);
-            },
-          },
-        );
-      } else {
-        setDraft(null);
-      }
-      return;
-    }
-    if (d?.kind === "arrow") {
-      const dx = d.geom.x2 - d.geom.x1;
-      const dy = d.geom.y2 - d.geom.y1;
-      if (Math.hypot(dx, dy) >= DRAG_MIN * 2) {
-        create.mutate(
-          {
-            startOffsetSec: t,
-            endOffsetSec: t + 3,
-            type: "arrow",
-            geometry: d.geom as never,
-            label: draftLabel,
-          },
-          {
-            onSuccess: () => {
-              setMode("off");
-              setDraftLabel("");
-              setDraft(null);
-            },
-          },
-        );
-      } else {
-        setDraft(null);
-      }
-      return;
-    }
-    if (mode === "liveInk") {
-      if (!inkDrawingRef.current) return;
-      inkDrawingRef.current = false;
-      flushStroke();
-    }
+    if (mode === "liveInk") onInkUp();
+    else onShapePointerUp(e);
   };
 
   const seekTo = (sec: number) => {
@@ -509,23 +417,6 @@ function ToolButton({
       {label}
     </Button>
   );
-}
-
-function modeHint(m: Mode): string {
-  switch (m) {
-    case "point":
-      return "動画上をクリックして点を配置";
-    case "rect":
-      return "対角線をドラッグして矩形を作成";
-    case "arrow":
-      return "矢印の根元から先端へドラッグ";
-    case "text":
-      return "テキストを入力して動画上をクリック";
-    case "liveInk":
-      return "ドラッグで一時的なストロークを描画 (数秒で消える)";
-    default:
-      return "";
-  }
 }
 
 function LiveInkLayer({ strokes }: { strokes: RemoteStroke[] }) {
