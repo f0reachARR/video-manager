@@ -2,15 +2,19 @@ import {
   ActionIcon,
   Badge,
   Button,
+  Checkbox,
   FileButton,
   Group,
   Modal,
+  NumberInput,
   Paper,
   Progress,
   Select,
   Stack,
   Table,
   Text,
+  Textarea,
+  TextInput,
   Title,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
@@ -25,11 +29,16 @@ import { VideoMetadataModal } from "../components/VideoMetadataModal";
 import { type Video, videosApi } from "../lib/api/client";
 import { useCurrentUserId } from "../lib/currentUser";
 import {
+  useCreateRun,
   useDeleteVideo,
   useDevices,
+  useRobots,
+  useScenarios,
   useSessions,
+  useTeams,
   useVideos,
 } from "../lib/queries";
+import { useNavigate } from "@tanstack/react-router";
 
 const TUSD_ENDPOINT =
   (import.meta.env.VITE_TUSD_ENDPOINT as string | undefined) ??
@@ -59,6 +68,9 @@ function VideosPage() {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  // Multi-select for "選択した動画から Run を作成" flow.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [createRunOpened, setCreateRunOpened] = useState(false);
 
   const deviceNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -257,9 +269,43 @@ function VideosPage() {
           </Stack>
         )}
 
+        {selected.size > 0 && (
+          <Group justify="space-between" px="sm" py="xs" bg="var(--mantine-color-blue-light)">
+            <Text size="sm">
+              {selected.size} 件選択中
+            </Text>
+            <Group gap="xs">
+              <Button
+                size="xs"
+                variant="filled"
+                onClick={() => setCreateRunOpened(true)}
+              >
+                🎬 選択した動画から Run を作成
+              </Button>
+              <Button size="xs" variant="default" onClick={() => setSelected(new Set())}>
+                選択解除
+              </Button>
+            </Group>
+          </Group>
+        )}
+
         <Table striped highlightOnHover withRowBorders={false}>
           <Table.Thead>
             <Table.Tr>
+              <Table.Th style={{ width: 40 }}>
+                <Checkbox
+                  aria-label="全選択"
+                  checked={list.length > 0 && selected.size === list.length}
+                  indeterminate={selected.size > 0 && selected.size < list.length}
+                  onChange={(e) => {
+                    if (e.currentTarget.checked) {
+                      setSelected(new Set(list.map((x) => x.id)));
+                    } else {
+                      setSelected(new Set());
+                    }
+                  }}
+                />
+              </Table.Th>
               <Table.Th style={{ width: 90 }}>Thumb</Table.Th>
               <Table.Th>Storage Key</Table.Th>
               <Table.Th>Device</Table.Th>
@@ -273,6 +319,19 @@ function VideosPage() {
           <Table.Tbody>
             {list.map((v) => (
               <Table.Tr key={v.id}>
+                <Table.Td>
+                  <Checkbox
+                    checked={selected.has(v.id)}
+                    onChange={(e) => {
+                      setSelected((cur) => {
+                        const next = new Set(cur);
+                        if (e.currentTarget.checked) next.add(v.id);
+                        else next.delete(v.id);
+                        return next;
+                      });
+                    }}
+                  />
+                </Table.Td>
                 <Table.Td>
                   <VideoThumb video={v} />
                 </Table.Td>
@@ -307,7 +366,7 @@ function VideosPage() {
             ))}
             {list.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={8}>
+                <Table.Td colSpan={9}>
                   <Text c="dimmed" ta="center" py="md">
                     まだ動画がありません
                   </Text>
@@ -317,7 +376,216 @@ function VideosPage() {
           </Table.Tbody>
         </Table>
       </Stack>
+
+      {createRunOpened && (
+        <CreateRunFromVideosModal
+          videos={list.filter((v) => selected.has(v.id))}
+          onClose={() => setCreateRunOpened(false)}
+          onCreated={() => {
+            setCreateRunOpened(false);
+            setSelected(new Set());
+          }}
+        />
+      )}
     </ResourcePage>
+  );
+}
+
+function CreateRunFromVideosModal({
+  videos,
+  onClose,
+  onCreated,
+}: {
+  videos: Video[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const sessions = useSessions();
+  const teams = useTeams();
+  const robots = useRobots();
+  const scenarios = useScenarios();
+  const create = useCreateRun();
+  const navigate = useNavigate();
+
+  // Pre-fill: shared session across selection (if any), and duration = longest video.
+  const sharedSession = useMemo(() => {
+    const ids = new Set(videos.map((v) => v.sessionId).filter(Boolean) as string[]);
+    return ids.size === 1 ? [...ids][0] : null;
+  }, [videos]);
+  const maxDur = useMemo(
+    () => Math.max(0, ...videos.map((v) => v.durationSec ?? 0)),
+    [videos],
+  );
+
+  const [sessionId, setSessionId] = useState<string | null>(sharedSession);
+  const [teamId, setTeamId] = useState<string | null>(null);
+  const [robotId, setRobotId] = useState<string | null>(null);
+  const [scenarioId, setScenarioId] = useState<string | null>(null);
+  const [duration, setDuration] = useState<number | "">(maxDur || "");
+  const [memo, setMemo] = useState("");
+  const [angleLabels, setAngleLabels] = useState<Record<string, string>>({});
+  const [runOffsets, setRunOffsets] = useState<Record<string, number>>({});
+
+  const submit = () => {
+    if (!sessionId || !teamId || !robotId || !scenarioId) return;
+    const now = new Date();
+    const dur =
+      typeof duration === "number" && duration > 0 ? duration : maxDur || 0;
+    const startedAt = now;
+    const endedAt = new Date(now.getTime() + dur * 1000);
+    create.mutate(
+      {
+        sessionId,
+        teamId,
+        robotId,
+        scenarioId,
+        startedAt: startedAt.toISOString(),
+        endedAt: endedAt.toISOString(),
+        durationSec: Math.max(0, Math.round(dur)),
+        memo,
+        videos: videos.map((v) => ({
+          videoId: v.id,
+          videoOffsetStartSec: 0,
+          videoOffsetEndSec: Math.round(v.durationSec ?? 0),
+          runOffsetSec: runOffsets[v.id] ?? 0,
+          angleLabel: angleLabels[v.id] ?? "",
+        })),
+      },
+      {
+        onSuccess: (run) => {
+          onCreated();
+          navigate({ to: "/runs/$runId", params: { runId: run.id } });
+        },
+      },
+    );
+  };
+
+  return (
+    <Modal opened onClose={onClose} title="選択した動画から Run を作成" size="xl">
+      <Stack>
+        <Text size="sm" c="dimmed">
+          {videos.length} 件の動画から Run を作成します。各動画はアングルとして自動で紐付きます。
+        </Text>
+        <Select
+          label="Session"
+          data={(sessions.data?.data ?? []).map((s) => ({
+            value: s.id,
+            label: s.name,
+          }))}
+          value={sessionId}
+          onChange={setSessionId}
+          searchable
+          required
+        />
+        <Group grow>
+          <Select
+            label="Team"
+            data={(teams.data?.data ?? []).map((t) => ({
+              value: t.id,
+              label: t.name,
+            }))}
+            value={teamId}
+            onChange={setTeamId}
+            required
+          />
+          <Select
+            label="Robot"
+            data={(robots.data?.data ?? []).map((r) => ({
+              value: r.id,
+              label: r.name,
+            }))}
+            value={robotId}
+            onChange={setRobotId}
+            required
+          />
+          <Select
+            label="Scenario"
+            data={(scenarios.data?.data ?? []).map((s) => ({
+              value: s.id,
+              label: s.name,
+            }))}
+            value={scenarioId}
+            onChange={setScenarioId}
+            required
+          />
+        </Group>
+        <NumberInput
+          label="Duration (sec)"
+          description="Run のタイムライン長。最も長い動画の長さで初期化"
+          value={duration}
+          min={0}
+          onChange={(v) => setDuration(typeof v === "number" ? v : "")}
+        />
+        <Textarea
+          label="Memo"
+          value={memo}
+          onChange={(e) => setMemo(e.currentTarget.value)}
+          autosize
+          minRows={2}
+        />
+        <Text size="xs" fw={500} mt="sm">
+          アングル設定
+        </Text>
+        <Table withRowBorders={false}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Video</Table.Th>
+              <Table.Th style={{ width: 130 }}>Run Offset (sec)</Table.Th>
+              <Table.Th>Angle Label</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {videos.map((v) => (
+              <Table.Tr key={v.id}>
+                <Table.Td>
+                  <Text size="xs" ff="monospace" truncate maw={180}>
+                    {v.storageKey.slice(0, 16)} ({v.durationSec ?? "?"}s)
+                  </Text>
+                </Table.Td>
+                <Table.Td>
+                  <NumberInput
+                    size="xs"
+                    min={0}
+                    value={runOffsets[v.id] ?? 0}
+                    onChange={(n) =>
+                      setRunOffsets((cur) => ({
+                        ...cur,
+                        [v.id]: typeof n === "number" ? n : 0,
+                      }))
+                    }
+                  />
+                </Table.Td>
+                <Table.Td>
+                  <TextInput
+                    size="xs"
+                    placeholder="例: 正面"
+                    value={angleLabels[v.id] ?? ""}
+                    onChange={(e) =>
+                      setAngleLabels((cur) => ({
+                        ...cur,
+                        [v.id]: e.currentTarget.value,
+                      }))
+                    }
+                  />
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            キャンセル
+          </Button>
+          <Button
+            onClick={submit}
+            loading={create.isPending}
+            disabled={!sessionId || !teamId || !robotId || !scenarioId}
+          >
+            作成
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
 }
 

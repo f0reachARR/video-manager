@@ -40,6 +40,7 @@ import {
   useCreateMarker,
   useDeleteMarker,
   useMarkers,
+  useRecommendedRunVideos,
   useRemoveRunVideo,
   useRobots,
   useRun,
@@ -226,6 +227,8 @@ function RunDetailPage() {
         </Button>
       </Group>
       <RunVideosTable run={r} />
+
+      <RecommendedVideos run={r} />
 
       <Title order={4} mt="lg">
         メタデータ
@@ -1433,8 +1436,9 @@ function RunVideosTable({ run }: { run: Run }) {
         <Table.Tr>
           <Table.Th>Angle</Table.Th>
           <Table.Th>Video</Table.Th>
-          <Table.Th>Start (sec)</Table.Th>
-          <Table.Th>End (sec)</Table.Th>
+          <Table.Th>Run Offset (sec)</Table.Th>
+          <Table.Th>Video Start (sec)</Table.Th>
+          <Table.Th>Video End (sec)</Table.Th>
           <Table.Th style={{ width: 80 }}></Table.Th>
         </Table.Tr>
       </Table.Thead>
@@ -1461,6 +1465,23 @@ function RunVideosTable({ run }: { run: Run }) {
               <Text size="xs" ff="monospace" truncate maw={220}>
                 {rv.videoId}
               </Text>
+            </Table.Td>
+            <Table.Td>
+              <NumberInput
+                size="xs"
+                defaultValue={rv.runOffsetSec ?? 0}
+                min={0}
+                onBlur={(e) => {
+                  const v = Number(e.currentTarget.value);
+                  if (Number.isFinite(v) && v !== (rv.runOffsetSec ?? 0)) {
+                    update.mutate({
+                      runId: run.id,
+                      runVideoId: rv.id,
+                      body: { runOffsetSec: Math.max(0, v) },
+                    });
+                  }
+                }}
+              />
             </Table.Td>
             <Table.Td>
               <NumberInput
@@ -1513,7 +1534,7 @@ function RunVideosTable({ run }: { run: Run }) {
         ))}
         {list.length === 0 && (
           <Table.Tr>
-            <Table.Td colSpan={5}>
+            <Table.Td colSpan={6}>
               <Text c="dimmed" ta="center" py="md" size="sm">
                 アングルがありません
               </Text>
@@ -1613,6 +1634,50 @@ function AddVideoModal({ run, onClose }: { run: Run; onClose: () => void }) {
   );
 }
 
+// ---------- Recommended videos ----------
+
+function RecommendedVideos({ run }: { run: Run }) {
+  const rec = useRecommendedRunVideos(run.id);
+  const addRunVideo = useAddRunVideo();
+  const items = rec.data?.data ?? [];
+  if (items.length === 0) return null;
+
+  return (
+    <Stack gap="xs" mt="sm">
+      <Title order={5} c="dimmed">
+        🤖 同セッションで未紐付けの動画 ({items.length})
+      </Title>
+      <Group gap="xs" wrap="wrap">
+        {items.map((v) => {
+          const len = v.durationSec ?? 0;
+          return (
+            <Button
+              key={v.id}
+              size="xs"
+              variant="default"
+              loading={addRunVideo.isPending}
+              onClick={() => {
+                addRunVideo.mutate({
+                  runId: run.id,
+                  body: {
+                    videoId: v.id,
+                    videoOffsetStartSec: 0,
+                    videoOffsetEndSec: Math.round(len),
+                    runOffsetSec: 0,
+                    angleLabel: "",
+                  },
+                });
+              }}
+            >
+              ＋ {v.storageKey.slice(0, 12)} ({len}s)
+            </Button>
+          );
+        })}
+      </Group>
+    </Stack>
+  );
+}
+
 // ---------- Metadata editor ----------
 
 function RunMetadataEditor({
@@ -1628,6 +1693,7 @@ function RunMetadataEditor({
   onSave: (body: {
     robotId?: string;
     scenarioId?: string;
+    durationSec?: number;
     score?: number | null;
     memo?: string;
   }) => void;
@@ -1635,11 +1701,15 @@ function RunMetadataEditor({
 }) {
   const [robotId, setRobotId] = useState<string>(run.robotId);
   const [scenarioId, setScenarioId] = useState<string>(run.scenarioId);
+  const [durationSec, setDurationSec] = useState<number | "">(
+    run.durationSec ?? 0,
+  );
   const [score, setScore] = useState<number | "">(run.score ?? "");
   const [memo, setMemo] = useState<string>(run.memo);
   const dirty =
     robotId !== run.robotId ||
     scenarioId !== run.scenarioId ||
+    (durationSec === "" ? 0 : durationSec) !== (run.durationSec ?? 0) ||
     (score === "" ? null : score) !== (run.score ?? null) ||
     memo !== run.memo;
 
@@ -1659,12 +1729,21 @@ function RunMetadataEditor({
           onChange={(v) => v && setScenarioId(v)}
         />
       </Group>
-      <NumberInput
-        label="Score"
-        value={score}
-        onChange={(v) => setScore(typeof v === "number" ? v : "")}
-        allowDecimal
-      />
+      <Group grow>
+        <NumberInput
+          label="Duration (sec)"
+          description="Run のタイムライン長"
+          value={durationSec}
+          min={0}
+          onChange={(v) => setDurationSec(typeof v === "number" ? v : "")}
+        />
+        <NumberInput
+          label="Score"
+          value={score}
+          onChange={(v) => setScore(typeof v === "number" ? v : "")}
+          allowDecimal
+        />
+      </Group>
       <Textarea
         label="Memo"
         value={memo}
@@ -1680,6 +1759,10 @@ function RunMetadataEditor({
             onSave({
               robotId,
               scenarioId,
+              durationSec: Math.max(
+                0,
+                Math.round(typeof durationSec === "number" ? durationSec : 0),
+              ),
               score: score === "" ? null : score,
               memo,
             })
