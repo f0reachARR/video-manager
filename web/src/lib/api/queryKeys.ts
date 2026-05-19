@@ -15,6 +15,8 @@ export const queryKeys = {
   tags: ["tags"] as const,
   sessions: (params: SessionListParams = {}) => ["sessions", params] as const,
   videos: (params: VideoListParams = {}) => ["videos", params] as const,
+  videoRenditions: (videoId: string) => ["videos", videoId, "renditions"] as const,
+  encodingJobs: ["encoding-jobs"] as const,
   runs: (params: RunListParams = {}) => ["runs", params] as const,
   run: (id: string) => ["runs", "detail", id] as const,
   markers: (runId: string, params: MarkerListParams = {}) =>

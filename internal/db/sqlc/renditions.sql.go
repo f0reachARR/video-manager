@@ -129,6 +129,55 @@ func (q *Queries) InsertRendition(ctx context.Context, arg InsertRenditionParams
 	return i, err
 }
 
+const listEncodingVideos = `-- name: ListEncodingVideos :many
+SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok FROM videos
+WHERE hls_status IN ('planning', 'encoding', 'failed')
+ORDER BY created_at DESC
+LIMIT $1
+`
+
+// Videos that are mid-encode (hls_status in planning/encoding) or have failed
+// recently. Returned newest first so the dashboard shows current activity at
+// the top.
+func (q *Queries) ListEncodingVideos(ctx context.Context, limit int32) ([]Video, error) {
+	rows, err := q.db.Query(ctx, listEncodingVideos, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Video
+	for rows.Next() {
+		var i Video
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.DeviceID,
+			&i.UploaderID,
+			&i.StorageKey,
+			&i.RecordedAt,
+			&i.DurationSec,
+			&i.TimeOffsetSec,
+			&i.CreatedAt,
+			&i.ThumbnailKey,
+			&i.DisplayName,
+			&i.HlsMasterKey,
+			&i.HLSStatus,
+			&i.SourceVideoCodec,
+			&i.SourceAudioCodec,
+			&i.SourceWidth,
+			&i.SourceHeight,
+			&i.PassthroughOk,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRenditionsByVideo = `-- name: ListRenditionsByVideo :many
 SELECT id, video_id, kind, status, passthrough, width, height, bandwidth_bps, playlist_key, segments_done, error, started_at, completed_at, updated_at FROM video_renditions
 WHERE video_id = $1
@@ -137,6 +186,47 @@ ORDER BY kind ASC
 
 func (q *Queries) ListRenditionsByVideo(ctx context.Context, videoID pgtype.UUID) ([]VideoRendition, error) {
 	rows, err := q.db.Query(ctx, listRenditionsByVideo, videoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VideoRendition
+	for rows.Next() {
+		var i VideoRendition
+		if err := rows.Scan(
+			&i.ID,
+			&i.VideoID,
+			&i.Kind,
+			&i.Status,
+			&i.Passthrough,
+			&i.Width,
+			&i.Height,
+			&i.BandwidthBps,
+			&i.PlaylistKey,
+			&i.SegmentsDone,
+			&i.Error,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRenditionsByVideos = `-- name: ListRenditionsByVideos :many
+SELECT id, video_id, kind, status, passthrough, width, height, bandwidth_bps, playlist_key, segments_done, error, started_at, completed_at, updated_at FROM video_renditions
+WHERE video_id = ANY($1::uuid[])
+ORDER BY video_id ASC, kind ASC
+`
+
+func (q *Queries) ListRenditionsByVideos(ctx context.Context, videoIds []pgtype.UUID) ([]VideoRendition, error) {
+	rows, err := q.db.Query(ctx, listRenditionsByVideos, videoIds)
 	if err != nil {
 		return nil, err
 	}

@@ -57,3 +57,17 @@ SELECT
   COUNT(*) FILTER (WHERE status = 'failed')      AS failed_count
 FROM video_renditions
 WHERE video_id = $1;
+
+-- name: ListRenditionsByVideos :many
+SELECT * FROM video_renditions
+WHERE video_id = ANY(sqlc.arg('video_ids')::uuid[])
+ORDER BY video_id ASC, kind ASC;
+
+-- name: ListEncodingVideos :many
+-- Videos that are mid-encode (hls_status in planning/encoding) or have failed
+-- recently. Returned newest first so the dashboard shows current activity at
+-- the top.
+SELECT * FROM videos
+WHERE hls_status IN ('planning', 'encoding', 'failed')
+ORDER BY created_at DESC
+LIMIT $1;

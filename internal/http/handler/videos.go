@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
 	"github.com/f0reachARR/video-manager/internal/storage"
@@ -305,6 +306,139 @@ func (h *Videos) PlaybackURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, playbackUrlResponse{URL: url, ExpiresAt: expires, Kind: "mp4"})
+}
+
+type renditionDTO struct {
+	ID           string     `json:"id"`
+	VideoID      string     `json:"videoId"`
+	Kind         string     `json:"kind"`
+	Status       string     `json:"status"`
+	Passthrough  bool       `json:"passthrough"`
+	Width        int32      `json:"width"`
+	Height       int32      `json:"height"`
+	BandwidthBps *int32     `json:"bandwidthBps"`
+	PlaylistKey  string     `json:"playlistKey"`
+	SegmentsDone int32      `json:"segmentsDone"`
+	Error        *string    `json:"error"`
+	StartedAt    *time.Time `json:"startedAt"`
+	CompletedAt  *time.Time `json:"completedAt"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
+}
+
+type renditionListResponse struct {
+	VideoID     string          `json:"videoId"`
+	HLSStatus   string          `json:"hlsStatus"`
+	DurationSec *int32          `json:"durationSec"`
+	Data        []renditionDTO  `json:"data"`
+}
+
+type encodingJobDTO struct {
+	Video      videoDTO       `json:"video"`
+	Renditions []renditionDTO `json:"renditions"`
+}
+
+type encodingJobListResponse struct {
+	Data []encodingJobDTO `json:"data"`
+}
+
+func toRenditionDTO(r sqlc.VideoRendition) renditionDTO {
+	return renditionDTO{
+		ID:           uuidString(r.ID),
+		VideoID:      uuidString(r.VideoID),
+		Kind:         string(r.Kind),
+		Status:       string(r.Status),
+		Passthrough:  r.Passthrough,
+		Width:        r.Width,
+		Height:       r.Height,
+		BandwidthBps: r.BandwidthBps,
+		PlaylistKey:  r.PlaylistKey,
+		SegmentsDone: r.SegmentsDone,
+		Error:        r.Error,
+		StartedAt:    timeOrNil(r.StartedAt),
+		CompletedAt:  timeOrNil(r.CompletedAt),
+		UpdatedAt:    r.UpdatedAt.Time,
+	}
+}
+
+// Renditions returns the per-variant HLS state for one video.
+func (h *Videos) Renditions(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUIDParam(chi.URLParam(r, "videoId"))
+	if err != nil {
+		badRequest(w, "invalid videoId")
+		return
+	}
+	v, err := h.Q.GetVideo(r.Context(), id)
+	if err != nil {
+		if isNoRows(err) {
+			notFound(w, "video not found")
+			return
+		}
+		internalError(w, err)
+		return
+	}
+	rows, err := h.Q.ListRenditionsByVideo(r.Context(), id)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	out := renditionListResponse{
+		VideoID:     uuidString(v.ID),
+		HLSStatus:   string(v.HLSStatus),
+		DurationSec: v.DurationSec,
+		Data:        make([]renditionDTO, 0, len(rows)),
+	}
+	for _, r := range rows {
+		out.Data = append(out.Data, toRenditionDTO(r))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// EncodingJobs lists every video currently encoding or recently failed,
+// along with their renditions. Powers the /encoding dashboard.
+func (h *Videos) EncodingJobs(w http.ResponseWriter, r *http.Request) {
+	limit := int32(50)
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if n < 1 {
+				n = 1
+			}
+			if n > 200 {
+				n = 200
+			}
+			limit = int32(n)
+		}
+	}
+	videos, err := h.Q.ListEncodingVideos(r.Context(), limit)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	ids := make([]pgtype.UUID, 0, len(videos))
+	for _, v := range videos {
+		ids = append(ids, v.ID)
+	}
+	rends := []sqlc.VideoRendition{}
+	if len(ids) > 0 {
+		rends, err = h.Q.ListRenditionsByVideos(r.Context(), ids)
+		if err != nil {
+			internalError(w, err)
+			return
+		}
+	}
+	byVideo := map[string][]renditionDTO{}
+	for _, rd := range rends {
+		key := uuidString(rd.VideoID)
+		byVideo[key] = append(byVideo[key], toRenditionDTO(rd))
+	}
+	out := encodingJobListResponse{Data: make([]encodingJobDTO, 0, len(videos))}
+	for _, v := range videos {
+		key := uuidString(v.ID)
+		out.Data = append(out.Data, encodingJobDTO{
+			Video:      toVideoDTO(v),
+			Renditions: byVideo[key],
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // HLSProxy streams a single HLS object (master.m3u8, variant playlist, or
