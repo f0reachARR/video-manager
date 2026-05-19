@@ -24,8 +24,16 @@ pnpm install
 docker compose up -d                 # postgres / minio / tusd を起動
 ./scripts/migrate.sh up              # 初期スキーマを適用
 ./scripts/seed-dev.sh                # マスタの最小データ（冪等）
-./scripts/dev.sh                     # Vite (5173) + Go API (8080) を foreground 起動
+./scripts/dev.sh                     # Vite (5173) + Go API (8080) + encode worker (8081) を foreground 起動
 ```
+
+`scripts/dev.sh` は 3 つのプロセスを並行起動する:
+
+- **Vite (5173)**: React SPA
+- **API (8080)**: `cmd/app` をデフォルトキュー (probe / plan / finalize) で起動
+- **Worker (8081)**: 同じ `cmd/app` を `WORKER_QUEUES=encode` で起動。HLS の重いエンコードジョブ専用
+
+ポートや並列度は `.env` の `DEV_WORKER_*` で上書きできる。別マシン / 追加ワーカーを試したいときは [`scripts/dev-worker.sh`](../scripts/dev-worker.sh) を別ターミナルで起動する（`DEV_WORKER_HTTP_ADDR` を 8081 と衝突しない値にする）。
 
 ブラウザで <http://localhost:5173> を開き、ヘッダ右の "現在のユーザー" でデフォルトユーザーを選ぶと、以降の作成 API に `X-User-Id` ヘッダが付くようになる。
 
@@ -40,7 +48,7 @@ docker compose up -d                 # postgres / minio / tusd を起動
 | [internal/db/query/](../internal/db/query/) | sqlc のソース SQL（手書き） |
 | [internal/http/](../internal/http/) | chi ルーター + handler + middleware |
 | [internal/storage/](../internal/storage/) | S3 (MinIO) 操作ラッパー |
-| [internal/worker/](../internal/worker/) | River バックグラウンドジョブ（ffprobe / サムネイル生成） |
+| [internal/worker/](../internal/worker/) | River バックグラウンドジョブ（ffprobe / サムネイル / HLS エンコード） |
 | [internal/testutil/pgtest/](../internal/testutil/pgtest/) | 統合テスト用の Postgres セットアップ |
 | [docs/api/](../docs/api/) | OpenAPI 契約 |
 | [migrations/](../migrations/) | golang-migrate SQL |
