@@ -102,23 +102,27 @@ function PreMatchPage() {
                         </Table.Td>
                         <Table.Td>
                           <Group gap="xs">
-                            <Text size="sm" fw={a?.isOwn ? 700 : 400}>
-                              {a?.name ?? "?"}
+                            <Group gap={4} wrap="nowrap">
+                              <Text size="sm" fw={a?.isOwn ? 700 : 400}>
+                                {a?.name ?? "?"}
+                              </Text>
                               {a?.isOwn && (
-                                <Badge ml={4} size="xs" color="grape">
+                                <Badge size="xs" color="grape">
                                   自
                                 </Badge>
                               )}
-                            </Text>
+                            </Group>
                             <Text c="dimmed">vs</Text>
-                            <Text size="sm" fw={b?.isOwn ? 700 : 400}>
-                              {b?.name ?? "?"}
+                            <Group gap={4} wrap="nowrap">
+                              <Text size="sm" fw={b?.isOwn ? 700 : 400}>
+                                {b?.name ?? "?"}
+                              </Text>
                               {b?.isOwn && (
-                                <Badge ml={4} size="xs" color="grape">
+                                <Badge size="xs" color="grape">
                                   自
                                 </Badge>
                               )}
-                            </Text>
+                            </Group>
                           </Group>
                         </Table.Td>
                         <Table.Td>
