@@ -66,7 +66,7 @@ func Setup(ctx context.Context, pool *pgxpool.Pool, q *sqlc.Queries, store *stor
 	river.AddWorker(workers, &ProbeVideoWorker{Q: q, Storage: store, Manager: mgr})
 	river.AddWorker(workers, &PlanHLSWorker{Q: q, Manager: mgr})
 	river.AddWorker(workers, &EncodeVariantWorker{Q: q, Storage: store, Manager: mgr})
-	river.AddWorker(workers, &FinalizeHLSWorker{Q: q, Storage: store})
+	river.AddWorker(workers, &FinalizeHLSWorker{Q: q, Storage: store, Manager: mgr})
 
 	queues := map[string]river.QueueConfig{}
 	for _, name := range cfg.Queues {
