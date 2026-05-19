@@ -1,8 +1,9 @@
 import { Card, Group, Stack, Text } from "@mantine/core";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { Run, RunVideo } from "../../../lib/api/client";
 import { useUpdateRun, useUpdateRunVideo } from "../api/queries";
+import { useVideos } from "../../videos/api/queries";
 import { formatTime } from "../lib/format";
 
 // Visual multi-track view of every angle attached to the Run. Each track
@@ -26,6 +27,18 @@ export function AnglesTimeline({
   const updateRun = useUpdateRun();
   const trackRef = useRef<HTMLDivElement>(null);
 
+  // Source-video duration is the upper bound for videoOffsetEndSec — without
+  // it the trim-end drag would happily let the user pin the end past where
+  // the actual video has frames.
+  const sourceVideos = useVideos({ sessionId: run.sessionId });
+  const sourceDurations = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const v of sourceVideos.data?.data ?? []) {
+      if (v.durationSec != null) m.set(v.id, v.durationSec);
+    }
+    return m;
+  }, [sourceVideos.data]);
+
   type DragKind = "move" | "trim-start" | "trim-end";
   type DragState = {
     rvId: string;
@@ -34,6 +47,11 @@ export function AnglesTimeline({
     initRunOff: number;
     initVStart: number;
     initVEnd: number;
+    // Captured at pointerdown so the drag math can clamp vEnd. undefined if
+    // the source duration isn't loaded yet — in that case we don't clamp,
+    // matching the pre-fix behavior. Legacy data already past the source
+    // length keeps initVEnd as a floor so we never silently shrink it.
+    vEndMax: number | undefined;
   } | null;
   // These hooks must come before the early-return below; otherwise toggling
   // videos.length between 0 and >0 changes the hook count and React throws
@@ -58,6 +76,7 @@ export function AnglesTimeline({
     (rv: RunVideo, kind: DragKind) => (e: React.PointerEvent) => {
       e.stopPropagation();
       (e.target as Element).setPointerCapture?.(e.pointerId);
+      const srcDur = sourceDurations.get(rv.videoId);
       dragRef.current = {
         rvId: rv.id,
         kind,
@@ -65,6 +84,8 @@ export function AnglesTimeline({
         initRunOff: rv.runOffsetSec ?? 0,
         initVStart: rv.videoOffsetStartSec,
         initVEnd: rv.videoOffsetEndSec,
+        vEndMax:
+          srcDur == null ? undefined : Math.max(srcDur, rv.videoOffsetEndSec),
       };
     };
 
@@ -90,6 +111,7 @@ export function AnglesTimeline({
       runOff = Math.max(0, drag.initRunOff + (vStart - drag.initVStart));
     } else if (drag.kind === "trim-end") {
       vEnd = Math.max(vStart + 1, Math.round(drag.initVEnd + dx));
+      if (drag.vEndMax != null) vEnd = Math.min(drag.vEndMax, vEnd);
     }
     setPending((cur) => {
       const next = new Map(cur);
