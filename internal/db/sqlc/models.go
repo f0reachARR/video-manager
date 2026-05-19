@@ -286,6 +286,7 @@ type Video struct {
 	TimeOffsetSec int32
 	CreatedAt     pgtype.Timestamptz
 	ThumbnailKey  *string
+	DisplayName   string
 }
 
 type VideoTag struct {

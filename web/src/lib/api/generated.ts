@@ -1005,6 +1005,8 @@ export interface components {
             uploaderId?: string | null;
             /** @description オブジェクトストレージのキー */
             storageKey: string;
+            /** @description UI 表示用の名前。初期値はアップロード時のファイル名 */
+            displayName: string;
             /** Format: date-time */
             recordedAt?: string | null;
             durationSec?: number | null;
@@ -1023,6 +1025,7 @@ export interface components {
             /** Format: date-time */
             recordedAt?: string | null;
             timeOffsetSec?: number;
+            displayName?: string;
         };
         VideoList: {
             data: components["schemas"]["Video"][];

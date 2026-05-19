@@ -1,6 +1,6 @@
 -- name: CreateVideo :one
-INSERT INTO videos (session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO videos (session_id, device_id, uploader_id, storage_key, display_name, recorded_at, duration_sec, time_offset_sec)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetVideo :one
@@ -26,7 +26,8 @@ SET
   session_id = CASE WHEN sqlc.arg('session_id_set')::bool THEN sqlc.narg('session_id')::uuid ELSE session_id END,
   device_id = CASE WHEN sqlc.arg('device_id_set')::bool THEN sqlc.narg('device_id')::uuid ELSE device_id END,
   recorded_at = CASE WHEN sqlc.arg('recorded_at_set')::bool THEN sqlc.narg('recorded_at')::timestamptz ELSE recorded_at END,
-  time_offset_sec = COALESCE(sqlc.narg('time_offset_sec'), time_offset_sec)
+  time_offset_sec = COALESCE(sqlc.narg('time_offset_sec'), time_offset_sec),
+  display_name = COALESCE(sqlc.narg('display_name'), display_name)
 WHERE id = sqlc.arg('id')
 RETURNING *;
 

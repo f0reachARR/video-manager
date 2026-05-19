@@ -2157,7 +2157,7 @@ components:
     # ---------- Video ----------
     Video:
       type: object
-      required: [id, storageKey, timeOffsetSec, hasThumbnail, createdAt]
+      required: [id, storageKey, displayName, timeOffsetSec, hasThumbnail, createdAt]
       properties:
         id:
           type: string
@@ -2174,6 +2174,9 @@ components:
         storageKey:
           type: string
           description: オブジェクトストレージのキー
+        displayName:
+          type: string
+          description: UI 表示用の名前。初期値はアップロード時のファイル名
         recordedAt:
           type: [string, "null"]
           format: date-time
@@ -2202,6 +2205,8 @@ components:
           format: date-time
         timeOffsetSec:
           type: integer
+        displayName:
+          type: string
     VideoList:
       type: object
       required: [data, pagination]

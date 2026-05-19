@@ -37,6 +37,7 @@ import {
   useScenarios,
   useSessions,
   useTeams,
+  useUpdateVideo,
   useVideos,
 } from "../lib/queries";
 import { useNavigate } from "@tanstack/react-router";
@@ -346,7 +347,7 @@ function VideosPage() {
                 />
               </Table.Th>
               <Table.Th style={{ width: 90 }}>Thumb</Table.Th>
-              <Table.Th>Storage Key</Table.Th>
+              <Table.Th>Name</Table.Th>
               <Table.Th>Device</Table.Th>
               <Table.Th>Recorded At</Table.Th>
               <Table.Th>Duration</Table.Th>
@@ -375,9 +376,7 @@ function VideosPage() {
                   <VideoThumb video={v} />
                 </Table.Td>
                 <Table.Td>
-                  <Text size="xs" ff="monospace" truncate maw={180}>
-                    {v.storageKey}
-                  </Text>
+                  <VideoNameCell video={v} />
                 </Table.Td>
                 <Table.Td>
                   {v.deviceId
@@ -607,8 +606,8 @@ function CreateRunFromVideosModal({
             {videos.map((v) => (
               <Table.Tr key={v.id}>
                 <Table.Td>
-                  <Text size="xs" ff="monospace" truncate maw={180}>
-                    {v.storageKey.slice(0, 16)} ({v.durationSec ?? "?"}s)
+                  <Text size="xs" truncate maw={220}>
+                    {v.displayName?.trim() || v.storageKey.slice(0, 16)} ({v.durationSec ?? "?"}s)
                   </Text>
                 </Table.Td>
                 <Table.Td>
@@ -655,6 +654,55 @@ function CreateRunFromVideosModal({
         </Group>
       </Stack>
     </Modal>
+  );
+}
+
+// Inline-editable display name. Falls back to a truncated storage_key when
+// the row predates the displayName column or upload had no filename meta.
+function VideoNameCell({ video }: { video: Video }) {
+  const update = useUpdateVideo();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(video.displayName ?? "");
+  if (editing) {
+    const commit = () => {
+      const next = draft.trim();
+      if (next !== (video.displayName ?? "")) {
+        update.mutate({ id: video.id, body: { displayName: next } });
+      }
+      setEditing(false);
+    };
+    return (
+      <TextInput
+        size="xs"
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.currentTarget.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          else if (e.key === "Escape") {
+            setDraft(video.displayName ?? "");
+            setEditing(false);
+          }
+        }}
+      />
+    );
+  }
+  const shown = video.displayName?.trim() || video.storageKey;
+  return (
+    <Text
+      size="sm"
+      truncate
+      maw={220}
+      title={`${shown} (${video.storageKey})\nクリックで編集`}
+      onClick={() => {
+        setDraft(video.displayName ?? "");
+        setEditing(true);
+      }}
+      style={{ cursor: "pointer" }}
+    >
+      {shown}
+    </Text>
   );
 }
 

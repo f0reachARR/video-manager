@@ -1582,7 +1582,7 @@ function AddVideoModal({ run, onClose }: { run: Run; onClose: () => void }) {
     .filter((v) => !usedIds.has(v.id))
     .map((v) => ({
       value: v.id,
-      label: `${v.storageKey.slice(0, 8)} (${v.durationSec ?? "?"}s)`,
+      label: `${v.displayName?.trim() || v.storageKey.slice(0, 8)} (${v.durationSec ?? "?"}s)`,
     }));
 
   const submit = () => {
@@ -1990,7 +1990,7 @@ function RecommendedVideos({ run }: { run: Run }) {
                 });
               }}
             >
-              ＋ {v.storageKey.slice(0, 12)} ({len}s)
+              ＋ {v.displayName?.trim() || v.storageKey.slice(0, 12)} ({len}s)
             </Button>
           );
         })}

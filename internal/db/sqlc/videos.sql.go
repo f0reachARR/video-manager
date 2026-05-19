@@ -12,9 +12,9 @@ import (
 )
 
 const createVideo = `-- name: CreateVideo :one
-INSERT INTO videos (session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key
+INSERT INTO videos (session_id, device_id, uploader_id, storage_key, display_name, recorded_at, duration_sec, time_offset_sec)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name
 `
 
 type CreateVideoParams struct {
@@ -22,6 +22,7 @@ type CreateVideoParams struct {
 	DeviceID      pgtype.UUID
 	UploaderID    pgtype.UUID
 	StorageKey    string
+	DisplayName   string
 	RecordedAt    pgtype.Timestamptz
 	DurationSec   *int32
 	TimeOffsetSec int32
@@ -33,6 +34,7 @@ func (q *Queries) CreateVideo(ctx context.Context, arg CreateVideoParams) (Video
 		arg.DeviceID,
 		arg.UploaderID,
 		arg.StorageKey,
+		arg.DisplayName,
 		arg.RecordedAt,
 		arg.DurationSec,
 		arg.TimeOffsetSec,
@@ -49,6 +51,7 @@ func (q *Queries) CreateVideo(ctx context.Context, arg CreateVideoParams) (Video
 		&i.TimeOffsetSec,
 		&i.CreatedAt,
 		&i.ThumbnailKey,
+		&i.DisplayName,
 	)
 	return i, err
 }
@@ -66,7 +69,7 @@ func (q *Queries) DeleteVideo(ctx context.Context, id pgtype.UUID) (int64, error
 }
 
 const getVideo = `-- name: GetVideo :one
-SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key FROM videos WHERE id = $1
+SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name FROM videos WHERE id = $1
 `
 
 func (q *Queries) GetVideo(ctx context.Context, id pgtype.UUID) (Video, error) {
@@ -83,12 +86,13 @@ func (q *Queries) GetVideo(ctx context.Context, id pgtype.UUID) (Video, error) {
 		&i.TimeOffsetSec,
 		&i.CreatedAt,
 		&i.ThumbnailKey,
+		&i.DisplayName,
 	)
 	return i, err
 }
 
 const getVideoByStorageKey = `-- name: GetVideoByStorageKey :one
-SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key FROM videos WHERE storage_key = $1
+SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name FROM videos WHERE storage_key = $1
 `
 
 func (q *Queries) GetVideoByStorageKey(ctx context.Context, storageKey string) (Video, error) {
@@ -105,12 +109,13 @@ func (q *Queries) GetVideoByStorageKey(ctx context.Context, storageKey string) (
 		&i.TimeOffsetSec,
 		&i.CreatedAt,
 		&i.ThumbnailKey,
+		&i.DisplayName,
 	)
 	return i, err
 }
 
 const listVideosPage = `-- name: ListVideosPage :many
-SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key
+SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name
 FROM videos
 WHERE
   ($2::uuid IS NULL OR session_id = $2::uuid)
@@ -157,6 +162,7 @@ func (q *Queries) ListVideosPage(ctx context.Context, arg ListVideosPageParams) 
 			&i.TimeOffsetSec,
 			&i.CreatedAt,
 			&i.ThumbnailKey,
+			&i.DisplayName,
 		); err != nil {
 			return nil, err
 		}
@@ -174,9 +180,10 @@ SET
   session_id = CASE WHEN $1::bool THEN $2::uuid ELSE session_id END,
   device_id = CASE WHEN $3::bool THEN $4::uuid ELSE device_id END,
   recorded_at = CASE WHEN $5::bool THEN $6::timestamptz ELSE recorded_at END,
-  time_offset_sec = COALESCE($7, time_offset_sec)
-WHERE id = $8
-RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key
+  time_offset_sec = COALESCE($7, time_offset_sec),
+  display_name = COALESCE($8, display_name)
+WHERE id = $9
+RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name
 `
 
 type UpdateVideoParams struct {
@@ -187,6 +194,7 @@ type UpdateVideoParams struct {
 	RecordedAtSet bool
 	RecordedAt    pgtype.Timestamptz
 	TimeOffsetSec *int32
+	DisplayName   *string
 	ID            pgtype.UUID
 }
 
@@ -199,6 +207,7 @@ func (q *Queries) UpdateVideo(ctx context.Context, arg UpdateVideoParams) (Video
 		arg.RecordedAtSet,
 		arg.RecordedAt,
 		arg.TimeOffsetSec,
+		arg.DisplayName,
 		arg.ID,
 	)
 	var i Video
@@ -213,6 +222,7 @@ func (q *Queries) UpdateVideo(ctx context.Context, arg UpdateVideoParams) (Video
 		&i.TimeOffsetSec,
 		&i.CreatedAt,
 		&i.ThumbnailKey,
+		&i.DisplayName,
 	)
 	return i, err
 }
@@ -223,7 +233,7 @@ SET
   recorded_at = CASE WHEN $1::bool THEN $2::timestamptz ELSE recorded_at END,
   duration_sec = CASE WHEN $3::bool THEN $4::int ELSE duration_sec END
 WHERE id = $5
-RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key
+RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name
 `
 
 type UpdateVideoProbeParams struct {
@@ -254,6 +264,7 @@ func (q *Queries) UpdateVideoProbe(ctx context.Context, arg UpdateVideoProbePara
 		&i.TimeOffsetSec,
 		&i.CreatedAt,
 		&i.ThumbnailKey,
+		&i.DisplayName,
 	)
 	return i, err
 }

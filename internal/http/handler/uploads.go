@@ -77,6 +77,10 @@ func (h *Uploads) TusHook(w http.ResponseWriter, r *http.Request) {
 
 	meta := req.Event.Upload.MetaData
 	params := sqlc.CreateVideoParams{StorageKey: storageKey}
+	// Use the original filename as the initial human-readable label.
+	if v := meta["filename"]; v != "" {
+		params.DisplayName = v
+	}
 	if v := meta["deviceId"]; v != "" {
 		id, err := parseUUIDParam(v)
 		if err == nil {

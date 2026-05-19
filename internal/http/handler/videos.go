@@ -21,6 +21,7 @@ type videoDTO struct {
 	DeviceID      *string    `json:"deviceId"`
 	UploaderID    *string    `json:"uploaderId"`
 	StorageKey    string     `json:"storageKey"`
+	DisplayName   string     `json:"displayName"`
 	RecordedAt    *time.Time `json:"recordedAt"`
 	DurationSec   *int32     `json:"durationSec"`
 	TimeOffsetSec int32      `json:"timeOffsetSec"`
@@ -48,6 +49,7 @@ func toVideoDTO(v sqlc.Video) videoDTO {
 		DeviceID:      deviceID,
 		UploaderID:    uploaderID,
 		StorageKey:    v.StorageKey,
+		DisplayName:   v.DisplayName,
 		RecordedAt:    timeOrNil(v.RecordedAt),
 		DurationSec:   v.DurationSec,
 		TimeOffsetSec: v.TimeOffsetSec,
@@ -66,6 +68,7 @@ type updateVideoRequest struct {
 	DeviceID      Optional[string]    `json:"deviceId"`
 	RecordedAt    Optional[time.Time] `json:"recordedAt"`
 	TimeOffsetSec *int32              `json:"timeOffsetSec"`
+	DisplayName   *string             `json:"displayName"`
 }
 
 type playbackUrlResponse struct {
@@ -153,7 +156,7 @@ func (h *Videos) Update(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err.Error())
 		return
 	}
-	params := sqlc.UpdateVideoParams{ID: id, TimeOffsetSec: req.TimeOffsetSec}
+	params := sqlc.UpdateVideoParams{ID: id, TimeOffsetSec: req.TimeOffsetSec, DisplayName: req.DisplayName}
 	if req.SessionID.Set {
 		params.SessionIDSet = true
 		if !req.SessionID.Null {
