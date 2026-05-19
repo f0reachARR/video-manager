@@ -8,7 +8,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 
-import { CurrentUserPicker } from "../components/CurrentUserPicker";
+import { CurrentUserPicker } from "../components/ui/CurrentUserPicker";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: RootLayout,

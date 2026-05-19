@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { fetchHealth, fetchReady } from "../lib/api/client";
-import { useCurrentUserId } from "../lib/currentUser";
+import { useCurrentUserId } from "../stores/currentUser";
 
 export const Route = createFileRoute("/")({
   component: IndexPage,

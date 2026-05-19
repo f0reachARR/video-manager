@@ -10,7 +10,7 @@ import {
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 
-import { ResourcePage } from "../components/ResourcePage";
+import { ResourcePage } from "../components/layout/ResourcePage";
 import type { Match } from "../lib/api/client";
 import { useMatches, useTeams, useTournaments } from "../lib/queries";
 

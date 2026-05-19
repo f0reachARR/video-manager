@@ -13,7 +13,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { ResourcePage } from "../components/ResourcePage";
+import { ResourcePage } from "../components/layout/ResourcePage";
 import type { Robot } from "../lib/api/client";
 import {
   useCreateRobot,

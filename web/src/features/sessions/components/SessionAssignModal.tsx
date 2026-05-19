@@ -13,8 +13,9 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { ApiError, sessionsApi, type Video } from "../lib/api/client";
-import { useCreateSession, useUpdateVideo } from "../lib/queries";
+import { ApiError, sessionsApi, type Video } from "../../../lib/api/client";
+import { useCreateSession } from "../api/queries";
+import { useUpdateVideo } from "../../videos/api/queries";
 
 type Props = {
   video: Video;

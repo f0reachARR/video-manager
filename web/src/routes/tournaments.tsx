@@ -13,7 +13,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { ResourcePage } from "../components/ResourcePage";
+import { ResourcePage } from "../components/layout/ResourcePage";
 import type { Tournament } from "../lib/api/client";
 import {
   useCreateTournament,

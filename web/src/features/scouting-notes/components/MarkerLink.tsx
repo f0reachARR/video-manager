@@ -6,8 +6,8 @@ import {
 } from "@tiptap/react";
 import { useNavigate } from "@tanstack/react-router";
 
-import type { Marker, MarkerCategory } from "../lib/api/client";
-import { useMarker } from "../lib/queries";
+import type { Marker, MarkerCategory } from "../../../lib/api/client";
+import { useMarker } from "../../markers/api/queries";
 
 declare module "@tiptap/core" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -2,8 +2,9 @@ import { Button, Group, Modal, NumberInput, Select, Stack } from "@mantine/core"
 import { DateTimePicker } from "@mantine/dates";
 import { useState } from "react";
 
-import type { Video } from "../lib/api/client";
-import { useDevices, useUpdateVideo } from "../lib/queries";
+import type { Video } from "../../../lib/api/client";
+import { useDevices } from "../../devices/api/queries";
+import { useUpdateVideo } from "../api/queries";
 
 type Props = {
   video: Video;

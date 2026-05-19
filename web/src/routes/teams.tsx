@@ -14,7 +14,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { ResourcePage } from "../components/ResourcePage";
+import { ResourcePage } from "../components/layout/ResourcePage";
 import type { Team } from "../lib/api/client";
 import {
   useCreateTeam,

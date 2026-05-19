@@ -14,7 +14,7 @@ import {
 } from "@mantine/core";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
-import { ScoutingEditor } from "../../components/ScoutingEditor";
+import { ScoutingEditor } from "../../features/scouting-notes/components/ScoutingEditor";
 import {
   ApiError,
   type Match,

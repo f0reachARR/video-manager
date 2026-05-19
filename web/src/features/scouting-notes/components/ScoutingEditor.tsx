@@ -13,10 +13,10 @@ import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
 
 import { MarkerLink } from "./MarkerLink";
-import { MarkerPickerModal } from "./MarkerPickerModal";
+import { MarkerPickerModal } from "../../markers/components/MarkerPickerModal";
 import "./ScoutingEditor.css";
-import { useCurrentUserId } from "../lib/currentUser";
-import { useUser } from "../lib/queries";
+import { useCurrentUserId } from "../../../stores/currentUser";
+import { useUser } from "../../users/api/queries";
 
 const HOCUSPOCUS_URL: string =
   (import.meta.env.VITE_HOCUSPOCUS_URL as string | undefined) ??

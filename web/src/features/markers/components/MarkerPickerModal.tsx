@@ -12,8 +12,9 @@ import {
 } from "@mantine/core";
 import { useMemo, useState } from "react";
 
-import type { MarkerCategory } from "../lib/api/client";
-import { useMarkers, useRuns } from "../lib/queries";
+import type { MarkerCategory } from "../../../lib/api/client";
+import { useMarkers } from "../api/queries";
+import { useRuns } from "../../runs/api/queries";
 
 const categoryLabel: Record<MarkerCategory, string> = {
   success: "成功",

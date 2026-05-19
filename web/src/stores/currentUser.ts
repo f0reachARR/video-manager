@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-import { setCurrentUserIdProvider } from "./api/client";
+import { setCurrentUserIdProvider } from "../lib/api/client";
 
 const STORAGE_KEY = "video-manager.currentUserId";
 

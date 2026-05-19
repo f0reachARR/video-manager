@@ -13,7 +13,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { ResourcePage } from "../components/ResourcePage";
+import { ResourcePage } from "../components/layout/ResourcePage";
 import type { Tag } from "../lib/api/client";
 import {
   useCreateTag,

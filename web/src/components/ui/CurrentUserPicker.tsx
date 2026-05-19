@@ -1,7 +1,7 @@
 import { Select, Text } from "@mantine/core";
 
-import { setCurrentUserId, useCurrentUserId } from "../lib/currentUser";
-import { useUsers } from "../lib/queries";
+import { setCurrentUserId, useCurrentUserId } from "../../stores/currentUser";
+import { useUsers } from "../../features/users/api/queries";
 
 export function CurrentUserPicker() {
   const currentUserId = useCurrentUserId();

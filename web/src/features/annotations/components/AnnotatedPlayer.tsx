@@ -16,14 +16,14 @@ import {
   type Annotation,
   type Video,
   videosApi,
-} from "../lib/api/client";
-import { useCurrentUserId } from "../lib/currentUser";
+} from "../../../lib/api/client";
+import { useCurrentUserId } from "../../../stores/currentUser";
 import {
   useAnnotations,
   useCreateAnnotation,
   useDeleteAnnotation,
-} from "../lib/queries";
-import { useTopicSubscription, useWebSocketPublisher } from "../lib/realtime";
+} from "../api/queries";
+import { useTopicSubscription, useWebSocketPublisher } from "../../../lib/realtime";
 import { useQueryClient } from "@tanstack/react-query";
 
 type Mode = "off" | "addPoint" | "liveInk";

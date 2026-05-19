@@ -9,7 +9,7 @@ import {
 } from "@mantine/core";
 import type { ReactNode } from "react";
 
-import { ApiError } from "../lib/api/client";
+import { ApiError } from "../../lib/api/client";
 
 type Props = {
   title: string;

@@ -14,7 +14,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { ResourcePage } from "../../components/ResourcePage";
+import { ResourcePage } from "../../components/layout/ResourcePage";
 import type { Match } from "../../lib/api/client";
 import {
   useCreateMatch,

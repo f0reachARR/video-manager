@@ -5,9 +5,9 @@
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { Annotation } from "../lib/api/client";
-import { useAnnotations, useCreateAnnotation } from "../lib/queries";
-import { useWebSocketPublisher } from "../lib/realtime";
+import type { Annotation } from "../../../lib/api/client";
+import { useAnnotations, useCreateAnnotation } from "../api/queries";
+import { useWebSocketPublisher } from "../../../lib/realtime";
 
 export type OverlayMode = "off" | "addPoint" | "liveInk";
 
