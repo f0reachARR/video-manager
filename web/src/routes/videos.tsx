@@ -1,5 +1,5 @@
 import { Button, FileButton, Group, Select, Stack, Text } from "@mantine/core";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 
 import { ResourcePage } from "../components/layout/ResourcePage";
@@ -12,7 +12,6 @@ import { UploadDropzone } from "../features/uploads/components/UploadDropzone";
 import { UploadQueue } from "../features/uploads/components/UploadQueue";
 import { MobileCaptureButton } from "../features/uploads/components/MobileCaptureButton";
 import { VideoList } from "../features/videos/components/VideoList";
-import { CreateRunFromVideosModal } from "../features/videos/components/CreateRunFromVideosModal";
 
 export const Route = createFileRoute("/videos")({
   component: VideosPage,
@@ -29,9 +28,9 @@ function VideosPage() {
   const devices = useDevices();
   const sessions = useSessions();
   const currentUserId = useCurrentUserId();
+  const navigate = useNavigate();
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [createRunOpened, setCreateRunOpened] = useState(false);
 
   // useTusUpload's getMeta reads the latest selection at upload start, so we
   // mirror the upload-time meta to refs to avoid resetting the hook when the
@@ -123,7 +122,16 @@ function VideosPage() {
               <Button
                 size="xs"
                 variant="filled"
-                onClick={() => setCreateRunOpened(true)}
+                onClick={() =>
+                  sessionId &&
+                  navigate({
+                    to: "/runs/new-from-videos",
+                    search: {
+                      sessionId,
+                      videoIds: [...selected].join(","),
+                    },
+                  })
+                }
                 disabled={!sessionId}
                 title={
                   sessionId
@@ -150,18 +158,6 @@ function VideosPage() {
           onSelectedChange={setSelected}
         />
       </Stack>
-
-      {createRunOpened && sessionId && (
-        <CreateRunFromVideosModal
-          videos={list.filter((v) => selected.has(v.id))}
-          lockedSessionId={sessionId}
-          onClose={() => setCreateRunOpened(false)}
-          onCreated={() => {
-            setCreateRunOpened(false);
-            setSelected(new Set());
-          }}
-        />
-      )}
     </ResourcePage>
   );
 }
