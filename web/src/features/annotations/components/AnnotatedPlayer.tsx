@@ -10,6 +10,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   ApiError,
@@ -23,12 +24,19 @@ import {
   useCreateAnnotation,
   useDeleteAnnotation,
 } from "../api/queries";
-import { useTopicSubscription, useWebSocketPublisher } from "../../../lib/realtime";
-import { useQueryClient } from "@tanstack/react-query";
+import {
+  AnnotationLayer,
+  type Draft,
+  drawAnnotation,
+} from "../lib/shapes";
+import {
+  useTopicSubscription,
+  useWebSocketPublisher,
+} from "../../../lib/realtime";
 
-type Mode = "off" | "addPoint" | "liveInk";
+type Mode = "off" | "point" | "rect" | "arrow" | "text" | "liveInk";
 
-type InkPoint = [number, number]; // x,y in 0..1
+type InkPoint = [number, number];
 type InkStrokeMessage = {
   type: "ink.stroke";
   color: string;
@@ -39,6 +47,10 @@ type RemoteStroke = InkStrokeMessage & { receivedAt: number };
 const INK_FADE_MS = 4000;
 // Random per-tab color so multiple viewers' strokes stay distinguishable.
 const myInkColor = `hsl(${Math.floor(Math.random() * 360)} 80% 55%)`;
+
+// Drag threshold below which we treat a pointer interaction as a "click"
+// instead of a drag. Used by rect/arrow to ignore accidental taps.
+const DRAG_MIN = 0.01;
 
 export function AnnotatedPlayer({ video }: { video: Video }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -63,10 +75,19 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
   const [strokes, setStrokes] = useState<RemoteStroke[]>([]);
   useTopicSubscription(`/ws/video/${video.id}`, (msg) => {
     const m = msg as Partial<InkStrokeMessage> & { type?: string };
-    if (m.type === "ink.stroke" && Array.isArray(m.points) && typeof m.color === "string") {
+    if (
+      m.type === "ink.stroke" &&
+      Array.isArray(m.points) &&
+      typeof m.color === "string"
+    ) {
       setStrokes((cur) => [
         ...cur,
-        { type: "ink.stroke", color: m.color!, points: m.points!, receivedAt: Date.now() },
+        {
+          type: "ink.stroke",
+          color: m.color!,
+          points: m.points!,
+          receivedAt: Date.now(),
+        },
       ]);
     } else if (typeof m.type === "string" && m.type.startsWith("annotation.")) {
       qc.invalidateQueries({ queryKey: ["annotations", video.id] });
@@ -87,7 +108,9 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
     videosApi
       .playbackUrl(video.id)
       .then((r) => setUrl(r.url))
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : String(e)));
+      .catch((e) =>
+        setError(e instanceof ApiError ? e.body.message : String(e)),
+      );
   }
 
   // Track currentTime via rAF while playing or after a seek.
@@ -109,19 +132,40 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
     );
   }, [ann.data, currentSec]);
 
-  const onCanvasClick: React.MouseEventHandler<HTMLDivElement> = (e) => {
-    if (mode !== "addPoint" || !videoRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
+  // --- Shape drawing state ---------------------------------------------
+  // draft is the geometry currently being drawn for rect/arrow; null when
+  // idle or when mode is point/text/liveInk (those create on a single
+  // click instead of a drag).
+  const [draft, setDraft] = useState<Draft>(null);
+  const draftRef = useRef<Draft>(null);
+  draftRef.current = draft;
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const pointToNormalized = (e: React.PointerEvent): InkPoint | null => {
+    const el = containerRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return;
-    const t = videoRef.current.currentTime;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+    return [x, y];
+  };
+
+  // Single-click create for point and text. Same path for both — the only
+  // diff is the type tag and that text uses the label as its content.
+  const placeClick = (p: InkPoint) => {
+    const t = videoRef.current?.currentTime ?? 0;
+    if (mode !== "point" && mode !== "text") return;
+    if (mode === "text" && !draftLabel.trim()) {
+      // Text without a label is invisible, so require one.
+      return;
+    }
     create.mutate(
       {
         startOffsetSec: t,
         endOffsetSec: t + 3,
-        type: "point",
-        geometry: { x, y } as never,
+        type: mode,
+        geometry: { x: p[0], y: p[1] } as never,
         label: draftLabel,
       },
       {
@@ -133,27 +177,9 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
     );
   };
 
-  const seekTo = (sec: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = sec;
-    }
-  };
-
-  // Live-ink pointer handlers — only active in mode "liveInk".
+  // --- Live ink ---------------------------------------------------------
   const inkBufferRef = useRef<InkPoint[]>([]);
   const inkDrawingRef = useRef(false);
-  const inkContainerRef = useRef<HTMLDivElement>(null);
-
-  const pointToNormalized = (e: React.PointerEvent): InkPoint | null => {
-    const el = inkContainerRef.current;
-    if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-    return [x, y];
-  };
-
   const flushStroke = () => {
     const pts = inkBufferRef.current;
     if (pts.length < 2) {
@@ -161,41 +187,140 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
       return;
     }
     publish({ type: "ink.stroke", color: myInkColor, points: pts });
-    // Also render locally without round-tripping through the server.
     setStrokes((cur) => [
       ...cur,
-      { type: "ink.stroke", color: myInkColor, points: pts, receivedAt: Date.now() },
+      {
+        type: "ink.stroke",
+        color: myInkColor,
+        points: pts,
+        receivedAt: Date.now(),
+      },
     ]);
     inkBufferRef.current = [];
   };
 
-  const onInkDown = (e: React.PointerEvent) => {
-    if (mode !== "liveInk") return;
+  // --- Unified pointer handlers ----------------------------------------
+  const pointerOriginRef = useRef<InkPoint | null>(null);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (mode === "off") return;
     const p = pointToNormalized(e);
     if (!p) return;
-    inkDrawingRef.current = true;
-    inkBufferRef.current = [p];
     (e.target as Element).setPointerCapture?.(e.pointerId);
-  };
-  const onInkMove = (e: React.PointerEvent) => {
-    if (mode !== "liveInk" || !inkDrawingRef.current) return;
-    const p = pointToNormalized(e);
-    if (!p) return;
-    inkBufferRef.current.push(p);
-    // Periodically flush so strokes appear "live" to others.
-    if (inkBufferRef.current.length >= 8) {
-      flushStroke();
+    pointerOriginRef.current = p;
+    if (mode === "rect") {
+      setDraft({
+        kind: "rect",
+        startX: p[0],
+        startY: p[1],
+        geom: { x: p[0], y: p[1], w: 0, h: 0 },
+      });
+    } else if (mode === "arrow") {
+      setDraft({
+        kind: "arrow",
+        geom: { x1: p[0], y1: p[1], x2: p[0], y2: p[1] },
+      });
+    } else if (mode === "liveInk") {
+      inkDrawingRef.current = true;
       inkBufferRef.current = [p];
     }
-  };
-  const onInkUp = () => {
-    if (!inkDrawingRef.current) return;
-    inkDrawingRef.current = false;
-    flushStroke();
+    // point/text are handled in pointerUp so a stray click doesn't fire on
+    // pointerdown if the user actually meant to drag.
   };
 
+  const onPointerMove = (e: React.PointerEvent) => {
+    const p = pointToNormalized(e);
+    if (!p) return;
+    const d = draftRef.current;
+    if (d?.kind === "rect") {
+      const x = Math.min(p[0], d.startX);
+      const y = Math.min(p[1], d.startY);
+      const w = Math.abs(p[0] - d.startX);
+      const h = Math.abs(p[1] - d.startY);
+      setDraft({ ...d, geom: { x, y, w, h } });
+    } else if (d?.kind === "arrow") {
+      setDraft({ ...d, geom: { ...d.geom, x2: p[0], y2: p[1] } });
+    } else if (mode === "liveInk" && inkDrawingRef.current) {
+      inkBufferRef.current.push(p);
+      if (inkBufferRef.current.length >= 8) {
+        flushStroke();
+        inkBufferRef.current = [p];
+      }
+    }
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    const origin = pointerOriginRef.current;
+    pointerOriginRef.current = null;
+    const p = pointToNormalized(e) ?? origin;
+    const d = draftRef.current;
+    const t = videoRef.current?.currentTime ?? 0;
+
+    if (mode === "point" || mode === "text") {
+      if (p) placeClick(p);
+      return;
+    }
+    if (d?.kind === "rect") {
+      if (d.geom.w >= DRAG_MIN && d.geom.h >= DRAG_MIN) {
+        create.mutate(
+          {
+            startOffsetSec: t,
+            endOffsetSec: t + 3,
+            type: "rect",
+            geometry: d.geom as never,
+            label: draftLabel,
+          },
+          {
+            onSuccess: () => {
+              setMode("off");
+              setDraftLabel("");
+              setDraft(null);
+            },
+          },
+        );
+      } else {
+        setDraft(null);
+      }
+      return;
+    }
+    if (d?.kind === "arrow") {
+      const dx = d.geom.x2 - d.geom.x1;
+      const dy = d.geom.y2 - d.geom.y1;
+      if (Math.hypot(dx, dy) >= DRAG_MIN * 2) {
+        create.mutate(
+          {
+            startOffsetSec: t,
+            endOffsetSec: t + 3,
+            type: "arrow",
+            geometry: d.geom as never,
+            label: draftLabel,
+          },
+          {
+            onSuccess: () => {
+              setMode("off");
+              setDraftLabel("");
+              setDraft(null);
+            },
+          },
+        );
+      } else {
+        setDraft(null);
+      }
+      return;
+    }
+    if (mode === "liveInk") {
+      if (!inkDrawingRef.current) return;
+      inkDrawingRef.current = false;
+      flushStroke();
+    }
+  };
+
+  const seekTo = (sec: number) => {
+    if (videoRef.current) videoRef.current.currentTime = sec;
+  };
+
+  // --- PNG export -------------------------------------------------------
   const [exportError, setExportError] = useState<string | null>(null);
-
   const exportPng = async () => {
     setExportError(null);
     const el = videoRef.current;
@@ -213,10 +338,11 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
     try {
       ctx.drawImage(el, 0, 0, w, h);
     } catch (e) {
-      setExportError("動画フレームの取得に失敗 (MinIO CORS 設定が必要かも): " + String(e));
+      setExportError(
+        "動画フレームの取得に失敗 (MinIO CORS 設定が必要かも): " + String(e),
+      );
       return;
     }
-    // Draw visible annotations in source-pixel coords.
     for (const a of visible) {
       drawAnnotation(ctx, a, w, h);
     }
@@ -235,82 +361,101 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
     link.remove();
   };
 
+  const drawing = mode !== "off";
+  const cursor = drawing ? "crosshair" : "default";
+  // Show the label field whenever a mode that uses a label is active. Text
+  // mode requires the label; others optionally use it.
+  const showLabelInput =
+    mode === "point" || mode === "rect" || mode === "arrow" || mode === "text";
+  const labelRequired = mode === "text";
+
   return (
     <Stack>
       {error && <Alert color="red">{error}</Alert>}
       {!error && !url && <Text>署名 URL を取得中...</Text>}
       {url && (
         <div
-          ref={inkContainerRef}
+          ref={containerRef}
           style={{
             position: "relative",
             background: "#000",
-            cursor:
-              mode === "addPoint" ? "crosshair" : mode === "liveInk" ? "crosshair" : "default",
-            touchAction: mode === "liveInk" ? "none" : undefined,
+            cursor,
+            touchAction: drawing ? "none" : undefined,
           }}
-          onClick={onCanvasClick}
-          onPointerDown={onInkDown}
-          onPointerMove={onInkMove}
-          onPointerUp={onInkUp}
-          onPointerCancel={onInkUp}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
         >
           <video
             ref={videoRef}
             src={url}
-            controls={mode !== "liveInk"}
+            // Hide native controls while drawing so the toolbar at the
+            // bottom doesn't eat our pointerdown events.
+            controls={!drawing}
             crossOrigin="anonymous"
             style={{ width: "100%", maxHeight: "60vh", display: "block" }}
           >
             <track kind="captions" />
           </video>
-          {/* Annotation overlay (above video, but pointer-events:none so
-              controls + clicks pass through unless we want them). */}
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              pointerEvents: "none",
-            }}
-          >
-            {visible.map((a) => (
-              <AnnotationOverlay key={a.id} a={a} />
-            ))}
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+            <AnnotationLayer annotations={visible} draft={draft} />
             <LiveInkLayer strokes={strokes} />
           </div>
         </div>
       )}
 
       <Group>
-        <Button
-          size="xs"
-          variant={mode === "addPoint" ? "filled" : "default"}
-          color={mode === "addPoint" ? "teal" : undefined}
-          onClick={() => setMode((m) => (m === "addPoint" ? "off" : "addPoint"))}
-        >
-          {mode === "addPoint" ? "クリックして配置..." : "📍 Point を追加"}
-        </Button>
-        <Button
-          size="xs"
-          variant={mode === "liveInk" ? "filled" : "default"}
-          color={mode === "liveInk" ? "grape" : undefined}
-          onClick={() => setMode((m) => (m === "liveInk" ? "off" : "liveInk"))}
-        >
-          {mode === "liveInk" ? "ライブインク中" : "✏️ ライブインク"}
-        </Button>
-        {mode === "addPoint" && (
+        <ToolButton
+          mode="point"
+          current={mode}
+          label="📍 Point"
+          onClick={setMode}
+          color="yellow"
+        />
+        <ToolButton
+          mode="rect"
+          current={mode}
+          label="▭ Rect"
+          onClick={setMode}
+          color="red"
+        />
+        <ToolButton
+          mode="arrow"
+          current={mode}
+          label="➝ Arrow"
+          onClick={setMode}
+          color="teal"
+        />
+        <ToolButton
+          mode="text"
+          current={mode}
+          label="🅣 Text"
+          onClick={setMode}
+          color="blue"
+        />
+        <ToolButton
+          mode="liveInk"
+          current={mode}
+          label="✏️ ライブインク"
+          onClick={setMode}
+          color="grape"
+        />
+        {showLabelInput && (
           <TextInput
             size="xs"
-            placeholder="ラベル (任意)"
+            placeholder={labelRequired ? "テキスト (必須)" : "ラベル (任意)"}
             value={draftLabel}
             onChange={(e) => setDraftLabel(e.currentTarget.value)}
             w={220}
+            required={labelRequired}
           />
         )}
         <Text size="xs" c="dimmed">
-          現在 {currentSec.toFixed(1)}s · 表示中 {visible.length} / 全 {ann.data?.data.length ?? 0}
+          現在 {currentSec.toFixed(1)}s · 表示中 {visible.length} / 全{" "}
+          {ann.data?.data.length ?? 0}
         </Text>
-        {!userId && mode === "addPoint" && (
+        {!userId && drawing && (
           <Text size="xs" c="orange">
             ユーザ未選択: authorId は null になります
           </Text>
@@ -319,6 +464,11 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
           🖼 PNG エクスポート
         </Button>
       </Group>
+      {drawing && (
+        <Text size="xs" c="dimmed">
+          {modeHint(mode)}
+        </Text>
+      )}
       {exportError && (
         <Alert color="orange" onClose={() => setExportError(null)} withCloseButton>
           {exportError}
@@ -335,54 +485,51 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
   );
 }
 
-function drawAnnotation(
-  ctx: CanvasRenderingContext2D,
-  a: Annotation,
-  w: number,
-  h: number,
-) {
-  const geom = a.geometry as Record<string, number>;
-  switch (a.type) {
-    case "point": {
-      const x = Number(geom.x ?? 0) * w;
-      const y = Number(geom.y ?? 0) * h;
-      ctx.fillStyle = "rgba(255, 200, 0, 0.8)";
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(x, y, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      if (a.label) {
-        ctx.fillStyle = "rgba(0,0,0,0.7)";
-        ctx.font = `${Math.max(14, h * 0.025)}px sans-serif`;
-        ctx.fillText(a.label, x + 14, y + 6);
-        ctx.fillStyle = "#fff";
-        ctx.fillText(a.label, x + 12, y + 4);
-      }
-      return;
-    }
-    case "rect": {
-      const x = Number(geom.x ?? 0) * w;
-      const y = Number(geom.y ?? 0) * h;
-      const rw = Number(geom.w ?? 0) * w;
-      const rh = Number(geom.h ?? 0) * h;
-      ctx.fillStyle = "rgba(255, 80, 80, 0.15)";
-      ctx.strokeStyle = "rgba(255, 80, 80, 0.9)";
-      ctx.lineWidth = 3;
-      ctx.fillRect(x, y, rw, rh);
-      ctx.strokeRect(x, y, rw, rh);
-      return;
-    }
+function ToolButton({
+  mode,
+  current,
+  label,
+  onClick,
+  color,
+}: {
+  mode: Mode;
+  current: Mode;
+  label: string;
+  onClick: (m: Mode) => void;
+  color: string;
+}) {
+  const active = current === mode;
+  return (
+    <Button
+      size="xs"
+      variant={active ? "filled" : "default"}
+      color={active ? color : undefined}
+      onClick={() => onClick(active ? "off" : mode)}
+    >
+      {label}
+    </Button>
+  );
+}
+
+function modeHint(m: Mode): string {
+  switch (m) {
+    case "point":
+      return "動画上をクリックして点を配置";
+    case "rect":
+      return "対角線をドラッグして矩形を作成";
+    case "arrow":
+      return "矢印の根元から先端へドラッグ";
+    case "text":
+      return "テキストを入力して動画上をクリック";
+    case "liveInk":
+      return "ドラッグで一時的なストロークを描画 (数秒で消える)";
     default:
-      return;
+      return "";
   }
 }
 
 function LiveInkLayer({ strokes }: { strokes: RemoteStroke[] }) {
   if (strokes.length === 0) return null;
-  // Render an SVG layer sized to the parent. ViewBox is 0..1 so points map
-  // directly. Older strokes fade via opacity.
   return (
     <svg
       viewBox="0 0 1 1"
@@ -419,56 +566,6 @@ function pointsToPath(points: InkPoint[]): string {
   return d;
 }
 
-function AnnotationOverlay({ a }: { a: Annotation }) {
-  const geom = a.geometry as Record<string, number>;
-  switch (a.type) {
-    case "point": {
-      const x = Number(geom.x ?? 0);
-      const y = Number(geom.y ?? 0);
-      return (
-        <div
-          style={{
-            position: "absolute",
-            left: `${x * 100}%`,
-            top: `${y * 100}%`,
-            transform: "translate(-50%, -50%)",
-            width: 18,
-            height: 18,
-            borderRadius: "50%",
-            background: "rgba(255, 200, 0, 0.8)",
-            border: "2px solid #fff",
-            boxShadow: "0 0 0 1px rgba(0,0,0,0.4)",
-          }}
-          title={a.label}
-        />
-      );
-    }
-    case "rect": {
-      const x = Number(geom.x ?? 0);
-      const y = Number(geom.y ?? 0);
-      const w = Number(geom.w ?? 0);
-      const h = Number(geom.h ?? 0);
-      return (
-        <div
-          style={{
-            position: "absolute",
-            left: `${x * 100}%`,
-            top: `${y * 100}%`,
-            width: `${w * 100}%`,
-            height: `${h * 100}%`,
-            border: "2px solid rgba(255, 80, 80, 0.9)",
-            background: "rgba(255, 80, 80, 0.15)",
-          }}
-          title={a.label}
-        />
-      );
-    }
-    default:
-      // arrow / path / text not rendered yet in this minimal cut.
-      return null;
-  }
-}
-
 function AnnotationTable({
   annotations,
   onSeek,
@@ -502,7 +599,11 @@ function AnnotationTable({
         {annotations.map((a) => (
           <Table.Tr key={a.id}>
             <Table.Td>
-              <Button size="compact-xs" variant="subtle" onClick={() => onSeek(a.startOffsetSec)}>
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                onClick={() => onSeek(a.startOffsetSec)}
+              >
                 {a.startOffsetSec.toFixed(1)}s
               </Button>
             </Table.Td>

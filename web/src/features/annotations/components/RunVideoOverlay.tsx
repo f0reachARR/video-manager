@@ -5,8 +5,8 @@
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { Annotation } from "../../../lib/api/client";
 import { useAnnotations, useCreateAnnotation } from "../api/queries";
+import { AnnotationLayer } from "../lib/shapes";
 import { useWebSocketPublisher } from "../../../lib/realtime";
 
 export type OverlayMode = "off" | "addPoint" | "liveInk";
@@ -196,61 +196,10 @@ export function RunVideoOverlay({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      {visibleAnnotations.map((a) => (
-        <AnnotationShape key={a.id} a={a} />
-      ))}
+      <AnnotationLayer annotations={visibleAnnotations} />
       <LiveInkLayer strokes={strokes} />
     </div>
   );
-}
-
-function AnnotationShape({ a }: { a: Annotation }) {
-  const geom = a.geometry as Record<string, number>;
-  switch (a.type) {
-    case "point": {
-      const x = Number(geom.x ?? 0);
-      const y = Number(geom.y ?? 0);
-      return (
-        <div
-          style={{
-            position: "absolute",
-            left: `${x * 100}%`,
-            top: `${y * 100}%`,
-            transform: "translate(-50%, -50%)",
-            width: 18,
-            height: 18,
-            borderRadius: "50%",
-            background: "rgba(255, 200, 0, 0.8)",
-            border: "2px solid #fff",
-            boxShadow: "0 0 0 1px rgba(0,0,0,0.4)",
-          }}
-          title={a.label}
-        />
-      );
-    }
-    case "rect": {
-      const x = Number(geom.x ?? 0);
-      const y = Number(geom.y ?? 0);
-      const w = Number(geom.w ?? 0);
-      const h = Number(geom.h ?? 0);
-      return (
-        <div
-          style={{
-            position: "absolute",
-            left: `${x * 100}%`,
-            top: `${y * 100}%`,
-            width: `${w * 100}%`,
-            height: `${h * 100}%`,
-            border: "2px solid rgba(255, 80, 80, 0.9)",
-            background: "rgba(255, 80, 80, 0.15)",
-          }}
-          title={a.label}
-        />
-      );
-    }
-    default:
-      return null;
-  }
 }
 
 function LiveInkLayer({ strokes }: { strokes: RemoteStroke[] }) {
