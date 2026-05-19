@@ -196,7 +196,6 @@ type Run struct {
 	ScenarioID  pgtype.UUID
 	MatchID     pgtype.UUID
 	StartedAt   pgtype.Timestamptz
-	EndedAt     pgtype.Timestamptz
 	Score       *float64
 	Memo        string
 	CreatedAt   pgtype.Timestamptz

@@ -12,9 +12,9 @@ import (
 )
 
 const createRun = `-- name: CreateRun :one
-INSERT INTO runs (session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, duration_sec)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at, duration_sec
+INSERT INTO runs (session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, duration_sec)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec
 `
 
 type CreateRunParams struct {
@@ -24,7 +24,6 @@ type CreateRunParams struct {
 	ScenarioID  pgtype.UUID
 	MatchID     pgtype.UUID
 	StartedAt   pgtype.Timestamptz
-	EndedAt     pgtype.Timestamptz
 	Score       *float64
 	Memo        string
 	DurationSec int32
@@ -38,7 +37,6 @@ func (q *Queries) CreateRun(ctx context.Context, arg CreateRunParams) (Run, erro
 		arg.ScenarioID,
 		arg.MatchID,
 		arg.StartedAt,
-		arg.EndedAt,
 		arg.Score,
 		arg.Memo,
 		arg.DurationSec,
@@ -52,7 +50,6 @@ func (q *Queries) CreateRun(ctx context.Context, arg CreateRunParams) (Run, erro
 		&i.ScenarioID,
 		&i.MatchID,
 		&i.StartedAt,
-		&i.EndedAt,
 		&i.Score,
 		&i.Memo,
 		&i.CreatedAt,
@@ -74,7 +71,7 @@ func (q *Queries) DeleteRun(ctx context.Context, id pgtype.UUID) (int64, error) 
 }
 
 const getRun = `-- name: GetRun :one
-SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at, duration_sec FROM runs WHERE id = $1
+SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec FROM runs WHERE id = $1
 `
 
 func (q *Queries) GetRun(ctx context.Context, id pgtype.UUID) (Run, error) {
@@ -88,7 +85,6 @@ func (q *Queries) GetRun(ctx context.Context, id pgtype.UUID) (Run, error) {
 		&i.ScenarioID,
 		&i.MatchID,
 		&i.StartedAt,
-		&i.EndedAt,
 		&i.Score,
 		&i.Memo,
 		&i.CreatedAt,
@@ -144,7 +140,7 @@ func (q *Queries) ListRecommendedVideosForRun(ctx context.Context, id pgtype.UUI
 }
 
 const listRunsPage = `-- name: ListRunsPage :many
-SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at, duration_sec
+SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec
 FROM runs
 WHERE
   ($2::uuid IS NULL OR session_id = $2::uuid)
@@ -194,7 +190,6 @@ func (q *Queries) ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]R
 			&i.ScenarioID,
 			&i.MatchID,
 			&i.StartedAt,
-			&i.EndedAt,
 			&i.Score,
 			&i.Memo,
 			&i.CreatedAt,
@@ -211,7 +206,7 @@ func (q *Queries) ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]R
 }
 
 const searchRuns = `-- name: SearchRuns :many
-SELECT r.id, r.session_id, r.team_id, r.robot_id, r.scenario_id, r.match_id, r.started_at, r.ended_at, r.score, r.memo, r.created_at, r.duration_sec
+SELECT r.id, r.session_id, r.team_id, r.robot_id, r.scenario_id, r.match_id, r.started_at, r.score, r.memo, r.created_at, r.duration_sec
 FROM runs r
 WHERE
   ($2::timestamptz IS NULL OR r.started_at >= $2::timestamptz)
@@ -279,7 +274,6 @@ func (q *Queries) SearchRuns(ctx context.Context, arg SearchRunsParams) ([]Run, 
 			&i.ScenarioID,
 			&i.MatchID,
 			&i.StartedAt,
-			&i.EndedAt,
 			&i.Score,
 			&i.Memo,
 			&i.CreatedAt,
@@ -302,12 +296,11 @@ SET
   scenario_id = COALESCE($2::uuid, scenario_id),
   match_id = CASE WHEN $3::bool THEN $4::uuid ELSE match_id END,
   started_at = COALESCE($5::timestamptz, started_at),
-  ended_at = COALESCE($6::timestamptz, ended_at),
-  score = CASE WHEN $7::bool THEN $8::float8 ELSE score END,
-  memo = COALESCE($9, memo),
-  duration_sec = COALESCE($10::int, duration_sec)
-WHERE id = $11
-RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at, duration_sec
+  score = CASE WHEN $6::bool THEN $7::float8 ELSE score END,
+  memo = COALESCE($8, memo),
+  duration_sec = COALESCE($9::int, duration_sec)
+WHERE id = $10
+RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec
 `
 
 type UpdateRunParams struct {
@@ -316,7 +309,6 @@ type UpdateRunParams struct {
 	MatchIDSet  bool
 	MatchID     pgtype.UUID
 	StartedAt   pgtype.Timestamptz
-	EndedAt     pgtype.Timestamptz
 	ScoreSet    bool
 	Score       *float64
 	Memo        *string
@@ -331,7 +323,6 @@ func (q *Queries) UpdateRun(ctx context.Context, arg UpdateRunParams) (Run, erro
 		arg.MatchIDSet,
 		arg.MatchID,
 		arg.StartedAt,
-		arg.EndedAt,
 		arg.ScoreSet,
 		arg.Score,
 		arg.Memo,
@@ -347,7 +338,6 @@ func (q *Queries) UpdateRun(ctx context.Context, arg UpdateRunParams) (Run, erro
 		&i.ScenarioID,
 		&i.MatchID,
 		&i.StartedAt,
-		&i.EndedAt,
 		&i.Score,
 		&i.Memo,
 		&i.CreatedAt,

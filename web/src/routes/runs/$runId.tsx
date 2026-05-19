@@ -21,6 +21,7 @@ import {
   Textarea,
   Title,
 } from "@mantine/core";
+import { DateTimePicker } from "@mantine/dates";
 import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -52,6 +53,7 @@ import {
   useVideos,
 } from "../../lib/queries";
 import { useCurrentUserId } from "../../lib/currentUser";
+import { formatDateTimeShort } from "../../lib/datetime";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useTopicSubscription,
@@ -185,9 +187,18 @@ function RunDetailPage() {
             </Button>
             <Title order={2}>Run 詳細</Title>
           </Group>
-          <Text size="xs" c="dimmed" ff="monospace">
-            {r.id}
-          </Text>
+          <Group gap="xs">
+            <Text size="xs" c="dimmed">
+              <span title={new Date(r.startedAt).toLocaleString()}>
+                ▶ {formatDateTimeShort(r.startedAt)}
+              </span>
+              {" / "}
+              {r.durationSec ?? 0}s
+            </Text>
+            <Text size="xs" c="dimmed" ff="monospace">
+              {r.id}
+            </Text>
+          </Group>
         </Stack>
         <Button
           size="xs"
@@ -464,7 +475,15 @@ function SyncPlayer({
     }
   }, [videos, mainAngleId]);
 
-  // rAF loop drives the shared timeline from the main video's currentTime.
+  // Wall-clock anchor for the playhead. We DON'T derive `t` from the main
+  // video's currentTime anymore because that breaks during gaps (no video
+  // means nothing to drive the clock). Instead the rAF loop walks the clock
+  // forward from a known (t, wall-time) anchor and steers each <video> to
+  // match. togglePlay / seek reset the anchor.
+  const playAnchorT = useRef(0);
+  const playAnchorWall = useRef(0);
+
+  // rAF loop drives the shared timeline from a wall clock anchor.
   useEffect(() => {
     if (!playing) {
       if (animationRef.current !== null) {
@@ -474,49 +493,38 @@ function SyncPlayer({
       return;
     }
     const tick = (now: number) => {
-      const mainEl = mainAngleId ? refs.current.get(mainAngleId) : null;
-      if (mainEl) {
-        const mainV = videos.find((v) => v.id === mainAngleId);
-        if (mainV) {
-          // Run timeline t = main video's currentTime mapped back through this
-          // angle's videoOffsetStartSec + its runOffsetSec.
-          const newT = Math.min(
-            runDurationSec,
-            Math.max(
-              0,
-              mainEl.currentTime - mainV.videoOffsetStartSec + (mainV.runOffsetSec ?? 0),
-            ),
-          );
-          // Only push when changed by >=50ms to avoid floods.
-          if (Math.abs(newT - lastT.current) > 0.05) {
-            lastT.current = newT;
-            setT(newT);
-            // Drive other angles. Each angle's source time is
-            //   videoOffsetStartSec + (runT - runOffsetSec)
-            // and is only valid when runT is within [runOffset, runOffset+len].
-            for (const v of videos) {
-              if (v.id === mainAngleId) continue;
-              const el = refs.current.get(v.id);
-              if (!el) continue;
-              const runOff = v.runOffsetSec ?? 0;
-              const len = v.videoOffsetEndSec - v.videoOffsetStartSec;
-              if (newT < runOff || newT > runOff + len) {
-                if (!el.paused) el.pause();
-                continue;
-              }
-              const target = v.videoOffsetStartSec + (newT - runOff);
-              if (Math.abs(el.currentTime - target) > 0.25) {
-                el.currentTime = target;
-              }
-              // If main is playing and we're back in range, resume.
-              if (el.paused) void el.play().catch(() => {});
-            }
-            if (newT >= runDurationSec) {
-              setPlaying(false);
-              return;
-            }
-          }
+      const elapsed = (now - playAnchorWall.current) / 1000;
+      const newT = Math.min(
+        runDurationSec,
+        Math.max(0, playAnchorT.current + elapsed),
+      );
+
+      // Steer every video to (newT - runOffset). Out-of-range angles get
+      // paused; the next tick that lands inside their window will re-play
+      // them. Includes the main angle — the wall clock is the ground truth.
+      for (const v of videos) {
+        const el = refs.current.get(v.id);
+        if (!el) continue;
+        const runOff = v.runOffsetSec ?? 0;
+        const len = v.videoOffsetEndSec - v.videoOffsetStartSec;
+        if (newT < runOff || newT > runOff + len) {
+          if (!el.paused) el.pause();
+          continue;
         }
+        const target = v.videoOffsetStartSec + (newT - runOff);
+        if (Math.abs(el.currentTime - target) > 0.25) {
+          el.currentTime = target;
+        }
+        if (el.paused) void el.play().catch(() => {});
+      }
+
+      if (Math.abs(newT - lastT.current) > 0.05) {
+        lastT.current = newT;
+        setT(newT);
+      }
+      if (newT >= runDurationSec) {
+        setPlaying(false);
+        return;
       }
       lastPlaybackTime.current = now;
       animationRef.current = requestAnimationFrame(tick);
@@ -531,6 +539,10 @@ function SyncPlayer({
   const seek = (newT: number, opts: { broadcast?: boolean } = {}) => {
     lastT.current = newT;
     setT(newT);
+    // Reset the wall-clock anchor so the rAF tick keeps walking forward from
+    // the new position rather than jumping back.
+    playAnchorT.current = newT;
+    playAnchorWall.current = performance.now();
     for (const v of videos) {
       const el = refs.current.get(v.id);
       if (!el) continue;
@@ -644,8 +656,10 @@ function SyncPlayer({
       broadcastPresence();
       return;
     }
-    // Sync each angle to (t - runOffset). Angles outside their coverage stay
-    // paused; the rAF loop resumes them when t enters their range.
+    // Anchor the wall clock to the current t. The rAF loop will then walk
+    // forward from here even if no video is in range yet (pre-video gap).
+    playAnchorT.current = t;
+    playAnchorWall.current = performance.now();
     for (const v of videos) {
       const el = refs.current.get(v.id);
       if (!el) continue;
@@ -1660,6 +1674,7 @@ function AnglesTimeline({
 }) {
   const videos = run.videos ?? [];
   const update = useUpdateRunVideo();
+  const updateRun = useUpdateRun();
   const trackRef = useRef<HTMLDivElement>(null);
 
   type DragKind = "move" | "trim-start" | "trim-end";
@@ -1680,7 +1695,13 @@ function AnglesTimeline({
 
   if (videos.length === 0 || durationSec <= 0) return null;
 
-  const pxPerSec = (rect: DOMRect) => rect.width / durationSec;
+  // The label gutter on the left of each track. The bar area starts after
+  // this many pixels; everything that maps "Run time -> screen X" has to
+  // account for it (drag math + playhead positioning).
+  const LABEL_GUTTER = 84;
+
+  const pxPerSec = (rect: DOMRect) =>
+    Math.max(0, rect.width - LABEL_GUTTER) / durationSec;
 
   const onPointerDown =
     (rv: RunVideo, kind: DragKind) => (e: React.PointerEvent) => {
@@ -1736,6 +1757,12 @@ function AnglesTimeline({
     if (p.runOff !== drag.initRunOff) body.runOffsetSec = p.runOff;
     if (p.vStart !== drag.initVStart) body.videoOffsetStartSec = p.vStart;
     if (p.vEnd !== drag.initVEnd) body.videoOffsetEndSec = p.vEnd;
+
+    // If the new bar extends past the current Run duration, bump it so the
+    // user doesn't have to manually grow durationSec to keep the angle visible.
+    const newEnd = p.runOff + (p.vEnd - p.vStart);
+    const needsExtend = newEnd > durationSec;
+
     if (Object.keys(body).length > 0) {
       update.mutate(
         { runId: run.id, runVideoId: drag.rvId, body },
@@ -1749,6 +1776,12 @@ function AnglesTimeline({
           },
         },
       );
+      if (needsExtend) {
+        updateRun.mutate({
+          id: run.id,
+          body: { durationSec: Math.ceil(newEnd) },
+        });
+      }
     } else {
       setPending((cur) => {
         const next = new Map(cur);
@@ -1776,29 +1809,33 @@ function AnglesTimeline({
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         >
+          {/* Playhead — spans the whole track stack, positioned inside the
+              bar area (after the LABEL_GUTTER), so its X aligns with every
+              track's leftPct=0 reference. */}
+          <div
+            style={{
+              position: "absolute",
+              left: `calc(${LABEL_GUTTER}px + (100% - ${LABEL_GUTTER}px) * ${Math.min(1, Math.max(0, currentSec / durationSec))})`,
+              top: 0,
+              bottom: 0,
+              width: 2,
+              transform: "translateX(-1px)",
+              background: "var(--mantine-color-blue-6)",
+              opacity: 0.7,
+              pointerEvents: "none",
+              zIndex: 2,
+            }}
+          />
           {/* Background grid + scale */}
           <div
             style={{
               position: "relative",
               height: 18,
               borderBottom: "1px solid var(--mantine-color-default-border)",
+              paddingLeft: LABEL_GUTTER,
             }}
           >
-            {/* Current playhead */}
-            <div
-              style={{
-                position: "absolute",
-                left: `${(currentSec / durationSec) * 100}%`,
-                top: 0,
-                bottom: -videos.length * 32,
-                width: 2,
-                background: "var(--mantine-color-blue-6)",
-                opacity: 0.7,
-                pointerEvents: "none",
-                zIndex: 2,
-              }}
-            />
-            <Text size="xs" c="dimmed" style={{ position: "absolute", left: 0 }}>
+            <Text size="xs" c="dimmed" style={{ position: "absolute", left: LABEL_GUTTER }}>
               0
             </Text>
             <Text
@@ -1977,6 +2014,7 @@ function RunMetadataEditor({
   onSave: (body: {
     robotId?: string;
     scenarioId?: string;
+    startedAt?: string;
     durationSec?: number;
     score?: number | null;
     memo?: string;
@@ -1985,14 +2023,17 @@ function RunMetadataEditor({
 }) {
   const [robotId, setRobotId] = useState<string>(run.robotId);
   const [scenarioId, setScenarioId] = useState<string>(run.scenarioId);
+  const [startedAt, setStartedAt] = useState<Date | null>(new Date(run.startedAt));
   const [durationSec, setDurationSec] = useState<number | "">(
     run.durationSec ?? 0,
   );
   const [score, setScore] = useState<number | "">(run.score ?? "");
   const [memo, setMemo] = useState<string>(run.memo);
+  const startedAtIso = startedAt?.toISOString();
   const dirty =
     robotId !== run.robotId ||
     scenarioId !== run.scenarioId ||
+    (startedAtIso !== undefined && startedAtIso !== run.startedAt) ||
     (durationSec === "" ? 0 : durationSec) !== (run.durationSec ?? 0) ||
     (score === "" ? null : score) !== (run.score ?? null) ||
     memo !== run.memo;
@@ -2014,9 +2055,15 @@ function RunMetadataEditor({
         />
       </Group>
       <Group grow>
+        <DateTimePicker
+          label="開始時刻"
+          value={startedAt}
+          onChange={(v) => setStartedAt(v ? new Date(v) : null)}
+          withSeconds
+        />
         <NumberInput
           label="Duration (sec)"
-          description="Run のタイムライン長"
+          description="終了時刻は開始 + Duration"
           value={durationSec}
           min={0}
           onChange={(v) => setDurationSec(typeof v === "number" ? v : "")}
@@ -2043,6 +2090,7 @@ function RunMetadataEditor({
             onSave({
               robotId,
               scenarioId,
+              startedAt: startedAt?.toISOString(),
               durationSec: Math.max(
                 0,
                 Math.round(typeof durationSec === "number" ? durationSec : 0),

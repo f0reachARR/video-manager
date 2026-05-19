@@ -18,6 +18,7 @@ import { useMemo, useState } from "react";
 
 import { ResourcePage } from "../../components/ResourcePage";
 import type { Run } from "../../lib/api/client";
+import { formatDateTimeShort } from "../../lib/datetime";
 import {
   useCreateRun,
   useDeleteRun,
@@ -130,11 +131,14 @@ function RunsPage() {
               <Table.Td>{nameMaps.scenarioNames.get(r.scenarioId) ?? r.scenarioId}</Table.Td>
               <Table.Td>{nameMaps.teamNames.get(r.teamId) ?? r.teamId}</Table.Td>
               <Table.Td>
-                <Text size="xs">
-                  {new Date(r.startedAt).toLocaleString()}
+                <Text
+                  size="xs"
+                  title={new Date(r.startedAt).toLocaleString()}
+                >
+                  {formatDateTimeShort(r.startedAt)}
                 </Text>
                 <Text size="xs" c="dimmed">
-                  〜 {new Date(r.endedAt).toLocaleString()}
+                  +{r.durationSec ?? 0}s
                 </Text>
               </Table.Td>
               <Table.Td>{r.score != null ? r.score : "—"}</Table.Td>
@@ -197,14 +201,16 @@ function RunCreateModal({ opened, onClose }: { opened: boolean; onClose: () => v
   const [robotId, setRobotId] = useState<string | null>(null);
   const [scenarioId, setScenarioId] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<Date | null>(null);
-  const [endedAt, setEndedAt] = useState<Date | null>(null);
+  const [durationSec, setDurationSec] = useState<number | "">(90);
   const [score, setScore] = useState<number | "">("");
   const [memo, setMemo] = useState("");
 
   const submit = () => {
-    if (!sessionId || !teamId || !robotId || !scenarioId || !startedAt || !endedAt) {
+    if (!sessionId || !teamId || !robotId || !scenarioId || !startedAt) {
       return;
     }
+    const dur =
+      typeof durationSec === "number" && durationSec > 0 ? durationSec : 0;
     create.mutate(
       {
         sessionId,
@@ -212,7 +218,7 @@ function RunCreateModal({ opened, onClose }: { opened: boolean; onClose: () => v
         robotId,
         scenarioId,
         startedAt: startedAt.toISOString(),
-        endedAt: endedAt.toISOString(),
+        durationSec: Math.max(0, Math.round(dur)),
         score: score === "" ? null : score,
         memo,
       },
@@ -260,10 +266,12 @@ function RunCreateModal({ opened, onClose }: { opened: boolean; onClose: () => v
             value={startedAt}
             onChange={setStartedAt}
           />
-          <DateTimeWithQuickAdjust
-            label="終了"
-            value={endedAt}
-            onChange={setEndedAt}
+          <NumberInput
+            label="Duration (sec)"
+            description="終了時刻は開始 + Duration で自動計算"
+            value={durationSec}
+            min={0}
+            onChange={(v) => setDurationSec(typeof v === "number" ? v : "")}
           />
         </Group>
         <NumberInput
@@ -286,7 +294,7 @@ function RunCreateModal({ opened, onClose }: { opened: boolean; onClose: () => v
           <Button
             onClick={submit}
             loading={create.isPending}
-            disabled={!sessionId || !teamId || !robotId || !scenarioId || !startedAt || !endedAt}
+            disabled={!sessionId || !teamId || !robotId || !scenarioId || !startedAt}
           >
             作成
           </Button>

@@ -1,6 +1,6 @@
 -- name: CreateRun :one
-INSERT INTO runs (session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, duration_sec)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO runs (session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, duration_sec)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: GetRun :one
@@ -26,7 +26,6 @@ SET
   scenario_id = COALESCE(sqlc.narg('scenario_id')::uuid, scenario_id),
   match_id = CASE WHEN sqlc.arg('match_id_set')::bool THEN sqlc.narg('match_id')::uuid ELSE match_id END,
   started_at = COALESCE(sqlc.narg('started_at')::timestamptz, started_at),
-  ended_at = COALESCE(sqlc.narg('ended_at')::timestamptz, ended_at),
   score = CASE WHEN sqlc.arg('score_set')::bool THEN sqlc.narg('score')::float8 ELSE score END,
   memo = COALESCE(sqlc.narg('memo'), memo),
   duration_sec = COALESCE(sqlc.narg('duration_sec')::int, duration_sec)

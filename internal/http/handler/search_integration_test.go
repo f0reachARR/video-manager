@@ -17,25 +17,25 @@ func TestSearchRunsCombinedFilters(t *testing.T) {
 	rec := env.do(t, http.MethodPost, "/tags", map[string]any{"name": "b"}, &tagB)
 	mustStatus(t, rec, http.StatusCreated)
 
-	create := func(start, end, memo string, tagIDs []string) string {
+	create := func(start, memo string, tagIDs []string) string {
 		var r runResp
 		rec := env.do(t, http.MethodPost, "/runs", map[string]any{
-			"sessionId":  deps.SessionID,
-			"teamId":     deps.TeamID,
-			"robotId":    deps.RobotID,
-			"scenarioId": deps.ScenarioID,
-			"startedAt":  start,
-			"endedAt":    end,
-			"memo":       memo,
-			"tagIds":     tagIDs,
+			"sessionId":   deps.SessionID,
+			"teamId":      deps.TeamID,
+			"robotId":     deps.RobotID,
+			"scenarioId":  deps.ScenarioID,
+			"startedAt":   start,
+			"durationSec": 60,
+			"memo":        memo,
+			"tagIds":      tagIDs,
 		}, &r)
 		mustStatus(t, rec, http.StatusCreated)
 		return r.ID
 	}
 
-	r1 := create("2026-05-01T09:00:00Z", "2026-05-01T09:01:00Z", "good run", []string{deps.TagID})
-	r2 := create("2026-05-02T09:00:00Z", "2026-05-02T09:01:00Z", "bad weather", []string{deps.TagID, tagB.ID})
-	r3 := create("2026-05-03T09:00:00Z", "2026-05-03T09:01:00Z", "ok", nil)
+	r1 := create("2026-05-01T09:00:00Z", "good run", []string{deps.TagID})
+	r2 := create("2026-05-02T09:00:00Z", "bad weather", []string{deps.TagID, tagB.ID})
+	r3 := create("2026-05-03T09:00:00Z", "ok", nil)
 
 	// Add a success marker on r2.
 	rec = env.do(t, http.MethodPost, "/runs/"+r2+"/markers",
@@ -98,8 +98,8 @@ func TestSearchRunsCursor(t *testing.T) {
 			"teamId":     deps.TeamID,
 			"robotId":    deps.RobotID,
 			"scenarioId": deps.ScenarioID,
-			"startedAt":  "2026-05-0" + string(rune('1'+i)) + "T09:00:00Z",
-			"endedAt":    "2026-05-0" + string(rune('1'+i)) + "T09:01:00Z",
+			"startedAt":   "2026-05-0" + string(rune('1'+i)) + "T09:00:00Z",
+			"durationSec": 60,
 		}, &r)
 		mustStatus(t, rec, http.StatusCreated)
 	}

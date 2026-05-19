@@ -23,8 +23,8 @@ func TestTeamMarkerStatsAggregates(t *testing.T) {
 		"teamId":     deps.TeamID,
 		"robotId":    deps.RobotID,
 		"scenarioId": deps.ScenarioID,
-		"startedAt":  "2026-05-02T10:00:00Z",
-		"endedAt":    "2026-05-02T10:01:30Z",
+		"startedAt":   "2026-05-02T10:00:00Z",
+		"durationSec": 90,
 	}, &r2)
 	mustStatus(t, rec, http.StatusCreated)
 
@@ -36,8 +36,8 @@ func TestTeamMarkerStatsAggregates(t *testing.T) {
 		"teamId":     deps.TeamID,
 		"robotId":    deps.RobotID,
 		"scenarioId": deps.ScenarioID,
-		"startedAt":  "2026-05-01T10:00:00Z",
-		"endedAt":    "2026-05-01T10:01:30Z",
+		"startedAt":   "2026-05-01T10:00:00Z",
+		"durationSec": 90,
 	}, &r1)
 	mustStatus(t, rec, http.StatusCreated)
 

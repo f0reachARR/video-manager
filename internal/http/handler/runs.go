@@ -67,7 +67,7 @@ func toRunDTO(r sqlc.Run, videos []sqlc.RunVideo, tagIDs []pgtype.UUID) runDTO {
 		ScenarioID:  uuidString(r.ScenarioID),
 		MatchID:     matchID,
 		StartedAt:   r.StartedAt.Time,
-		EndedAt:     r.EndedAt.Time,
+		EndedAt:     r.StartedAt.Time.Add(time.Duration(r.DurationSec) * time.Second),
 		DurationSec: r.DurationSec,
 		Score:       r.Score,
 		Memo:        r.Memo,
@@ -93,7 +93,6 @@ type createRunRequest struct {
 	ScenarioID  string    `json:"scenarioId"`
 	MatchID     *string   `json:"matchId"`
 	StartedAt   time.Time `json:"startedAt"`
-	EndedAt     time.Time `json:"endedAt"`
 	DurationSec *int32    `json:"durationSec"`
 	Score       *float64  `json:"score"`
 	Memo        *string   `json:"memo"`
@@ -108,7 +107,6 @@ type updateRunRequest struct {
 	ScenarioID  *string           `json:"scenarioId"`
 	MatchID     Optional[string]  `json:"matchId"`
 	StartedAt   *time.Time        `json:"startedAt"`
-	EndedAt     *time.Time        `json:"endedAt"`
 	DurationSec *int32            `json:"durationSec"`
 	Score       Optional[float64] `json:"score"`
 	Memo        *string           `json:"memo"`
@@ -211,10 +209,6 @@ func (h *Runs) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "validation", "invalid matchId", nil)
 		return
 	}
-	if !req.StartedAt.Before(req.EndedAt) && !req.StartedAt.Equal(req.EndedAt) {
-		writeError(w, http.StatusUnprocessableEntity, "validation", "endedAt must be >= startedAt", nil)
-		return
-	}
 	memo := ""
 	if req.Memo != nil {
 		memo = *req.Memo
@@ -234,7 +228,6 @@ func (h *Runs) Create(w http.ResponseWriter, r *http.Request) {
 		ScenarioID:  scenarioID,
 		MatchID:     matchID,
 		StartedAt:   pgtypeTimestamptz(req.StartedAt),
-		EndedAt:     pgtypeTimestamptz(req.EndedAt),
 		Score:       req.Score,
 		Memo:        memo,
 		DurationSec: duration,
@@ -351,9 +344,6 @@ func (h *Runs) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.StartedAt != nil {
 		params.StartedAt = pgtypeTimestamptz(*req.StartedAt)
-	}
-	if req.EndedAt != nil {
-		params.EndedAt = pgtypeTimestamptz(*req.EndedAt)
 	}
 	if req.DurationSec != nil {
 		if *req.DurationSec < 0 {

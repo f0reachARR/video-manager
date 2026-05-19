@@ -39,8 +39,8 @@ func createBasicRun(t *testing.T, env *testEnv) (runID, userID string) {
 		"teamId":     deps.TeamID,
 		"robotId":    deps.RobotID,
 		"scenarioId": deps.ScenarioID,
-		"startedAt":  "2026-05-01T10:00:00Z",
-		"endedAt":    "2026-05-01T10:01:30Z",
+		"startedAt":   "2026-05-01T10:00:00Z",
+		"durationSec": 90,
 	}, &run)
 	mustStatus(t, rec, http.StatusCreated)
 	return run.ID, user.ID

@@ -1074,6 +1074,7 @@ export interface components {
              */
             videoId?: string | null;
         };
+        /** @description `endedAt` はサーバー側で `startedAt + durationSec` から計算したレスポンス専用の値で、更新時は `startedAt` と `durationSec` を渡す。 */
         Run: {
             /** Format: uuid */
             id: string;
@@ -1114,8 +1115,6 @@ export interface components {
             matchId?: string | null;
             /** Format: date-time */
             startedAt: string;
-            /** Format: date-time */
-            endedAt: string;
             durationSec?: number;
             score?: number | null;
             /** @default  */
@@ -1133,8 +1132,6 @@ export interface components {
             matchId?: string | null;
             /** Format: date-time */
             startedAt?: string;
-            /** Format: date-time */
-            endedAt?: string;
             durationSec?: number;
             score?: number | null;
             memo?: string;

@@ -431,16 +431,13 @@ function CreateRunFromVideosModal({
     const now = new Date();
     const dur =
       typeof duration === "number" && duration > 0 ? duration : maxDur || 0;
-    const startedAt = now;
-    const endedAt = new Date(now.getTime() + dur * 1000);
     create.mutate(
       {
         sessionId,
         teamId,
         robotId,
         scenarioId,
-        startedAt: startedAt.toISOString(),
-        endedAt: endedAt.toISOString(),
+        startedAt: now.toISOString(),
         durationSec: Math.max(0, Math.round(dur)),
         memo,
         videos: videos.map((v) => ({

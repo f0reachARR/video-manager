@@ -103,9 +103,9 @@ func TestRunsCRUDAndPatchSemantics(t *testing.T) {
 		"teamId":     deps.TeamID,
 		"robotId":    deps.RobotID,
 		"scenarioId": deps.ScenarioID,
-		"startedAt":  "2026-05-01T10:00:00Z",
-		"endedAt":    "2026-05-01T10:01:30Z",
-		"memo":       "hello",
+		"startedAt":   "2026-05-01T10:00:00Z",
+		"durationSec": 90,
+		"memo":        "hello",
 		"score":      42.5,
 		"tagIds":     []string{deps.TagID},
 	}, &run)
@@ -188,8 +188,7 @@ func TestRunsCreateValidatesUUIDs(t *testing.T) {
 		"teamId":     "00000000-0000-0000-0000-000000000000",
 		"robotId":    "00000000-0000-0000-0000-000000000000",
 		"scenarioId": "00000000-0000-0000-0000-000000000000",
-		"startedAt":  "2026-05-01T10:00:00Z",
-		"endedAt":    "2026-05-01T10:01:00Z",
+		"startedAt": "2026-05-01T10:00:00Z",
 	}, nil)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("expected 422, got %d", rec.Code)
