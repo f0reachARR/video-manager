@@ -1,17 +1,30 @@
 // Compact datetime formatters tuned for the Run UI where we frequently show
-// timestamps inline. Default `toLocaleString()` produces verbose output like
-// "2026/5/19 14:32:01" — too long for table cells / chips. These helpers drop
-// redundant parts depending on how close the value is to "now".
+// timestamps inline. Default `toLocaleString()` produces verbose output that
+// also varies by locale; these helpers always use the Japanese-style
+// "Y/M/D H:M:S" ordering (slashes, 24h), trim the date parts when same-day
+// / same-year, and append a 1/100s fractional tail when the value isn't a
+// whole second.
 
-const pad = (n: number) => n.toString().padStart(2, "0");
+const pad = (n: number, w = 2) => n.toString().padStart(w, "0");
 
 /**
- * Returns a short label suitable for a single-line table cell:
- * - same day → "HH:MM"
- * - same year → "M/D HH:MM"
- * - otherwise → "YYYY/M/D HH:MM"
+ * `HH:MM:SS` (and `.ss` when the value has sub-second precision). Used as the
+ * tail of every multi-component formatter; exported in case a caller wants
+ * just the clock part.
+ */
+export function formatClock(d: Date): string {
+  const ms = d.getMilliseconds();
+  const tail = ms > 0 ? `.${pad(Math.floor(ms / 10))}` : "";
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${tail}`;
+}
+
+/**
+ * Compact label for inline display:
+ * - same day as `now` → `HH:MM:SS[.ss]`
+ * - same year         → `M/D HH:MM:SS[.ss]`
+ * - otherwise         → `Y/M/D HH:MM:SS[.ss]`
  *
- * Pass the now reference if you need deterministic output (tests etc.).
+ * `now` can be passed for deterministic output (tests etc.).
  */
 export function formatDateTimeShort(d: Date | string | number, now = new Date()): string {
   const dt = d instanceof Date ? d : new Date(d);
@@ -21,23 +34,18 @@ export function formatDateTimeShort(d: Date | string | number, now = new Date())
     dt.getMonth() === now.getMonth() &&
     dt.getDate() === now.getDate();
   const sameYear = dt.getFullYear() === now.getFullYear();
-  const time = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  const time = formatClock(dt);
   if (sameDay) return time;
   if (sameYear) return `${dt.getMonth() + 1}/${dt.getDate()} ${time}`;
   return `${dt.getFullYear()}/${dt.getMonth() + 1}/${dt.getDate()} ${time}`;
 }
 
-/** Variant that includes seconds when needed (e.g. tooltips). */
-export function formatDateTimeWithSeconds(d: Date | string | number, now = new Date()): string {
+/** Always-full `Y/M/D HH:MM:SS[.ss]` — for tooltips that need to be unambiguous. */
+export function formatDateTimeFull(d: Date | string | number): string {
   const dt = d instanceof Date ? d : new Date(d);
   if (Number.isNaN(dt.getTime())) return "—";
-  const sameDay =
-    dt.getFullYear() === now.getFullYear() &&
-    dt.getMonth() === now.getMonth() &&
-    dt.getDate() === now.getDate();
-  const sameYear = dt.getFullYear() === now.getFullYear();
-  const time = `${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
-  if (sameDay) return time;
-  if (sameYear) return `${dt.getMonth() + 1}/${dt.getDate()} ${time}`;
-  return `${dt.getFullYear()}/${dt.getMonth() + 1}/${dt.getDate()} ${time}`;
+  return `${dt.getFullYear()}/${dt.getMonth() + 1}/${dt.getDate()} ${formatClock(dt)}`;
 }
+
+// Backwards-compat alias — older code referenced this name.
+export const formatDateTimeWithSeconds = formatDateTimeFull;

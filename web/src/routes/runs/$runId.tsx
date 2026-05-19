@@ -53,7 +53,7 @@ import {
   useVideos,
 } from "../../lib/queries";
 import { useCurrentUserId } from "../../lib/currentUser";
-import { formatDateTimeShort } from "../../lib/datetime";
+import { formatDateTimeFull, formatDateTimeShort } from "../../lib/datetime";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useTopicSubscription,
@@ -189,7 +189,7 @@ function RunDetailPage() {
           </Group>
           <Group gap="xs">
             <Text size="xs" c="dimmed">
-              <span title={new Date(r.startedAt).toLocaleString()}>
+              <span title={formatDateTimeFull(r.startedAt)}>
                 ▶ {formatDateTimeShort(r.startedAt)}
               </span>
               {" / "}

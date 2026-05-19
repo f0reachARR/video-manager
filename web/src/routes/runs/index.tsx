@@ -18,7 +18,7 @@ import { useMemo, useState } from "react";
 
 import { ResourcePage } from "../../components/ResourcePage";
 import type { Run } from "../../lib/api/client";
-import { formatDateTimeShort } from "../../lib/datetime";
+import { formatDateTimeFull, formatDateTimeShort } from "../../lib/datetime";
 import {
   useCreateRun,
   useDeleteRun,
@@ -131,10 +131,7 @@ function RunsPage() {
               <Table.Td>{nameMaps.scenarioNames.get(r.scenarioId) ?? r.scenarioId}</Table.Td>
               <Table.Td>{nameMaps.teamNames.get(r.teamId) ?? r.teamId}</Table.Td>
               <Table.Td>
-                <Text
-                  size="xs"
-                  title={new Date(r.startedAt).toLocaleString()}
-                >
+                <Text size="xs" title={formatDateTimeFull(r.startedAt)}>
                   {formatDateTimeShort(r.startedAt)}
                 </Text>
                 <Text size="xs" c="dimmed">

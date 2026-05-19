@@ -20,7 +20,7 @@ import {
 import { DateTimePicker } from "@mantine/dates";
 import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Upload } from "tus-js-client";
 
 import { AnnotatedPlayer } from "../components/AnnotatedPlayer";
@@ -29,6 +29,7 @@ import { SessionAssignModal } from "../components/SessionAssignModal";
 import { VideoMetadataModal } from "../components/VideoMetadataModal";
 import { type Video, videosApi } from "../lib/api/client";
 import { useCurrentUserId } from "../lib/currentUser";
+import { formatDateTimeFull, formatDateTimeShort } from "../lib/datetime";
 import {
   useCreateRun,
   useDeleteVideo,
@@ -384,7 +385,13 @@ function VideosPage() {
                     : "—"}
                 </Table.Td>
                 <Table.Td>
-                  {v.recordedAt ? new Date(v.recordedAt).toLocaleString() : "—"}
+                  {v.recordedAt ? (
+                    <Text size="xs" title={formatDateTimeFull(v.recordedAt)}>
+                      {formatDateTimeShort(v.recordedAt)}
+                    </Text>
+                  ) : (
+                    "—"
+                  )}
                 </Table.Td>
                 <Table.Td>
                   {v.durationSec != null ? `${v.durationSec}s` : "—"}
@@ -400,7 +407,11 @@ function VideosPage() {
                     </Text>
                   )}
                 </Table.Td>
-                <Table.Td>{new Date(v.createdAt).toLocaleString()}</Table.Td>
+                <Table.Td>
+                  <Text size="xs" title={formatDateTimeFull(v.createdAt)}>
+                    {formatDateTimeShort(v.createdAt)}
+                  </Text>
+                </Table.Td>
                 <Table.Td>
                   <VideoActions video={v} />
                 </Table.Td>
@@ -482,6 +493,27 @@ function CreateRunFromVideosModal({
   const [memo, setMemo] = useState("");
   const [angleLabels, setAngleLabels] = useState<Record<string, string>>({});
   const [runOffsets, setRunOffsets] = useState<Record<string, number>>({});
+
+  // Whenever the Run start moves, re-derive each video's runOffsetSec from
+  // its recording time. This is the headline default: a clip that started 30s
+  // after Run start should sit at runOffset=30 on the timeline. Manual edits
+  // are intentionally overwritten so the offsets stay consistent with the
+  // chosen start; the user re-tweaks afterward if needed.
+  useEffect(() => {
+    if (!startedAt) return;
+    const base = startedAt.getTime();
+    const next: Record<string, number> = {};
+    for (const v of videos) {
+      const ts = v.recordedAt ?? v.createdAt;
+      if (!ts) {
+        next[v.id] = 0;
+        continue;
+      }
+      const delta = (new Date(ts).getTime() - base) / 1000;
+      next[v.id] = Math.max(0, Math.round(delta));
+    }
+    setRunOffsets(next);
+  }, [startedAt, videos]);
 
   const submit = () => {
     if (!sessionId || !teamId || !robotId || !scenarioId || !startedAt) return;
