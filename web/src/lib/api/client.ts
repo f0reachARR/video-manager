@@ -86,6 +86,8 @@ export type MarkerCategory = components["schemas"]["MarkerCategory"];
 export type CreateMarkerRequest = components["schemas"]["CreateMarkerRequest"];
 export type UpdateMarkerRequest = components["schemas"]["UpdateMarkerRequest"];
 
+export type AuthConfig = components["schemas"]["AuthConfig"];
+
 const BASE_URL = "/api";
 
 export class ApiError extends Error {
@@ -126,6 +128,9 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
     ...rest,
     headers: finalHeaders,
     body,
+    // Same-origin is the default, but make it explicit so the session cookie
+    // is reliably sent on requests issued by useEffect on first paint.
+    credentials: rest.credentials ?? "same-origin",
   });
 
   if (res.status === 204) {
@@ -171,6 +176,15 @@ export function fetchReady(): Promise<HealthResponse> {
 }
 
 export type PageParams = { cursor?: string; limit?: number };
+
+// ---- Auth ----
+export const authApi = {
+  config: () => request<AuthConfig>(`/auth/config`),
+  me: () => request<User>(`/auth/me`),
+  logout: () => request<void>(`/auth/logout`, { method: "POST" }),
+  loginHref: (returnTo?: string) =>
+    `${BASE_URL}/auth/login${qs({ return_to: returnTo })}`,
+};
 
 // ---- Users ----
 export const usersApi = {

@@ -32,6 +32,29 @@ type Config struct {
 
 	// HTTP API URL (used by worker nodes if they need to call back; reserved).
 	APIBaseURL string `env:"API_BASE_URL" envDefault:""`
+
+	// OIDC / authentication. When OIDCIssuerURL is empty, OIDC is disabled
+	// entirely and only the dev-bypass path (X-User-Id header) works.
+	OIDCIssuerURL     string   `env:"OIDC_ISSUER_URL" envDefault:""`
+	OIDCClientID      string   `env:"OIDC_CLIENT_ID" envDefault:""`
+	OIDCClientSecret  string   `env:"OIDC_CLIENT_SECRET" envDefault:""`
+	OIDCRedirectURL   string   `env:"OIDC_REDIRECT_URL" envDefault:""`
+	OIDCScopes        []string `env:"OIDC_SCOPES" envDefault:"openid,profile,email" envSeparator:","`
+	OIDCPostLogoutURL string   `env:"OIDC_POST_LOGOUT_URL" envDefault:"/"`
+
+	// SessionSecret signs session + transient state cookies (HMAC-SHA256).
+	// Required when OIDC is enabled. Minimum recommended length: 32 bytes
+	// random base64. If unset and OIDC is enabled, startup fails.
+	SessionSecret  string        `env:"SESSION_SECRET" envDefault:""`
+	SessionMaxAge  time.Duration `env:"SESSION_MAX_AGE" envDefault:"168h"`
+	CookieSecure   bool          `env:"COOKIE_SECURE" envDefault:"true"`
+	CookieDomain   string        `env:"COOKIE_DOMAIN" envDefault:""`
+	CookieSameSite string        `env:"COOKIE_SAMESITE" envDefault:"lax"`
+
+	// AuthDevBypass keeps the legacy X-User-Id header path working when set.
+	// Intended for local dev / integration tests so we don't have to spin up
+	// an IdP. Must be false in production.
+	AuthDevBypass bool `env:"AUTH_DEV_BYPASS" envDefault:"false"`
 }
 
 func Load() (*Config, error) {
@@ -47,8 +70,20 @@ func Load() (*Config, error) {
 	if len(cfg.WorkerQueues) == 0 {
 		cfg.WorkerQueues = []string{"default"}
 	}
+	cfg.OIDCScopes = trimAll(cfg.OIDCScopes)
+	if cfg.OIDCEnabled() {
+		if cfg.OIDCClientID == "" || cfg.OIDCRedirectURL == "" {
+			return nil, fmt.Errorf("OIDC enabled but OIDC_CLIENT_ID or OIDC_REDIRECT_URL is missing")
+		}
+		if cfg.SessionSecret == "" {
+			return nil, fmt.Errorf("OIDC enabled but SESSION_SECRET is empty")
+		}
+	}
 	return cfg, nil
 }
+
+// OIDCEnabled reports whether OIDC authentication should be wired up.
+func (c *Config) OIDCEnabled() bool { return c.OIDCIssuerURL != "" }
 
 func trimAll(in []string) []string {
 	out := in[:0]

@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/f0reachARR/video-manager/internal/auth"
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
 	"github.com/f0reachARR/video-manager/internal/realtime"
 )
@@ -131,15 +132,7 @@ func parseMarkerCategory(s string) (sqlc.MarkerCategory, error) {
 }
 
 func currentAuthorID(r *http.Request) pgtype.UUID {
-	v := strings.TrimSpace(r.Header.Get("X-User-Id"))
-	if v == "" {
-		return pgtype.UUID{}
-	}
-	id, err := parseUUIDParam(v)
-	if err != nil {
-		return pgtype.UUID{}
-	}
-	return id
+	return auth.UserIDFromContext(r.Context())
 }
 
 func (h *Markers) List(w http.ResponseWriter, r *http.Request) {

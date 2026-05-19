@@ -35,7 +35,20 @@ docker compose up -d                 # postgres / minio / tusd を起動
 
 ポートや並列度は `.env` の `DEV_WORKER_*` で上書きできる。別マシン / 追加ワーカーを試したいときは [`scripts/dev-worker.sh`](../scripts/dev-worker.sh) を別ターミナルで起動する（`DEV_WORKER_HTTP_ADDR` を 8081 と衝突しない値にする）。
 
-ブラウザで <http://localhost:5173> を開き、ヘッダ右の "現在のユーザー" でデフォルトユーザーを選ぶと、以降の作成 API に `X-User-Id` ヘッダが付くようになる。
+ブラウザで <http://localhost:5173> を開く。AuthGate が起動時に `/auth/me` を呼んで認証状態を判定する。`.env` の `OIDC_*` が空のとき (デフォルト) は OIDC が無効化されるので、`AUTH_DEV_BYPASS=true` を有効にしてユーザピッカーから "現在のユーザー" を選び、ページをリロードする。リロード後は `/auth/me` が 200 を返し、SPA が通常表示になる。
+
+OIDC を使いたいときは `.env` で次を設定する:
+
+```ini
+OIDC_ISSUER_URL=https://idp.example.com
+OIDC_CLIENT_ID=video-manager
+OIDC_CLIENT_SECRET=...
+OIDC_REDIRECT_URL=http://localhost:8080/auth/callback
+SESSION_SECRET=<openssl rand -base64 48>
+AUTH_DEV_BYPASS=false
+```
+
+セッションは HttpOnly な `vm_session` cookie に HMAC で署名されて入る。サインアウトはヘッダのユーザ名 → `サインアウト` で `/auth/logout` を叩き、cookie を破棄する。
 
 ## 3. リポジトリ地図
 

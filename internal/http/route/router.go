@@ -4,10 +4,11 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimid "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
 	"github.com/f0reachARR/video-manager/internal/http/handler"
+	appmid "github.com/f0reachARR/video-manager/internal/http/middleware"
 )
 
 type Deps struct {
@@ -28,16 +29,18 @@ type Deps struct {
 	ScoutingNotes  *handler.ScoutingNotes
 	WS             *handler.WS
 	Uploads        *handler.Uploads
+	Auth           *handler.Auth
+	AuthMiddleware appmid.AuthDeps
 	AllowedOrigins []string
 }
 
 func New(d Deps) http.Handler {
 	r := chi.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	r.Use(chimid.RequestID)
+	r.Use(chimid.RealIP)
+	r.Use(chimid.Logger)
+	r.Use(chimid.Recoverer)
 
 	if len(d.AllowedOrigins) > 0 {
 		r.Use(cors.Handler(cors.Options{
@@ -49,8 +52,23 @@ func New(d Deps) http.Handler {
 		}))
 	}
 
+	// Resolve the authenticated user from the session cookie (or X-User-Id
+	// when dev-bypass is enabled). Runs before every route — handlers that
+	// need auth call auth.UserFromContext themselves.
+	r.Use(appmid.LoadUser(d.AuthMiddleware))
+
 	r.Get("/health", d.Health.Live)
 	r.Get("/ready", d.Health.Ready)
+
+	if d.Auth != nil {
+		r.Route("/auth", func(r chi.Router) {
+			r.Get("/config", d.Auth.Config)
+			r.Get("/login", d.Auth.Login)
+			r.Get("/callback", d.Auth.Callback)
+			r.Post("/logout", d.Auth.Logout)
+			r.Get("/me", d.Auth.Me)
+		})
+	}
 
 	r.Route("/users", func(r chi.Router) {
 		r.Get("/", d.Users.List)

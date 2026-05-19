@@ -14,7 +14,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, color)
 VALUES ($1, $2)
-RETURNING id, name, color, created_at
+RETURNING id, name, color, created_at, oidc_sub, email
 `
 
 type CreateUserParams struct {
@@ -30,6 +30,34 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Name,
 		&i.Color,
 		&i.CreatedAt,
+		&i.OidcSub,
+		&i.Email,
+	)
+	return i, err
+}
+
+const createUserFromOIDC = `-- name: CreateUserFromOIDC :one
+INSERT INTO users (name, oidc_sub, email)
+VALUES ($1, $2, $3)
+RETURNING id, name, color, created_at, oidc_sub, email
+`
+
+type CreateUserFromOIDCParams struct {
+	Name    string
+	OidcSub *string
+	Email   *string
+}
+
+func (q *Queries) CreateUserFromOIDC(ctx context.Context, arg CreateUserFromOIDCParams) (User, error) {
+	row := q.db.QueryRow(ctx, createUserFromOIDC, arg.Name, arg.OidcSub, arg.Email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Color,
+		&i.CreatedAt,
+		&i.OidcSub,
+		&i.Email,
 	)
 	return i, err
 }
@@ -47,7 +75,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) (int64, error)
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, name, color, created_at FROM users WHERE id = $1
+SELECT id, name, color, created_at, oidc_sub, email FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -58,12 +86,85 @@ func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (User, error) {
 		&i.Name,
 		&i.Color,
 		&i.CreatedAt,
+		&i.OidcSub,
+		&i.Email,
+	)
+	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, name, color, created_at, oidc_sub, email FROM users WHERE lower(email) = lower($1::text)
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, dollar_1 string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, dollar_1)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Color,
+		&i.CreatedAt,
+		&i.OidcSub,
+		&i.Email,
+	)
+	return i, err
+}
+
+const getUserByOIDCSub = `-- name: GetUserByOIDCSub :one
+SELECT id, name, color, created_at, oidc_sub, email FROM users WHERE oidc_sub = $1
+`
+
+func (q *Queries) GetUserByOIDCSub(ctx context.Context, oidcSub *string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByOIDCSub, oidcSub)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Color,
+		&i.CreatedAt,
+		&i.OidcSub,
+		&i.Email,
+	)
+	return i, err
+}
+
+const linkUserOIDC = `-- name: LinkUserOIDC :one
+UPDATE users
+SET oidc_sub = $1::text,
+    email    = COALESCE($2::text, email),
+    name     = COALESCE($3::text, name)
+WHERE id = $4::uuid
+RETURNING id, name, color, created_at, oidc_sub, email
+`
+
+type LinkUserOIDCParams struct {
+	OidcSub string
+	Email   *string
+	Name    *string
+	ID      pgtype.UUID
+}
+
+func (q *Queries) LinkUserOIDC(ctx context.Context, arg LinkUserOIDCParams) (User, error) {
+	row := q.db.QueryRow(ctx, linkUserOIDC,
+		arg.OidcSub,
+		arg.Email,
+		arg.Name,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Color,
+		&i.CreatedAt,
+		&i.OidcSub,
+		&i.Email,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, name, color, created_at FROM users ORDER BY created_at ASC
+SELECT id, name, color, created_at, oidc_sub, email FROM users ORDER BY created_at ASC
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -80,6 +181,8 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.Name,
 			&i.Color,
 			&i.CreatedAt,
+			&i.OidcSub,
+			&i.Email,
 		); err != nil {
 			return nil, err
 		}
@@ -92,7 +195,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 }
 
 const listUsersPage = `-- name: ListUsersPage :many
-SELECT id, name, color, created_at
+SELECT id, name, color, created_at, oidc_sub, email
 FROM users
 WHERE ($2::timestamptz IS NULL OR (created_at, id) > ($2::timestamptz, $3::uuid))
 ORDER BY created_at ASC, id ASC
@@ -119,6 +222,8 @@ func (q *Queries) ListUsersPage(ctx context.Context, arg ListUsersPageParams) ([
 			&i.Name,
 			&i.Color,
 			&i.CreatedAt,
+			&i.OidcSub,
+			&i.Email,
 		); err != nil {
 			return nil, err
 		}
@@ -136,7 +241,7 @@ SET
   name = COALESCE($1, name),
   color = CASE WHEN $2::bool THEN $3 ELSE color END
 WHERE id = $4
-RETURNING id, name, color, created_at
+RETURNING id, name, color, created_at, oidc_sub, email
 `
 
 type UpdateUserParams struct {
@@ -159,6 +264,8 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.Name,
 		&i.Color,
 		&i.CreatedAt,
+		&i.OidcSub,
+		&i.Email,
 	)
 	return i, err
 }

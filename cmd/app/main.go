@@ -10,10 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/f0reachARR/video-manager/internal/auth"
 	"github.com/f0reachARR/video-manager/internal/config"
 	"github.com/f0reachARR/video-manager/internal/db"
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
 	"github.com/f0reachARR/video-manager/internal/http/handler"
+	appmid "github.com/f0reachARR/video-manager/internal/http/middleware"
 	"github.com/f0reachARR/video-manager/internal/http/route"
 	"github.com/f0reachARR/video-manager/internal/realtime"
 	"github.com/f0reachARR/video-manager/internal/storage"
@@ -62,6 +64,45 @@ func run() error {
 
 	hub := realtime.NewHub()
 
+	// Auth: build a Signer if a session secret is configured (either OIDC is
+	// on, or dev-bypass wants signed cookies in the future). If OIDC is on we
+	// also perform discovery against the IdP up front so misconfigured
+	// deployments fail fast.
+	var signer *auth.Signer
+	var oidcProvider *auth.Provider
+	var authHandler *handler.Auth
+	if cfg.SessionSecret != "" {
+		s, err := auth.NewSigner(cfg.SessionSecret)
+		if err != nil {
+			return err
+		}
+		signer = s
+	}
+	if cfg.OIDCEnabled() {
+		p, err := auth.NewProvider(ctx, cfg.OIDCIssuerURL, cfg.OIDCClientID, cfg.OIDCClientSecret, cfg.OIDCRedirectURL, cfg.OIDCScopes)
+		if err != nil {
+			return err
+		}
+		oidcProvider = p
+	}
+	cookie := auth.CookieOptions{
+		Secure:   cfg.CookieSecure,
+		Domain:   cfg.CookieDomain,
+		SameSite: auth.SameSiteFromString(cfg.CookieSameSite),
+	}
+	// We always expose Auth so /auth/me and /auth/config work even when OIDC
+	// is disabled (e.g. dev with bypass). /auth/login + /auth/callback gate
+	// themselves on Provider != nil.
+	authHandler = &handler.Auth{
+		Q:             q,
+		Provider:      oidcProvider,
+		Signer:        signer,
+		Cookie:        cookie,
+		SessionMaxAge: cfg.SessionMaxAge,
+		PostLogoutURL: cfg.OIDCPostLogoutURL,
+		DevBypass:     cfg.AuthDevBypass,
+	}
+
 	workers, err := worker.Setup(ctx, database.Pool, q, store, worker.Config{
 		Queues:             cfg.WorkerQueues,
 		DefaultConcurrency: cfg.WorkerDefaultConcurrency,
@@ -102,6 +143,8 @@ func run() error {
 		ScoutingNotes:  &handler.ScoutingNotes{Q: q},
 		WS:             &handler.WS{Hub: hub, AllowedOrigins: cfg.AllowedOrigins},
 		Uploads:        &handler.Uploads{Q: q, Worker: workers},
+		Auth:           authHandler,
+		AuthMiddleware: appmid.AuthDeps{Q: q, Signer: signer, DevBypass: cfg.AuthDevBypass},
 		AllowedOrigins: cfg.AllowedOrigins,
 	})
 

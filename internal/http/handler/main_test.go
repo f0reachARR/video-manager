@@ -13,6 +13,7 @@ import (
 
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
 	"github.com/f0reachARR/video-manager/internal/http/handler"
+	appmid "github.com/f0reachARR/video-manager/internal/http/middleware"
 	"github.com/f0reachARR/video-manager/internal/http/route"
 	"github.com/f0reachARR/video-manager/internal/testutil/pgtest"
 )
@@ -58,6 +59,10 @@ func setupEnv(t *testing.T) *testEnv {
 		// Videos handler depends on a Storage client; not exercised in these tests.
 		Videos:  &handler.Videos{Q: q},
 		Uploads: &handler.Uploads{Q: q, Worker: enq},
+		// Tests still author via X-User-Id, so enable the dev-bypass path in
+		// the auth middleware. No session signer needed here — the bypass
+		// branch reads the header directly.
+		AuthMiddleware: appmid.AuthDeps{Q: q, DevBypass: true},
 	})
 	return &testEnv{Pool: pool, Q: q, Router: r, Enqueuer: enq}
 }

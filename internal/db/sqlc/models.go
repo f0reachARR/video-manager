@@ -405,6 +405,8 @@ type User struct {
 	Name      string
 	Color     *string
 	CreatedAt pgtype.Timestamptz
+	OidcSub   *string
+	Email     *string
 }
 
 type Video struct {

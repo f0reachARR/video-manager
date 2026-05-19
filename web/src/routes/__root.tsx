@@ -8,7 +8,8 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 
-import { CurrentUserPicker } from "../components/ui/CurrentUserPicker";
+import { AuthGate } from "../features/auth/components/AuthGate";
+import { SessionMenu } from "../features/auth/components/SessionMenu";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: RootLayout,
@@ -43,7 +44,11 @@ function RootLayout() {
       </Box>
     );
   }
-  return <AuthenticatedLayout />;
+  return (
+    <AuthGate>
+      <AuthenticatedLayout />
+    </AuthGate>
+  );
 }
 
 function AuthenticatedLayout() {
@@ -57,7 +62,7 @@ function AuthenticatedLayout() {
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Title order={4}>Video Manager</Title>
-          <CurrentUserPicker />
+          <SessionMenu />
         </Group>
       </AppShell.Header>
       <AppShell.Navbar p="xs">

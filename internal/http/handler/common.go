@@ -82,6 +82,10 @@ func notFound(w http.ResponseWriter, message string) {
 	writeError(w, http.StatusNotFound, "not_found", message, nil)
 }
 
+func unauthorized(w http.ResponseWriter, message string) {
+	writeError(w, http.StatusUnauthorized, "unauthorized", message, nil)
+}
+
 func internalError(w http.ResponseWriter, err error) {
 	slog.Error("internal error", "error", err)
 	writeError(w, http.StatusInternalServerError, "internal", "internal server error", nil)
