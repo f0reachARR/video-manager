@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Upload } from "tus-js-client";
 
 const TUSD_ENDPOINT =
@@ -49,6 +49,51 @@ export function useTusUpload({
   onSuccess?: () => void;
 }): UseTusUploadResult {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
+  // Mirror of `uploads` for event handlers that must read the latest state
+  // without being recreated on every change.
+  const uploadsRef = useRef<UploadItem[]>([]);
+  useEffect(() => {
+    uploadsRef.current = uploads;
+  }, [uploads]);
+
+  // Resume uploads automatically when the browser regains network. tus-js-client
+  // already retries within `retryDelays`, but once the delay list is exhausted
+  // the upload sits in `error` until the user retries — fine on a momentary
+  // blip, frustrating in a flaky venue. Listening for `online` lets us kick
+  // the queue back to life without user action.
+  useEffect(() => {
+    const onOnline = () => {
+      for (const it of uploadsRef.current) {
+        if (it.state !== "error") continue;
+        setUploads((u) =>
+          u.map((x) =>
+            x.id === it.id
+              ? { ...x, state: "uploading", error: undefined }
+              : x,
+          ),
+        );
+        it.upload.start();
+      }
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
+
+  // Block accidental tab close / reload while uploads are in flight. The
+  // browser ignores the custom message but shows its own confirm dialog.
+  useEffect(() => {
+    const hasActive = uploads.some((u) => u.state === "uploading");
+    if (!hasActive) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      // preventDefault is the spec-compliant way; older Safari still needs
+      // `returnValue` set, so set it via assignment that bypasses the
+      // deprecation hint on the typed event.
+      e.preventDefault();
+      (e as { returnValue: string }).returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [uploads]);
 
   const buildUpload = (
     file: File,
