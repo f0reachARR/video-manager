@@ -9,7 +9,6 @@ import {
   SimpleGrid,
   Stack,
   Text,
-  TextInput,
 } from "@mantine/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -29,9 +28,14 @@ import {
   RunVideoOverlay,
   type OverlayMode,
 } from "../../annotations/components/RunVideoOverlay";
-import { modeHint } from "../../annotations/lib/useShapeDrawing";
+import { AnnotationToolbar } from "../../annotations/components/AnnotationToolbar";
 import { markerCategoryColor } from "../../markers/lib/category";
 import { formatTime } from "../lib/format";
+import {
+  angleDuration,
+  isAngleInRange,
+  runTimeToVideoTime,
+} from "../lib/timeMap";
 import {
   presenceColor,
   presenceLabel,
@@ -198,10 +202,7 @@ export function SyncPlayer({
         ? 0
         : Math.max(
             ...videos.map((v) =>
-              Math.max(
-                0,
-                (v.runOffsetSec ?? 0) + (v.videoOffsetEndSec - v.videoOffsetStartSec),
-              ),
+              Math.max(0, (v.runOffsetSec ?? 0) + angleDuration(v)),
             ),
           );
     const d = fromRun > 0 ? fromRun : fromVideos;
@@ -250,13 +251,11 @@ export function SyncPlayer({
       for (const v of videos) {
         const el = refs.current.get(v.id);
         if (!el) continue;
-        const runOff = v.runOffsetSec ?? 0;
-        const len = v.videoOffsetEndSec - v.videoOffsetStartSec;
-        if (newT < runOff || newT > runOff + len) {
+        if (!isAngleInRange(v, newT)) {
           if (!el.paused) el.pause();
           continue;
         }
-        const target = v.videoOffsetStartSec + (newT - runOff);
+        const target = runTimeToVideoTime(v, newT);
         if (Math.abs(el.currentTime - target) > VIDEO_DRIFT_SNAP_SEC) {
           el.currentTime = target;
         }
@@ -291,13 +290,11 @@ export function SyncPlayer({
     for (const v of videos) {
       const el = refs.current.get(v.id);
       if (!el) continue;
-      const runOff = v.runOffsetSec ?? 0;
-      const len = v.videoOffsetEndSec - v.videoOffsetStartSec;
-      if (newT < runOff || newT > runOff + len) {
+      if (!isAngleInRange(v, newT)) {
         if (!el.paused) el.pause();
         continue;
       }
-      el.currentTime = v.videoOffsetStartSec + (newT - runOff);
+      el.currentTime = runTimeToVideoTime(v, newT);
     }
     if (opts.broadcast !== false) {
       presence.broadcastNow();
@@ -355,18 +352,14 @@ export function SyncPlayer({
     for (const v of videos) {
       const el = refs.current.get(v.id);
       if (!el) continue;
-      const runOff = v.runOffsetSec ?? 0;
-      const len = v.videoOffsetEndSec - v.videoOffsetStartSec;
-      if (t < runOff || t > runOff + len) continue;
-      el.currentTime = v.videoOffsetStartSec + (t - runOff);
+      if (!isAngleInRange(v, t)) continue;
+      el.currentTime = runTimeToVideoTime(v, t);
     }
     await Promise.all(
       videos.map(async (v) => {
         const el = refs.current.get(v.id);
         if (!el) return;
-        const runOff = v.runOffsetSec ?? 0;
-        const len = v.videoOffsetEndSec - v.videoOffsetStartSec;
-        if (t < runOff || t > runOff + len) return;
+        if (!isAngleInRange(v, t)) return;
         try {
           await el.play();
         } catch {
@@ -448,54 +441,12 @@ export function SyncPlayer({
       )}
 
       <Group gap="xs" wrap="wrap">
-        <ShapeToolButton
-          mode="point"
-          current={overlayMode}
-          onClick={setOverlayMode}
-          label="📍 Point"
-          color="yellow"
+        <AnnotationToolbar
+          mode={overlayMode}
+          onModeChange={setOverlayMode}
+          label={overlayLabel}
+          onLabelChange={setOverlayLabel}
         />
-        <ShapeToolButton
-          mode="rect"
-          current={overlayMode}
-          onClick={setOverlayMode}
-          label="▭ Rect"
-          color="red"
-        />
-        <ShapeToolButton
-          mode="arrow"
-          current={overlayMode}
-          onClick={setOverlayMode}
-          label="➝ Arrow"
-          color="teal"
-        />
-        <ShapeToolButton
-          mode="text"
-          current={overlayMode}
-          onClick={setOverlayMode}
-          label="🅣 Text"
-          color="blue"
-        />
-        <ShapeToolButton
-          mode="liveInk"
-          current={overlayMode}
-          onClick={setOverlayMode}
-          label="✏️ ライブインク"
-          color="grape"
-        />
-        {(overlayMode === "point" ||
-          overlayMode === "rect" ||
-          overlayMode === "arrow" ||
-          overlayMode === "text") && (
-          <TextInput
-            size="xs"
-            placeholder={overlayMode === "text" ? "テキスト (必須)" : "ラベル (任意)"}
-            value={overlayLabel}
-            onChange={(e) => setOverlayLabel(e.currentTarget.value)}
-            w={200}
-            required={overlayMode === "text"}
-          />
-        )}
         <SyncControls
           presences={presence.presences}
           usersById={usersById}
@@ -728,12 +679,7 @@ function AngleVideo({
   // player with a NO VIDEO placeholder instead of showing a frozen / wrong
   // frame. The "before" gap appears when runOffsetSec > 0; the "after" gap
   // appears when the angle's length is less than the Run's duration.
-  const runOff = angle.rv.runOffsetSec ?? 0;
-  const angleDur = Math.max(
-    0,
-    angle.rv.videoOffsetEndSec - angle.rv.videoOffsetStartSec,
-  );
-  const outOfRange = runT < runOff || runT > runOff + angleDur;
+  const outOfRange = !isAngleInRange(angle.rv, runT);
 
   return (
     <Card withBorder p="xs">
@@ -812,32 +758,3 @@ function AngleVideo({
   );
 }
 
-// Single tool button used by the overlay toolbar. Highlights when active
-// and toggles off on a second click so the user can leave drawing mode
-// without hunting for an explicit cancel.
-function ShapeToolButton({
-  mode,
-  current,
-  onClick,
-  label,
-  color,
-}: {
-  mode: OverlayMode;
-  current: OverlayMode;
-  onClick: (next: OverlayMode) => void;
-  label: string;
-  color: string;
-}) {
-  const active = current === mode;
-  return (
-    <Button
-      size="xs"
-      variant={active ? "filled" : "default"}
-      color={active ? color : undefined}
-      onClick={() => onClick(active ? "off" : mode)}
-      title={modeHint(mode)}
-    >
-      {label}
-    </Button>
-  );
-}

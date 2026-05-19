@@ -12,6 +12,7 @@
 
 import { type RefObject, useRef, useState } from "react";
 
+import { pointerToNormalized } from "./coords";
 import { type Draft } from "./shapes";
 
 export type DrawMode =
@@ -60,21 +61,9 @@ export function useShapeDrawing({
   draftRef.current = draft;
   const pointerOriginRef = useRef<[number, number] | null>(null);
 
-  const pointToNormalized = (
-    e: React.PointerEvent,
-  ): [number, number] | null => {
-    const el = containerRef.current;
-    if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-    return [x, y];
-  };
-
   const onPointerDown = (e: React.PointerEvent) => {
     if (mode === "off" || mode === "liveInk") return;
-    const p = pointToNormalized(e);
+    const p = pointerToNormalized(containerRef.current, e);
     if (!p) return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
     pointerOriginRef.current = p;
@@ -97,7 +86,7 @@ export function useShapeDrawing({
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (mode === "off" || mode === "liveInk") return;
-    const p = pointToNormalized(e);
+    const p = pointerToNormalized(containerRef.current, e);
     if (!p) return;
     const d = draftRef.current;
     if (d?.kind === "rect") {
@@ -115,7 +104,7 @@ export function useShapeDrawing({
     if (mode === "off" || mode === "liveInk") return;
     const origin = pointerOriginRef.current;
     pointerOriginRef.current = null;
-    const p = pointToNormalized(e) ?? origin;
+    const p = pointerToNormalized(containerRef.current, e) ?? origin;
     const d = draftRef.current;
     const t = videoRef.current?.currentTime ?? 0;
     const end = t + defaultDuration;

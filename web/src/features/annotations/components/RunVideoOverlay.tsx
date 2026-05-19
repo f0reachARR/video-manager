@@ -2,27 +2,16 @@
 // Handles both Annotation (persisted) and LiveInk (transient) rendering,
 // and — when `canEdit` is true and a mode is active — captures pointer
 // events to create new annotations / strokes.
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { type RefObject, useMemo } from "react";
 
 import { useAnnotations, useCreateAnnotation } from "../api/queries";
 import { AnnotationLayer } from "../lib/shapes";
 import { useShapeDrawing, type DrawMode } from "../lib/useShapeDrawing";
-import { useWebSocketPublisher } from "../../../lib/realtime";
+import { useVideoCurrentTime } from "../lib/useVideoCurrentTime";
+import { useLiveInk } from "../lib/useLiveInk";
+import { LiveInkLayer } from "./LiveInkLayer";
 
 export type OverlayMode = DrawMode;
-
-type InkPoint = [number, number];
-type InkStrokeMessage = {
-  type: "ink.stroke";
-  color: string;
-  points: InkPoint[];
-};
-type RemoteStroke = InkStrokeMessage & { receivedAt: number };
-
-const INK_FADE_MS = 4000;
-// Per-tab color so each viewer's strokes look different.
-const myInkColor = `hsl(${Math.floor(Math.random() * 360)} 80% 55%)`;
 
 export function RunVideoOverlay({
   videoId,
@@ -42,18 +31,7 @@ export function RunVideoOverlay({
   const ann = useAnnotations(videoId);
   const create = useCreateAnnotation(videoId);
 
-  // Track the underlying video's currentTime so we can decide which
-  // annotations are visible right now.
-  const [currentSec, setCurrentSec] = useState(0);
-  useEffect(() => {
-    let raf = 0;
-    const tick = () => {
-      if (videoRef.current) setCurrentSec(videoRef.current.currentTime);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [videoRef]);
+  const currentSec = useVideoCurrentTime(videoRef);
 
   const visibleAnnotations = useMemo(() => {
     const all = ann.data?.data ?? [];
@@ -62,53 +40,12 @@ export function RunVideoOverlay({
     );
   }, [ann.data, currentSec]);
 
-  const qc = useQueryClient();
-
-  // Live ink — same wire format as AnnotatedPlayer so a /videos modal and a
-  // Run detail tab can co-view strokes on the same video.
-  const [strokes, setStrokes] = useState<RemoteStroke[]>([]);
-  const publish = useWebSocketPublisher(`/ws/video/${videoId}`, (msg) => {
-    const m = msg as Partial<InkStrokeMessage> & { type?: string };
-    if (
-      m.type === "ink.stroke" &&
-      Array.isArray(m.points) &&
-      typeof m.color === "string"
-    ) {
-      setStrokes((cur) => [
-        ...cur,
-        {
-          type: "ink.stroke",
-          color: m.color!,
-          points: m.points!,
-          receivedAt: Date.now(),
-        },
-      ]);
-    } else if (typeof m.type === "string" && m.type.startsWith("annotation.")) {
-      // Server-side broadcast for Annotation CRUD — refetch authoritative state.
-      qc.invalidateQueries({ queryKey: ["annotations", videoId] });
-    }
-  });
-  useEffect(() => {
-    if (strokes.length === 0) return;
-    const t = setTimeout(() => {
-      const cutoff = Date.now() - INK_FADE_MS;
-      setStrokes((cur) => cur.filter((s) => s.receivedAt > cutoff));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [strokes]);
-
-  // Pointer handling — only active when this overlay both has a mode and the
-  // user is allowed to edit (main angle).
+  // Overlay only captures pointers when the user is allowed to edit AND a
+  // mode is active — otherwise we keep pointer-events:none so the
+  // underlying <video> controls keep working.
   const interactive = canEdit && mode !== "off";
 
-  // Persistent shape modes (point/rect/arrow/text) go through the shared
-  // drawing hook so AnnotatedPlayer + RunVideoOverlay stay aligned.
-  const {
-    draft,
-    onPointerDown: onShapePointerDown,
-    onPointerMove: onShapePointerMove,
-    onPointerUp: onShapePointerUp,
-  } = useShapeDrawing({
+  const shape = useShapeDrawing({
     mode: canEdit ? mode : "off",
     containerRef,
     videoRef,
@@ -118,76 +55,23 @@ export function RunVideoOverlay({
     },
   });
 
-  // Live ink uses its own buffered-stroke flow because it broadcasts over
-  // WebSocket instead of writing to the API.
-  const inkBufferRef = useRef<InkPoint[]>([]);
-  const inkDrawingRef = useRef(false);
-  const flushStroke = () => {
-    const pts = inkBufferRef.current;
-    if (pts.length < 2) {
-      inkBufferRef.current = [];
-      return;
-    }
-    publish({ type: "ink.stroke", color: myInkColor, points: pts });
-    setStrokes((cur) => [
-      ...cur,
-      {
-        type: "ink.stroke",
-        color: myInkColor,
-        points: pts,
-        receivedAt: Date.now(),
-      },
-    ]);
-    inkBufferRef.current = [];
-  };
-  const pointToNormalized = (e: React.PointerEvent): InkPoint | null => {
-    const el = containerRef.current;
-    if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-    return [x, y];
-  };
-  const onInkDown = (e: React.PointerEvent) => {
-    if (mode !== "liveInk" || !canEdit) return;
-    const p = pointToNormalized(e);
-    if (!p) return;
-    inkDrawingRef.current = true;
-    inkBufferRef.current = [p];
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-  };
-  const onInkMove = (e: React.PointerEvent) => {
-    if (mode !== "liveInk" || !canEdit || !inkDrawingRef.current) return;
-    const p = pointToNormalized(e);
-    if (!p) return;
-    inkBufferRef.current.push(p);
-    if (inkBufferRef.current.length >= 8) {
-      flushStroke();
-      inkBufferRef.current = [
-        inkBufferRef.current[inkBufferRef.current.length - 1] ?? p,
-      ];
-    }
-  };
-  const onInkUp = () => {
-    if (!inkDrawingRef.current) return;
-    inkDrawingRef.current = false;
-    flushStroke();
-  };
+  const ink = useLiveInk({
+    videoId,
+    containerRef,
+    enabled: canEdit && mode === "liveInk",
+  });
 
-  // Unified pointer handlers — dispatch to shape drawing or live ink
-  // depending on the active mode.
   const onPointerDown = (e: React.PointerEvent) => {
-    if (mode === "liveInk") onInkDown(e);
-    else onShapePointerDown(e);
+    if (mode === "liveInk") ink.onPointerDown(e);
+    else shape.onPointerDown(e);
   };
   const onPointerMove = (e: React.PointerEvent) => {
-    if (mode === "liveInk") onInkMove(e);
-    else onShapePointerMove(e);
+    if (mode === "liveInk") ink.onPointerMove(e);
+    else shape.onPointerMove(e);
   };
   const onPointerUp = (e: React.PointerEvent) => {
-    if (mode === "liveInk") onInkUp();
-    else onShapePointerUp(e);
+    if (mode === "liveInk") ink.onPointerUp();
+    else shape.onPointerUp(e);
   };
 
   return (
@@ -195,8 +79,6 @@ export function RunVideoOverlay({
       style={{
         position: "absolute",
         inset: 0,
-        // pointer-events:none unless this overlay is actively capturing — that
-        // way the underlying <video> controls keep working.
         pointerEvents: interactive ? "auto" : "none",
         touchAction: interactive ? "none" : undefined,
         cursor: interactive ? "crosshair" : "default",
@@ -206,42 +88,8 @@ export function RunVideoOverlay({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <AnnotationLayer annotations={visibleAnnotations} draft={draft} />
-      <LiveInkLayer strokes={strokes} />
+      <AnnotationLayer annotations={visibleAnnotations} draft={shape.draft} />
+      <LiveInkLayer strokes={ink.strokes} />
     </div>
-  );
-}
-
-function LiveInkLayer({ strokes }: { strokes: RemoteStroke[] }) {
-  if (strokes.length === 0) return null;
-  const now = Date.now();
-  return (
-    <svg
-      style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
-      viewBox="0 0 1 1"
-      preserveAspectRatio="none"
-    >
-      {strokes.map((s, i) => {
-        const age = now - s.receivedAt;
-        const opacity = Math.max(0, 1 - age / INK_FADE_MS);
-        const d =
-          "M " +
-          s.points
-            .map(([x, y]) => `${x.toFixed(4)} ${y.toFixed(4)}`)
-            .join(" L ");
-        return (
-          <path
-            key={i}
-            d={d}
-            stroke={s.color}
-            strokeWidth={0.005}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-            opacity={opacity}
-          />
-        );
-      })}
-    </svg>
   );
 }
