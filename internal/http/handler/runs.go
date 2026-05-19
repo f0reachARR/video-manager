@@ -241,7 +241,10 @@ func (h *Runs) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Optional bulk attach. Errors here are reported but don't roll back the
-	// Run itself — failed angles can be retried via AddVideo.
+	// Run itself — failed angles can be retried via AddVideo. Videos must
+	// belong to the same Session as the Run (or be unassigned, in which case
+	// they get associated to this Run's Session implicitly is NOT done — the
+	// caller is expected to assign first).
 	var attached []sqlc.RunVideo
 	for _, v := range req.Videos {
 		videoID, err := parseUUIDParam(v.VideoID)
@@ -249,6 +252,13 @@ func (h *Runs) Create(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if v.VideoOffsetEndSec < v.VideoOffsetStartSec {
+			continue
+		}
+		vid, err := h.Q.GetVideo(r.Context(), videoID)
+		if err != nil {
+			continue
+		}
+		if !vid.SessionID.Valid || vid.SessionID.Bytes != sessionID.Bytes {
 			continue
 		}
 		angle := ""
@@ -426,7 +436,8 @@ func (h *Runs) AddVideo(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "invalid runId")
 		return
 	}
-	if _, err := h.Q.GetRun(r.Context(), runID); err != nil {
+	run, err := h.Q.GetRun(r.Context(), runID)
+	if err != nil {
 		if isNoRows(err) {
 			notFound(w, "run not found")
 			return
@@ -446,6 +457,19 @@ func (h *Runs) AddVideo(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.VideoOffsetEndSec < req.VideoOffsetStartSec {
 		writeError(w, http.StatusUnprocessableEntity, "validation", "end < start", nil)
+		return
+	}
+	video, err := h.Q.GetVideo(r.Context(), videoID)
+	if err != nil {
+		if isNoRows(err) {
+			writeError(w, http.StatusUnprocessableEntity, "validation", "video not found", nil)
+			return
+		}
+		internalError(w, err)
+		return
+	}
+	if !video.SessionID.Valid || video.SessionID.Bytes != run.SessionID.Bytes {
+		writeError(w, http.StatusUnprocessableEntity, "session_mismatch", "video and run belong to different sessions", nil)
 		return
 	}
 	angle := ""

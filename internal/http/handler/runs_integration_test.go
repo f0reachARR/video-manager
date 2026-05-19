@@ -70,10 +70,12 @@ func seedRunDeps(t *testing.T, env *testEnv) runDeps {
 	rec = env.do(t, http.MethodPost, "/tags", map[string]any{"name": "important"}, &tag)
 	mustStatus(t, rec, http.StatusCreated)
 
-	// video (direct DB insert; tus path not under test here)
+	// video (direct DB insert; tus path not under test here). The video is
+	// seeded under the same Session as the Run — the API now rejects
+	// cross-session attaches.
 	storageKey := "run-test-key"
 	if _, err := env.Pool.Exec(ctx,
-		`INSERT INTO videos (storage_key, duration_sec) VALUES ($1, 90)`, storageKey); err != nil {
+		`INSERT INTO videos (session_id, storage_key, duration_sec) VALUES ($1, $2, 90)`, sess.ID, storageKey); err != nil {
 		t.Fatalf("insert video: %v", err)
 	}
 	var videoID string

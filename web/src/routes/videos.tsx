@@ -19,12 +19,17 @@ export const Route = createFileRoute("/videos")({
 });
 
 function VideosPage() {
-  const videos = useVideos();
+  // The single Session select serves a dual role: it tags new uploads, and
+  // it filters the list. The latter is what makes "選択した動画から Run を作成"
+  // safe — a Run is per-Session, so we require the filter to be set before
+  // letting the user build one. Otherwise the selection could span sessions
+  // and the server would reject it.
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const videos = useVideos(sessionId ? { sessionId } : {});
   const devices = useDevices();
   const sessions = useSessions();
   const currentUserId = useCurrentUserId();
   const [deviceId, setDeviceId] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [createRunOpened, setCreateRunOpened] = useState(false);
 
@@ -56,16 +61,21 @@ function VideosPage() {
       actions={
         <Group>
           <Select
-            placeholder="Session"
+            placeholder="Session (絞り込み + アップロード先)"
             data={(sessions.data?.data ?? []).map((s) => ({
               value: s.id,
               label: s.name,
             }))}
             value={sessionId}
-            onChange={setSessionId}
+            onChange={(v) => {
+              setSessionId(v);
+              // Selection across Sessions is meaningless for Run creation,
+              // so clear it whenever the filter changes.
+              setSelected(new Set());
+            }}
             clearable
             searchable
-            w={200}
+            w={260}
             size="sm"
           />
           <Select
@@ -105,12 +115,21 @@ function VideosPage() {
             py="xs"
             bg="var(--mantine-color-blue-light)"
           >
-            <Text size="sm">{selected.size} 件選択中</Text>
+            <Text size="sm">
+              {selected.size} 件選択中
+              {!sessionId && " — Session で絞り込んでから Run を作成できます"}
+            </Text>
             <Group gap="xs">
               <Button
                 size="xs"
                 variant="filled"
                 onClick={() => setCreateRunOpened(true)}
+                disabled={!sessionId}
+                title={
+                  sessionId
+                    ? undefined
+                    : "Run は単一の Session に紐づくため、まず Session で絞り込んでください"
+                }
               >
                 🎬 選択した動画から Run を作成
               </Button>
@@ -132,9 +151,10 @@ function VideosPage() {
         />
       </Stack>
 
-      {createRunOpened && (
+      {createRunOpened && sessionId && (
         <CreateRunFromVideosModal
           videos={list.filter((v) => selected.has(v.id))}
+          lockedSessionId={sessionId}
           onClose={() => setCreateRunOpened(false)}
           onCreated={() => {
             setCreateRunOpened(false);

@@ -23,10 +23,15 @@ import { useTeams } from "../../teams/api/queries";
 
 export function CreateRunFromVideosModal({
   videos,
+  lockedSessionId,
   onClose,
   onCreated,
 }: {
   videos: Video[];
+  // When set, the Session is fixed by the caller (typically because the
+  // videos list was filtered to this Session) and the field is shown as
+  // read-only. Prevents accidental cross-Session Runs.
+  lockedSessionId?: string;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -61,7 +66,9 @@ export function CreateRunFromVideosModal({
     return new Date(Math.min(...stamps));
   }, [videos]);
 
-  const [sessionId, setSessionId] = useState<string | null>(sharedSession);
+  const [sessionId, setSessionId] = useState<string | null>(
+    lockedSessionId ?? sharedSession,
+  );
   const [teamId, setTeamId] = useState<string | null>(null);
   const [robotId, setRobotId] = useState<string | null>(null);
   const [scenarioId, setScenarioId] = useState<string | null>(null);
@@ -136,6 +143,11 @@ export function CreateRunFromVideosModal({
         </Text>
         <Select
           label="Session"
+          description={
+            lockedSessionId
+              ? "動画一覧の絞り込みで固定されています"
+              : undefined
+          }
           data={(sessions.data?.data ?? []).map((s) => ({
             value: s.id,
             label: s.name,
@@ -144,6 +156,7 @@ export function CreateRunFromVideosModal({
           onChange={setSessionId}
           searchable
           required
+          disabled={!!lockedSessionId}
         />
         <Group grow>
           <Select
