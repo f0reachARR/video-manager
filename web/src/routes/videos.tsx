@@ -17,6 +17,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { DateTimePicker } from "@mantine/dates";
 import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
@@ -416,19 +417,31 @@ function CreateRunFromVideosModal({
     () => Math.max(0, ...videos.map((v) => v.durationSec ?? 0)),
     [videos],
   );
+  // Default startedAt = earliest recording time of the selection (falling
+  // back to createdAt when recordedAt isn't set). Lets the timeline line up
+  // with when the run actually happened instead of "now".
+  const defaultStart = useMemo(() => {
+    const stamps = videos
+      .map((v) => v.recordedAt ?? v.createdAt)
+      .filter(Boolean)
+      .map((s) => new Date(s as string).getTime())
+      .filter((n) => Number.isFinite(n));
+    if (stamps.length === 0) return new Date();
+    return new Date(Math.min(...stamps));
+  }, [videos]);
 
   const [sessionId, setSessionId] = useState<string | null>(sharedSession);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [robotId, setRobotId] = useState<string | null>(null);
   const [scenarioId, setScenarioId] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<Date | null>(defaultStart);
   const [duration, setDuration] = useState<number | "">(maxDur || "");
   const [memo, setMemo] = useState("");
   const [angleLabels, setAngleLabels] = useState<Record<string, string>>({});
   const [runOffsets, setRunOffsets] = useState<Record<string, number>>({});
 
   const submit = () => {
-    if (!sessionId || !teamId || !robotId || !scenarioId) return;
-    const now = new Date();
+    if (!sessionId || !teamId || !robotId || !scenarioId || !startedAt) return;
     const dur =
       typeof duration === "number" && duration > 0 ? duration : maxDur || 0;
     create.mutate(
@@ -437,7 +450,7 @@ function CreateRunFromVideosModal({
         teamId,
         robotId,
         scenarioId,
-        startedAt: now.toISOString(),
+        startedAt: startedAt.toISOString(),
         durationSec: Math.max(0, Math.round(dur)),
         memo,
         videos: videos.map((v) => ({
@@ -506,13 +519,22 @@ function CreateRunFromVideosModal({
             required
           />
         </Group>
-        <NumberInput
-          label="Duration (sec)"
-          description="Run のタイムライン長。最も長い動画の長さで初期化"
-          value={duration}
-          min={0}
-          onChange={(v) => setDuration(typeof v === "number" ? v : "")}
-        />
+        <Group grow>
+          <DateTimePicker
+            label="開始時刻"
+            description="選択した動画の最初の録画時刻で初期化"
+            value={startedAt}
+            onChange={(v) => setStartedAt(v ? new Date(v) : null)}
+            withSeconds
+          />
+          <NumberInput
+            label="Duration (sec)"
+            description="最も長い動画の長さで初期化"
+            value={duration}
+            min={0}
+            onChange={(v) => setDuration(typeof v === "number" ? v : "")}
+          />
+        </Group>
         <Textarea
           label="Memo"
           value={memo}
