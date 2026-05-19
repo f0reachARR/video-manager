@@ -73,6 +73,9 @@ type PresenceTick = {
   tSec: number;
   playing: boolean;
   isBroadcaster: boolean;
+  // RunVideo.id of the angle the sender is currently viewing as "main".
+  // Followers switch their own main angle to match.
+  mainAngleId: string | null;
   ts: number;
 };
 
@@ -82,6 +85,7 @@ type Presence = {
   tSec: number;
   playing: boolean;
   isBroadcaster: boolean;
+  mainAngleId: string | null;
   ts: number;
   lastSeen: number;
 };
@@ -331,6 +335,7 @@ function SyncPlayer({
       tSec: m.tSec,
       playing: m.playing,
       isBroadcaster: !!m.isBroadcaster,
+      mainAngleId: typeof m.mainAngleId === "string" ? m.mainAngleId : null,
       ts: typeof m.ts === "number" ? m.ts : Date.now(),
       lastSeen: Date.now(),
     };
@@ -363,8 +368,17 @@ function SyncPlayer({
       }
     }
 
-    // If we're following this sender, nudge our playback to match.
+    // If we're following this sender, nudge our playback + main angle.
     if (followTargetRef.current === tick.senderId) {
+      // Switch to whichever main angle the followed user is viewing (if we
+      // also have it in our run.videos — RunVideo.id is shared across viewers).
+      if (
+        tick.mainAngleId &&
+        tick.mainAngleId !== mainAngleIdRef.current &&
+        videos.some((v) => v.id === tick.mainAngleId)
+      ) {
+        setMainAngleId(tick.mainAngleId);
+      }
       const latency = Math.max(0, (Date.now() - tick.ts) / 1000);
       const targetT = tick.tSec + (tick.playing ? latency : 0);
       const drift = Math.abs(targetT - lastTRef.current);
@@ -536,6 +550,7 @@ function SyncPlayer({
       tSec: lastTRef.current,
       playing: playingRef.current,
       isBroadcaster: myBroadcastingRef.current,
+      mainAngleId: mainAngleIdRef.current,
       ts: Date.now(),
     } satisfies PresenceTick);
   };
