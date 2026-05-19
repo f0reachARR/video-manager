@@ -89,6 +89,14 @@ func (h *Uploads) TusHook(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("tus hook: invalid deviceId metadata", "value", v)
 		}
 	}
+	if v := meta["sessionId"]; v != "" {
+		id, err := parseUUIDParam(v)
+		if err == nil {
+			params.SessionID = id
+		} else {
+			slog.Warn("tus hook: invalid sessionId metadata", "value", v)
+		}
+	}
 	if v := meta["uploaderId"]; v != "" {
 		id, err := parseUUIDParam(v)
 		if err == nil {

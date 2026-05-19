@@ -70,6 +70,7 @@ function VideosPage() {
   const currentUserId = useCurrentUserId();
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   // Multi-select for "選択した動画から Run を作成" flow.
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -95,6 +96,7 @@ function VideosPage() {
       filetype: file.type || "application/octet-stream",
     };
     if (deviceId) meta.deviceId = deviceId;
+    if (sessionId) meta.sessionId = sessionId;
     if (currentUserId) meta.uploaderId = currentUserId;
     return new Upload(file, {
       endpoint: TUSD_ENDPOINT,
@@ -189,6 +191,19 @@ function VideosPage() {
       onRetry={() => videos.refetch()}
       actions={
         <Group>
+          <Select
+            placeholder="Session"
+            data={(sessions.data?.data ?? []).map((s) => ({
+              value: s.id,
+              label: s.name,
+            }))}
+            value={sessionId}
+            onChange={setSessionId}
+            clearable
+            searchable
+            w={200}
+            size="sm"
+          />
           <Select
             placeholder="Device"
             data={devicesList.map((d) => ({ value: d.id, label: d.name }))}
