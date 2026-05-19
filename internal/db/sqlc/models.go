@@ -56,6 +56,51 @@ func (ns NullAnnotationType) Value() (driver.Value, error) {
 	return string(ns.AnnotationType), nil
 }
 
+type HLSStatus string
+
+const (
+	HlsStatusPending  HLSStatus = "pending"
+	HlsStatusPlanning HLSStatus = "planning"
+	HlsStatusEncoding HLSStatus = "encoding"
+	HlsStatusReady    HLSStatus = "ready"
+	HlsStatusFailed   HLSStatus = "failed"
+)
+
+func (e *HLSStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = HLSStatus(s)
+	case string:
+		*e = HLSStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for HLSStatus: %T", src)
+	}
+	return nil
+}
+
+type NullHLSStatus struct {
+	HLSStatus HLSStatus
+	Valid     bool // Valid is true if HLSStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullHLSStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.HLSStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.HLSStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullHLSStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.HLSStatus), nil
+}
+
 type MarkerCategory string
 
 const (
@@ -97,6 +142,93 @@ func (ns NullMarkerCategory) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.MarkerCategory), nil
+}
+
+type RenditionKind string
+
+const (
+	RenditionKindOriginal RenditionKind = "original"
+	RenditionKind720p     RenditionKind = "720p"
+	RenditionKind480p     RenditionKind = "480p"
+)
+
+func (e *RenditionKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RenditionKind(s)
+	case string:
+		*e = RenditionKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RenditionKind: %T", src)
+	}
+	return nil
+}
+
+type NullRenditionKind struct {
+	RenditionKind RenditionKind
+	Valid         bool // Valid is true if RenditionKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRenditionKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.RenditionKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RenditionKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRenditionKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RenditionKind), nil
+}
+
+type RenditionStatus string
+
+const (
+	RenditionStatusPending  RenditionStatus = "pending"
+	RenditionStatusEncoding RenditionStatus = "encoding"
+	RenditionStatusReady    RenditionStatus = "ready"
+	RenditionStatusFailed   RenditionStatus = "failed"
+)
+
+func (e *RenditionStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RenditionStatus(s)
+	case string:
+		*e = RenditionStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RenditionStatus: %T", src)
+	}
+	return nil
+}
+
+type NullRenditionStatus struct {
+	RenditionStatus RenditionStatus
+	Valid           bool // Valid is true if RenditionStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRenditionStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.RenditionStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RenditionStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRenditionStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RenditionStatus), nil
 }
 
 type SessionModeHint string
@@ -276,17 +408,41 @@ type User struct {
 }
 
 type Video struct {
-	ID            pgtype.UUID
-	SessionID     pgtype.UUID
-	DeviceID      pgtype.UUID
-	UploaderID    pgtype.UUID
-	StorageKey    string
-	RecordedAt    pgtype.Timestamptz
-	DurationSec   *int32
-	TimeOffsetSec int32
-	CreatedAt     pgtype.Timestamptz
-	ThumbnailKey  *string
-	DisplayName   string
+	ID               pgtype.UUID
+	SessionID        pgtype.UUID
+	DeviceID         pgtype.UUID
+	UploaderID       pgtype.UUID
+	StorageKey       string
+	RecordedAt       pgtype.Timestamptz
+	DurationSec      *int32
+	TimeOffsetSec    int32
+	CreatedAt        pgtype.Timestamptz
+	ThumbnailKey     *string
+	DisplayName      string
+	HlsMasterKey     *string
+	HLSStatus        HLSStatus
+	SourceVideoCodec *string
+	SourceAudioCodec *string
+	SourceWidth      *int32
+	SourceHeight     *int32
+	PassthroughOk    bool
+}
+
+type VideoRendition struct {
+	ID           pgtype.UUID
+	VideoID      pgtype.UUID
+	Kind         RenditionKind
+	Status       RenditionStatus
+	Passthrough  bool
+	Width        int32
+	Height       int32
+	BandwidthBps *int32
+	PlaylistKey  string
+	SegmentsDone int32
+	Error        *string
+	StartedAt    pgtype.Timestamptz
+	CompletedAt  pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }
 
 type VideoTag struct {

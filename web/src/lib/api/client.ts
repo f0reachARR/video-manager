@@ -39,6 +39,10 @@ export type Video = components["schemas"]["Video"];
 export type UpdateVideoRequest = components["schemas"]["UpdateVideoRequest"];
 export type VideoList = components["schemas"]["VideoList"];
 export type PlaybackUrl = components["schemas"]["PlaybackUrl"];
+export type VideoRendition = components["schemas"]["VideoRendition"];
+export type VideoRenditionList = components["schemas"]["VideoRenditionList"];
+export type EncodingJob = components["schemas"]["EncodingJob"];
+export type EncodingJobList = components["schemas"]["EncodingJobList"];
 
 export type Session = components["schemas"]["Session"];
 export type CreateSessionRequest = components["schemas"]["CreateSessionRequest"];
@@ -279,6 +283,15 @@ export const videosApi = {
     request<PlaybackUrl>(`/videos/${id}/playback-url`),
   thumbnailUrl: (id: string) =>
     request<PlaybackUrl>(`/videos/${id}/thumbnail-url`),
+  renditions: (id: string) =>
+    request<VideoRenditionList>(`/videos/${id}/renditions`),
+};
+
+export const encodingJobsApi = {
+  list: (limit?: number) =>
+    request<EncodingJobList>(
+      `/encoding-jobs${qs({ limit: limit?.toString() })}`,
+    ),
 };
 
 // ---- Sessions ----

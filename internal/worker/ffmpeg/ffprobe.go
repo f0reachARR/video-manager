@@ -14,8 +14,13 @@ import (
 )
 
 type Metadata struct {
-	RecordedAt  *time.Time
-	DurationSec *int32
+	RecordedAt   *time.Time
+	DurationSec  *int32
+	Width        *int32
+	Height       *int32
+	VideoCodec   string // e.g. "h264", "hevc"
+	VideoProfile string // e.g. "Main", "High"
+	AudioCodec   string // e.g. "aac", "mp3", "" when no audio
 }
 
 // Probe runs `ffprobe -show_format -of json` against the given input URL or
@@ -43,9 +48,16 @@ type ffprobeOutput struct {
 		Duration string            `json:"duration"`
 		Tags     map[string]string `json:"tags"`
 	} `json:"format"`
-	Streams []struct {
-		Tags map[string]string `json:"tags"`
-	} `json:"streams"`
+	Streams []ffprobeStream `json:"streams"`
+}
+
+type ffprobeStream struct {
+	CodecType string            `json:"codec_type"` // "video" / "audio"
+	CodecName string            `json:"codec_name"` // "h264" / "aac" ...
+	Profile   string            `json:"profile"`    // "Main", "High", ...
+	Width     int               `json:"width"`
+	Height    int               `json:"height"`
+	Tags      map[string]string `json:"tags"`
 }
 
 var creationTimeFormats = []string{
@@ -69,6 +81,27 @@ func parse(raw []byte) (Metadata, error) {
 	}
 	if t := pickCreationTime(out); t != nil {
 		m.RecordedAt = t
+	}
+	for _, s := range out.Streams {
+		switch s.CodecType {
+		case "video":
+			if m.VideoCodec == "" {
+				m.VideoCodec = s.CodecName
+				m.VideoProfile = s.Profile
+				if s.Width > 0 {
+					w := int32(s.Width)
+					m.Width = &w
+				}
+				if s.Height > 0 {
+					h := int32(s.Height)
+					m.Height = &h
+				}
+			}
+		case "audio":
+			if m.AudioCodec == "" {
+				m.AudioCodec = s.CodecName
+			}
+		}
 	}
 	return m, nil
 }

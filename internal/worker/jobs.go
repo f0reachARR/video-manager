@@ -26,12 +26,14 @@ type ProbeVideoArgs struct {
 func (ProbeVideoArgs) Kind() string { return "video.probe" }
 
 // ProbeVideoWorker reads a Video row, downloads/streams it via a presigned URL,
-// runs ffprobe, then writes recorded_at + duration_sec back to the DB. The
-// device's default_time_offset_sec is applied to recorded_at on write.
+// runs ffprobe, then writes recorded_at + duration_sec + source_* back to the
+// DB. The device's default_time_offset_sec is applied to recorded_at on write.
+// When metadata is complete it enqueues a video.hls.plan job.
 type ProbeVideoWorker struct {
 	river.WorkerDefaults[ProbeVideoArgs]
 	Q       *sqlc.Queries
 	Storage *storage.Client
+	Manager *Manager
 }
 
 func (w *ProbeVideoWorker) Work(ctx context.Context, job *river.Job[ProbeVideoArgs]) error {
@@ -86,6 +88,29 @@ func (w *ProbeVideoWorker) Work(ctx context.Context, job *river.Job[ProbeVideoAr
 		return fmt.Errorf("update video: %w", err)
 	}
 
+	// Persist source codec/dimensions and passthrough eligibility for HLS planning.
+	srcParams := sqlc.UpdateVideoSourceParams{
+		ID:            pgID,
+		PassthroughOk: ffmpeg.PassthroughOK(meta),
+	}
+	if meta.VideoCodec != "" {
+		s := meta.VideoCodec
+		srcParams.SourceVideoCodec = &s
+	}
+	if meta.AudioCodec != "" {
+		s := meta.AudioCodec
+		srcParams.SourceAudioCodec = &s
+	}
+	if meta.Width != nil {
+		srcParams.SourceWidth = meta.Width
+	}
+	if meta.Height != nil {
+		srcParams.SourceHeight = meta.Height
+	}
+	if _, err := w.Q.UpdateVideoSource(ctx, srcParams); err != nil {
+		return fmt.Errorf("update video source: %w", err)
+	}
+
 	// Thumbnail extraction is best-effort: ffmpeg may be missing, the video
 	// may be unreadable, etc. We log and continue rather than failing the job.
 	if ffmpeg.FFmpegAvailable() {
@@ -110,7 +135,19 @@ func (w *ProbeVideoWorker) Work(ctx context.Context, job *river.Job[ProbeVideoAr
 	}
 
 	slog.Info("video probe complete", "videoId", job.Args.VideoID,
-		"recordedAt", meta.RecordedAt, "durationSec", meta.DurationSec)
+		"recordedAt", meta.RecordedAt, "durationSec", meta.DurationSec,
+		"videoCodec", meta.VideoCodec, "audioCodec", meta.AudioCodec,
+		"width", meta.Width, "height", meta.Height,
+		"passthroughOK", ffmpeg.PassthroughOK(meta))
+
+	// Trigger HLS planning. Failing to enqueue is non-fatal — the probe job
+	// itself succeeded; the planner can be retried by hand or by a scheduled
+	// reconciler. We log loudly so the operator notices.
+	if w.Manager != nil {
+		if err := w.Manager.EnqueuePlanHLS(ctx, job.Args.VideoID); err != nil {
+			slog.Warn("enqueue plan_hls failed", "videoId", job.Args.VideoID, "error", err)
+		}
+	}
 	return nil
 }
 

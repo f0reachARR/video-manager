@@ -92,6 +92,35 @@ services:
     ports:
       - "${HOCUSPOCUS_PORT:-1234}:1234"
 
+  # Dedicated worker node for HLS encoding. River pulls jobs from PostgreSQL,
+  # so spinning up additional replicas (`docker compose up --scale worker=N`,
+  # or another host pointed at the same DB) automatically shares the queue.
+  # The image is identical to the API; WORKER_QUEUES decides what this
+  # process polls. Default "encode" pulls only the heavy ffmpeg jobs; the
+  # API node continues to run probe / plan / finalize on the default queue.
+  worker:
+    build:
+      context: .
+      dockerfile: deploy/docker/app.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      HTTP_ADDR: ":8081"
+      DATABASE_URL: postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-video_manager}?sslmode=disable
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${MINIO_BUCKET:-videos}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      S3_USE_PATH_STYLE: "true"
+      WORKER_QUEUES: ${WORKER_QUEUES:-encode}
+      WORKER_CONCURRENCY_DEFAULT: ${WORKER_CONCURRENCY_DEFAULT:-2}
+      WORKER_CONCURRENCY_ENCODE: ${WORKER_CONCURRENCY_ENCODE:-1}
+
 volumes:
   postgres-data:
   minio-data:

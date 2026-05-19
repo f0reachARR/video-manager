@@ -15,6 +15,7 @@ type Querier interface {
 	AddRunVideo(ctx context.Context, arg AddRunVideoParams) (RunVideo, error)
 	ClearRunTags(ctx context.Context, runID pgtype.UUID) error
 	CountMarkersByTeamAndCategory(ctx context.Context, teamID pgtype.UUID) ([]CountMarkersByTeamAndCategoryRow, error)
+	CountRenditionsByStatus(ctx context.Context, videoID pgtype.UUID) (CountRenditionsByStatusRow, error)
 	CreateAnnotation(ctx context.Context, arg CreateAnnotationParams) (Annotation, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
 	CreateMarker(ctx context.Context, arg CreateMarkerParams) (Marker, error)
@@ -52,6 +53,7 @@ type Querier interface {
 	GetMarker(ctx context.Context, id pgtype.UUID) (Marker, error)
 	GetMatch(ctx context.Context, id pgtype.UUID) (Match, error)
 	GetOwnTeam(ctx context.Context) (Team, error)
+	GetRendition(ctx context.Context, id pgtype.UUID) (VideoRendition, error)
 	GetRobot(ctx context.Context, id pgtype.UUID) (Robot, error)
 	GetRun(ctx context.Context, id pgtype.UUID) (Run, error)
 	GetRunVideo(ctx context.Context, id pgtype.UUID) (RunVideo, error)
@@ -65,14 +67,22 @@ type Querier interface {
 	GetUser(ctx context.Context, id pgtype.UUID) (User, error)
 	GetVideo(ctx context.Context, id pgtype.UUID) (Video, error)
 	GetVideoByStorageKey(ctx context.Context, storageKey string) (Video, error)
+	IncrementRenditionSegments(ctx context.Context, id pgtype.UUID) (int64, error)
+	InsertRendition(ctx context.Context, arg InsertRenditionParams) (VideoRendition, error)
 	ListAnnotationsByVideo(ctx context.Context, videoID pgtype.UUID) ([]Annotation, error)
 	ListDevices(ctx context.Context) ([]Device, error)
 	ListDevicesPage(ctx context.Context, arg ListDevicesPageParams) ([]Device, error)
+	// Videos that are mid-encode (hls_status in planning/encoding) or have failed
+	// recently. Returned newest first so the dashboard shows current activity at
+	// the top.
+	ListEncodingVideos(ctx context.Context, limit int32) ([]Video, error)
 	ListMarkersByRun(ctx context.Context, arg ListMarkersByRunParams) ([]Marker, error)
 	ListMatchesPage(ctx context.Context, arg ListMatchesPageParams) ([]Match, error)
 	// Videos uploaded against the Run's session that are not yet attached to it.
 	// Used to populate the "Run に追加すべき動画" recommendation list.
 	ListRecommendedVideosForRun(ctx context.Context, id pgtype.UUID) ([]Video, error)
+	ListRenditionsByVideo(ctx context.Context, videoID pgtype.UUID) ([]VideoRendition, error)
+	ListRenditionsByVideos(ctx context.Context, videoIds []pgtype.UUID) ([]VideoRendition, error)
 	ListRobotsByTeam(ctx context.Context, teamID pgtype.UUID) ([]Robot, error)
 	ListRobotsPage(ctx context.Context, arg ListRobotsPageParams) ([]Robot, error)
 	ListRunTagsByRun(ctx context.Context, runID pgtype.UUID) ([]pgtype.UUID, error)
@@ -91,6 +101,9 @@ type Querier interface {
 	ListUsers(ctx context.Context) ([]User, error)
 	ListUsersPage(ctx context.Context, arg ListUsersPageParams) ([]User, error)
 	ListVideosPage(ctx context.Context, arg ListVideosPageParams) ([]Video, error)
+	MarkRenditionEncoding(ctx context.Context, id pgtype.UUID) (int64, error)
+	MarkRenditionFailed(ctx context.Context, arg MarkRenditionFailedParams) (int64, error)
+	MarkRenditionReady(ctx context.Context, arg MarkRenditionReadyParams) (int64, error)
 	SearchRuns(ctx context.Context, arg SearchRunsParams) ([]Run, error)
 	UpdateAnnotation(ctx context.Context, arg UpdateAnnotationParams) (Annotation, error)
 	UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error)
@@ -106,7 +119,10 @@ type Querier interface {
 	UpdateTournament(ctx context.Context, arg UpdateTournamentParams) (Tournament, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateVideo(ctx context.Context, arg UpdateVideoParams) (Video, error)
+	UpdateVideoHLSReady(ctx context.Context, arg UpdateVideoHLSReadyParams) (int64, error)
+	UpdateVideoHLSStatus(ctx context.Context, arg UpdateVideoHLSStatusParams) (int64, error)
 	UpdateVideoProbe(ctx context.Context, arg UpdateVideoProbeParams) (Video, error)
+	UpdateVideoSource(ctx context.Context, arg UpdateVideoSourceParams) (int64, error)
 	UpdateVideoThumbnail(ctx context.Context, arg UpdateVideoThumbnailParams) (int64, error)
 }
 

@@ -87,3 +87,45 @@ func TestParseInvalidJSON(t *testing.T) {
 		t.Error("expected error on invalid JSON")
 	}
 }
+
+func TestParseExtractsStreamMetadata(t *testing.T) {
+	raw := []byte(`{
+		"format": {"duration": "60"},
+		"streams": [
+			{"codec_type": "video", "codec_name": "h264", "profile": "High", "width": 1920, "height": 1080},
+			{"codec_type": "audio", "codec_name": "aac"}
+		]
+	}`)
+	m, err := parse(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if m.VideoCodec != "h264" || m.VideoProfile != "High" {
+		t.Errorf("video codec/profile: got %q %q", m.VideoCodec, m.VideoProfile)
+	}
+	if m.Width == nil || *m.Width != 1920 || m.Height == nil || *m.Height != 1080 {
+		t.Errorf("dimensions: got %v x %v", m.Width, m.Height)
+	}
+	if m.AudioCodec != "aac" {
+		t.Errorf("audio codec: got %q", m.AudioCodec)
+	}
+}
+
+func TestParseHandlesVideoOnlyFile(t *testing.T) {
+	raw := []byte(`{
+		"format": {"duration": "30"},
+		"streams": [
+			{"codec_type": "video", "codec_name": "hevc", "width": 1280, "height": 720}
+		]
+	}`)
+	m, err := parse(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if m.VideoCodec != "hevc" {
+		t.Errorf("video codec: got %q", m.VideoCodec)
+	}
+	if m.AudioCodec != "" {
+		t.Errorf("expected no audio codec; got %q", m.AudioCodec)
+	}
+}

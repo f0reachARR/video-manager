@@ -94,7 +94,7 @@ func (q *Queries) GetRun(ctx context.Context, id pgtype.UUID) (Run, error) {
 }
 
 const listRecommendedVideosForRun = `-- name: ListRecommendedVideosForRun :many
-SELECT v.id, v.session_id, v.device_id, v.uploader_id, v.storage_key, v.recorded_at, v.duration_sec, v.time_offset_sec, v.created_at, v.thumbnail_key, v.display_name
+SELECT v.id, v.session_id, v.device_id, v.uploader_id, v.storage_key, v.recorded_at, v.duration_sec, v.time_offset_sec, v.created_at, v.thumbnail_key, v.display_name, v.hls_master_key, v.hls_status, v.source_video_codec, v.source_audio_codec, v.source_width, v.source_height, v.passthrough_ok
 FROM videos v
 JOIN runs r ON r.id = $1
 WHERE v.session_id = r.session_id
@@ -129,6 +129,13 @@ func (q *Queries) ListRecommendedVideosForRun(ctx context.Context, id pgtype.UUI
 			&i.CreatedAt,
 			&i.ThumbnailKey,
 			&i.DisplayName,
+			&i.HlsMasterKey,
+			&i.HLSStatus,
+			&i.SourceVideoCodec,
+			&i.SourceAudioCodec,
+			&i.SourceWidth,
+			&i.SourceHeight,
+			&i.PassthroughOk,
 		); err != nil {
 			return nil, err
 		}

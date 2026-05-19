@@ -402,8 +402,82 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 動画再生用の署名 URL を発行 */
+        /**
+         * 動画再生用の URL を発行
+         * @description HLS が ready なら master.m3u8 を指す proxy URL (kind=hls) を返す。
+         *     それ以外は元 MP4 の署名 URL (kind=mp4) を返す。
+         */
         get: operations["getVideoPlaybackUrl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/videos/{videoId}/renditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 動画の HLS rendition 一覧
+         * @description 指定した動画の各バリアントの状態を返す。`status=encoding` のあいだは
+         *     `segmentsDone` がエンコード進捗の目安になる（segments_done /
+         *     ceil(duration_sec / 6) ≒ %）。
+         */
+        get: operations["listVideoRenditions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/encoding-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * HLS エンコード中・失敗した動画とその rendition 状態
+         * @description ダッシュボード用。`hls_status` が `planning` / `encoding` / `failed` の
+         *     動画と、それらの video_renditions 行をまとめて返す。新しいものが先頭。
+         */
+        get: operations["listEncodingJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/videos/{videoId}/hls/{rest}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+                /**
+                 * @description master.m3u8 / {variant}/playlist.m3u8 / {variant}/seg-XXXXX.ts のいずれか。
+                 *     API サーバが MinIO から取得して中継する。署名 URL は使わず認証は API
+                 *     ミドルウェアに任せる。
+                 */
+                rest: string;
+            };
+            cookie?: never;
+        };
+        /** HLS の master / variant playlist / segment を取得 */
+        get: operations["getVideoHlsObject"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1014,6 +1088,12 @@ export interface components {
             timeOffsetSec: number;
             /** @description サムネイルが生成済みなら true。 GET /videos/{id}/thumbnail-url で取得 */
             hasThumbnail: boolean;
+            /**
+             * @description HLS 変換パイプラインの状態。`ready` のときのみ playback-url が
+             *     HLS (kind=hls) を返す。それ以外は MP4 フォールバック。
+             * @enum {string}
+             */
+            hlsStatus: "pending" | "planning" | "encoding" | "ready" | "failed";
             /** Format: date-time */
             createdAt: string;
         };
@@ -1031,11 +1111,63 @@ export interface components {
             data: components["schemas"]["Video"][];
             pagination: components["schemas"]["Pagination"];
         };
+        VideoRendition: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            videoId: string;
+            /** @enum {string} */
+            kind: "original" | "720p" | "480p";
+            /** @enum {string} */
+            status: "pending" | "encoding" | "ready" | "failed";
+            /**
+             * @description `-c copy` で再エンコードせず TS に remux しているなら true。
+             *     original のみ true になり得る。
+             */
+            passthrough: boolean;
+            width: number;
+            height: number;
+            /** @description master playlist で広告する BANDWIDTH 値 */
+            bandwidthBps?: number | null;
+            playlistKey: string;
+            /** @description これまでに S3 へアップロードされた .ts セグメント数 */
+            segmentsDone: number;
+            error?: string | null;
+            /** Format: date-time */
+            startedAt?: string | null;
+            /** Format: date-time */
+            completedAt?: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        VideoRenditionList: {
+            /** Format: uuid */
+            videoId: string;
+            /** @enum {string} */
+            hlsStatus: "pending" | "planning" | "encoding" | "ready" | "failed";
+            durationSec: number | null;
+            data: components["schemas"]["VideoRendition"][];
+        };
+        EncodingJob: {
+            video: components["schemas"]["Video"];
+            renditions: components["schemas"]["VideoRendition"][];
+        };
+        EncodingJobList: {
+            data: components["schemas"]["EncodingJob"][];
+        };
         PlaybackUrl: {
             /** Format: uri */
             url: string;
             /** Format: date-time */
             expiresAt: string;
+            /**
+             * @description Playback source type. "hls" means an HLS master playlist served via
+             *     the in-process proxy; "mp4" means the original upload served via a
+             *     presigned S3 URL (used while HLS encoding is in progress or failed);
+             *     "image" is used by the thumbnail endpoint.
+             * @enum {string}
+             */
+            kind: "hls" | "mp4" | "image";
         };
         TusHookRequest: {
             /** @description tusd hook 種別（例 pre-finish / post-finish） */
@@ -2501,6 +2633,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlaybackUrl"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listVideoRenditions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoRenditionList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listEncodingJobs: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EncodingJobList"];
+                };
+            };
+        };
+    };
+    getVideoHlsObject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+                /**
+                 * @description master.m3u8 / {variant}/playlist.m3u8 / {variant}/seg-XXXXX.ts のいずれか。
+                 *     API サーバが MinIO から取得して中継する。署名 URL は使わず認証は API
+                 *     ミドルウェアに任せる。
+                 */
+                rest: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description HLS object body (m3u8 or mpegts) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apple.mpegurl": unknown;
+                    "video/mp2t": unknown;
                 };
             };
             404: components["responses"]["NotFound"];

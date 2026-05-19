@@ -845,7 +845,10 @@ paths:
     get:
       tags: [videos]
       operationId: getVideoPlaybackUrl
-      summary: 動画再生用の署名 URL を発行
+      summary: 動画再生用の URL を発行
+      description: |
+        HLS が ready なら master.m3u8 を指す proxy URL (kind=hls) を返す。
+        それ以外は元 MP4 の署名 URL (kind=mp4) を返す。
       responses:
         "200":
           description: OK
@@ -853,6 +856,77 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlaybackUrl"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /videos/{videoId}/renditions:
+    parameters:
+      - $ref: "#/components/parameters/VideoId"
+    get:
+      tags: [videos]
+      operationId: listVideoRenditions
+      summary: 動画の HLS rendition 一覧
+      description: |
+        指定した動画の各バリアントの状態を返す。`status=encoding` のあいだは
+        `segmentsDone` がエンコード進捗の目安になる（segments_done /
+        ceil(duration_sec / 6) ≒ %）。
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoRenditionList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /encoding-jobs:
+    get:
+      tags: [videos]
+      operationId: listEncodingJobs
+      summary: HLS エンコード中・失敗した動画とその rendition 状態
+      description: |
+        ダッシュボード用。`hls_status` が `planning` / `encoding` / `failed` の
+        動画と、それらの video_renditions 行をまとめて返す。新しいものが先頭。
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EncodingJobList"
+
+  /videos/{videoId}/hls/{rest}:
+    parameters:
+      - $ref: "#/components/parameters/VideoId"
+      - name: rest
+        in: path
+        required: true
+        schema:
+          type: string
+        description: |
+          master.m3u8 / {variant}/playlist.m3u8 / {variant}/seg-XXXXX.ts のいずれか。
+          API サーバが MinIO から取得して中継する。署名 URL は使わず認証は API
+          ミドルウェアに任せる。
+    get:
+      tags: [videos]
+      operationId: getVideoHlsObject
+      summary: HLS の master / variant playlist / segment を取得
+      responses:
+        "200":
+          description: HLS object body (m3u8 or mpegts)
+          content:
+            application/vnd.apple.mpegurl: {}
+            video/mp2t: {}
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -2157,7 +2231,7 @@ components:
     # ---------- Video ----------
     Video:
       type: object
-      required: [id, storageKey, displayName, timeOffsetSec, hasThumbnail, createdAt]
+      required: [id, storageKey, displayName, timeOffsetSec, hasThumbnail, hlsStatus, createdAt]
       properties:
         id:
           type: string
@@ -2188,6 +2262,12 @@ components:
         hasThumbnail:
           type: boolean
           description: サムネイルが生成済みなら true。 GET /videos/{id}/thumbnail-url で取得
+        hlsStatus:
+          type: string
+          description: |
+            HLS 変換パイプラインの状態。`ready` のときのみ playback-url が
+            HLS (kind=hls) を返す。それ以外は MP4 フォールバック。
+          enum: [pending, planning, encoding, ready, failed]
         createdAt:
           type: string
           format: date-time
@@ -2217,9 +2297,101 @@ components:
             $ref: "#/components/schemas/Video"
         pagination:
           $ref: "#/components/schemas/Pagination"
+    VideoRendition:
+      type: object
+      required:
+        - id
+        - videoId
+        - kind
+        - status
+        - passthrough
+        - width
+        - height
+        - playlistKey
+        - segmentsDone
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        videoId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [original, "720p", "480p"]
+        status:
+          type: string
+          enum: [pending, encoding, ready, failed]
+        passthrough:
+          type: boolean
+          description: |
+            `-c copy` で再エンコードせず TS に remux しているなら true。
+            original のみ true になり得る。
+        width:
+          type: integer
+        height:
+          type: integer
+        bandwidthBps:
+          type: [integer, "null"]
+          description: master playlist で広告する BANDWIDTH 値
+        playlistKey:
+          type: string
+        segmentsDone:
+          type: integer
+          description: これまでに S3 へアップロードされた .ts セグメント数
+        error:
+          type: [string, "null"]
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        completedAt:
+          type: [string, "null"]
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    VideoRenditionList:
+      type: object
+      required: [videoId, hlsStatus, durationSec, data]
+      properties:
+        videoId:
+          type: string
+          format: uuid
+        hlsStatus:
+          type: string
+          enum: [pending, planning, encoding, ready, failed]
+        durationSec:
+          type: [integer, "null"]
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/VideoRendition"
+
+    EncodingJob:
+      type: object
+      required: [video, renditions]
+      properties:
+        video:
+          $ref: "#/components/schemas/Video"
+        renditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/VideoRendition"
+
+    EncodingJobList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/EncodingJob"
+
     PlaybackUrl:
       type: object
-      required: [url, expiresAt]
+      required: [url, expiresAt, kind]
       properties:
         url:
           type: string
@@ -2227,6 +2399,14 @@ components:
         expiresAt:
           type: string
           format: date-time
+        kind:
+          type: string
+          description: |
+            Playback source type. "hls" means an HLS master playlist served via
+            the in-process proxy; "mp4" means the original upload served via a
+            presigned S3 URL (used while HLS encoding is in progress or failed);
+            "image" is used by the thumbnail endpoint.
+          enum: [hls, mp4, image]
 
     # ---------- Tus hook ----------
     TusHookRequest:

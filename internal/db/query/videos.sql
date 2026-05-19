@@ -44,5 +44,25 @@ UPDATE videos
 SET thumbnail_key = $2
 WHERE id = $1;
 
+-- name: UpdateVideoSource :execrows
+UPDATE videos
+SET
+  source_video_codec = sqlc.narg('source_video_codec')::text,
+  source_audio_codec = sqlc.narg('source_audio_codec')::text,
+  source_width       = sqlc.narg('source_width')::int,
+  source_height      = sqlc.narg('source_height')::int,
+  passthrough_ok     = sqlc.arg('passthrough_ok')::bool
+WHERE id = sqlc.arg('id')::uuid;
+
+-- name: UpdateVideoHLSStatus :execrows
+UPDATE videos
+SET hls_status = sqlc.arg('hls_status')::hls_status
+WHERE id = sqlc.arg('id')::uuid;
+
+-- name: UpdateVideoHLSReady :execrows
+UPDATE videos
+SET hls_status = 'ready', hls_master_key = sqlc.arg('hls_master_key')::text
+WHERE id = sqlc.arg('id')::uuid;
+
 -- name: DeleteVideo :execrows
 DELETE FROM videos WHERE id = $1;

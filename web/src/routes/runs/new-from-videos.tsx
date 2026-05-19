@@ -18,8 +18,9 @@ import {
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { Video } from "../../lib/api/client";
+import type { PlaybackUrl, Video } from "../../lib/api/client";
 import { videosApi } from "../../lib/api/client";
+import { useHlsSource } from "../../components/player/useHlsSource";
 import { useCreateRun } from "../../features/runs/api/queries";
 import { useRobots } from "../../features/robots/api/queries";
 import { useScenarios } from "../../features/scenarios/api/queries";
@@ -995,14 +996,14 @@ function Preview({
 }) {
   // Lazily fetch playback URLs for every placeable video — the preview
   // now spans the full timeline so any of them might come into view.
-  const [urls, setUrls] = useState<Map<string, string>>(new Map());
+  const [urls, setUrls] = useState<Map<string, PlaybackUrl>>(new Map());
   useEffect(() => {
     let canceled = false;
     videos.forEach(async (v) => {
       if (urls.has(v.id)) return;
       try {
         const r = await videosApi.playbackUrl(v.id);
-        if (!canceled) setUrls((m) => new Map(m).set(v.id, r.url));
+        if (!canceled) setUrls((m) => new Map(m).set(v.id, r));
       } catch {
         // Best-effort; the lane just won't load.
       }
@@ -1150,19 +1151,11 @@ function Preview({
                   }}
                 >
                   {url ? (
-                    <video
-                      ref={(el) => {
+                    <PreviewVideoEl
+                      source={url}
+                      registerRef={(el) => {
                         if (el) videoRefs.current.set(v.id, el);
                         else videoRefs.current.delete(v.id);
-                      }}
-                      src={url}
-                      muted
-                      playsInline
-                      preload="metadata"
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
                       }}
                     />
                   ) : (
@@ -1266,5 +1259,32 @@ function Preview({
         </Group>
       </Stack>
     </Card>
+  );
+}
+
+function PreviewVideoEl({
+  source,
+  registerRef,
+}: {
+  source: PlaybackUrl;
+  registerRef: (el: HTMLVideoElement | null) => void;
+}) {
+  const [el, setEl] = useState<HTMLVideoElement | null>(null);
+  useHlsSource(el, source);
+  return (
+    <video
+      ref={(node) => {
+        setEl(node);
+        registerRef(node);
+      }}
+      muted
+      playsInline
+      preload="metadata"
+      style={{
+        width: "100%",
+        height: "100%",
+        objectFit: "contain",
+      }}
+    />
   );
 }
