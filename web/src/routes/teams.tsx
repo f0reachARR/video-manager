@@ -64,7 +64,9 @@ function TeamsPage() {
           {list.map((t) => (
             <Table.Tr key={t.id}>
               <Table.Td>{t.name}</Table.Td>
-              <Table.Td>{t.isOwn && <Badge color="blue">自チーム</Badge>}</Table.Td>
+              <Table.Td>
+                {t.isOwn && <Badge color="blue">自チーム</Badge>}
+              </Table.Td>
               <Table.Td>{new Date(t.createdAt).toLocaleString()}</Table.Td>
               <Table.Td>
                 <TeamActions
@@ -146,15 +148,32 @@ function TeamEditModal({
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title={team ? "チーム編集" : "チーム新規作成"}>
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={team ? "チーム編集" : "チーム新規作成"}
+    >
       <Stack>
-        <TextInput label="名前" value={name} onChange={(e) => setName(e.currentTarget.value)} required />
-        <Checkbox label="自チーム (isOwn)" checked={isOwn} onChange={(e) => setIsOwn(e.currentTarget.checked)} />
+        <TextInput
+          label="名前"
+          value={name}
+          onChange={(e) => setName(e.currentTarget.value)}
+          required
+        />
+        <Checkbox
+          label="自チーム (isOwn)"
+          checked={isOwn}
+          onChange={(e) => setIsOwn(e.currentTarget?.checked ?? false)}
+        />
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
             キャンセル
           </Button>
-          <Button onClick={submit} loading={create.isPending || update.isPending} disabled={!name.trim()}>
+          <Button
+            onClick={submit}
+            loading={create.isPending || update.isPending}
+            disabled={!name.trim()}
+          >
             保存
           </Button>
         </Group>

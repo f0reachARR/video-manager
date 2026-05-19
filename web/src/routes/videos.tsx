@@ -127,7 +127,9 @@ function VideosPage() {
       startedAt: Date.now(),
       state: "uploading",
       upload: buildUpload(file, (patch) =>
-        setUploads((u) => u.map((it) => (it.id === id ? { ...it, ...patch } : it))),
+        setUploads((u) =>
+          u.map((it) => (it.id === id ? { ...it, ...patch } : it)),
+        ),
       ),
     };
     setUploads((u) => [...u, item]);
@@ -145,14 +147,21 @@ function VideosPage() {
     const target = uploads.find((u) => u.id === id);
     if (!target) return;
     target.upload.abort().catch(() => {});
-    setUploads((u) => u.map((it) => (it.id === id ? { ...it, state: "canceled" } : it)));
+    setUploads((u) =>
+      u.map((it) => (it.id === id ? { ...it, state: "canceled" } : it)),
+    );
   };
 
   const retryUpload = (id: string) => {
     setUploads((u) =>
       u.map((it) =>
         it.id === id
-          ? { ...it, state: "uploading", error: undefined, startedAt: Date.now() }
+          ? {
+              ...it,
+              state: "uploading",
+              error: undefined,
+              startedAt: Date.now(),
+            }
           : it,
       ),
     );
@@ -187,7 +196,11 @@ function VideosPage() {
             w={200}
             size="sm"
           />
-          <FileButton onChange={(files) => files && startUploadMany(files)} accept="video/*" multiple>
+          <FileButton
+            onChange={(files) => files && startUploadMany(files)}
+            accept="video/*"
+            multiple
+          >
             {(props) => <Button {...props}>＋ 動画を選択</Button>}
           </FileButton>
           <MobileCaptureButton onPicked={startUpload} />
@@ -211,7 +224,8 @@ function VideosPage() {
           onDrop={(e) => {
             e.preventDefault();
             setDragging(false);
-            if (e.dataTransfer?.files?.length) startUploadMany(e.dataTransfer.files);
+            if (e.dataTransfer?.files?.length)
+              startUploadMany(e.dataTransfer.files);
           }}
         >
           <Text ta="center" c={dragging ? "blue" : "dimmed"}>
@@ -238,29 +252,44 @@ function VideosPage() {
                 <Progress
                   value={u.progress}
                   color={
-                    u.state === "error" ? "red"
-                    : u.state === "canceled" ? "gray"
-                    : u.state === "done" ? "green"
-                    : "blue"
+                    u.state === "error"
+                      ? "red"
+                      : u.state === "canceled"
+                        ? "gray"
+                        : u.state === "done"
+                          ? "green"
+                          : "blue"
                   }
                   miw={200}
                   size="sm"
                   flex={1}
                 />
                 <Text size="xs" w={130} ta="right">
-                  {u.state === "uploading" && `${u.progress}% · ${formatRate(u)}`}
+                  {u.state === "uploading" &&
+                    `${u.progress}% · ${formatRate(u)}`}
                   {u.state === "done" && "完了"}
                   {u.state === "canceled" && "中止"}
                   {u.state === "error" && (u.error ?? "失敗")}
                 </Text>
                 <Group gap={4} w={70} justify="flex-end">
                   {u.state === "uploading" && (
-                    <ActionIcon size="sm" variant="subtle" color="red" onClick={() => cancelUpload(u.id)} aria-label="中止">
+                    <ActionIcon
+                      size="sm"
+                      variant="subtle"
+                      color="red"
+                      onClick={() => cancelUpload(u.id)}
+                      aria-label="中止"
+                    >
                       ✕
                     </ActionIcon>
                   )}
                   {(u.state === "error" || u.state === "canceled") && (
-                    <ActionIcon size="sm" variant="subtle" onClick={() => retryUpload(u.id)} aria-label="再試行">
+                    <ActionIcon
+                      size="sm"
+                      variant="subtle"
+                      onClick={() => retryUpload(u.id)}
+                      aria-label="再試行"
+                    >
                       ↻
                     </ActionIcon>
                   )}
@@ -271,10 +300,13 @@ function VideosPage() {
         )}
 
         {selected.size > 0 && (
-          <Group justify="space-between" px="sm" py="xs" bg="var(--mantine-color-blue-light)">
-            <Text size="sm">
-              {selected.size} 件選択中
-            </Text>
+          <Group
+            justify="space-between"
+            px="sm"
+            py="xs"
+            bg="var(--mantine-color-blue-light)"
+          >
+            <Text size="sm">{selected.size} 件選択中</Text>
             <Group gap="xs">
               <Button
                 size="xs"
@@ -283,7 +315,11 @@ function VideosPage() {
               >
                 🎬 選択した動画から Run を作成
               </Button>
-              <Button size="xs" variant="default" onClick={() => setSelected(new Set())}>
+              <Button
+                size="xs"
+                variant="default"
+                onClick={() => setSelected(new Set())}
+              >
                 選択解除
               </Button>
             </Group>
@@ -297,7 +333,9 @@ function VideosPage() {
                 <Checkbox
                   aria-label="全選択"
                   checked={list.length > 0 && selected.size === list.length}
-                  indeterminate={selected.size > 0 && selected.size < list.length}
+                  indeterminate={
+                    selected.size > 0 && selected.size < list.length
+                  }
                   onChange={(e) => {
                     if (e.currentTarget.checked) {
                       setSelected(new Set(list.map((x) => x.id)));
@@ -326,7 +364,7 @@ function VideosPage() {
                     onChange={(e) => {
                       setSelected((cur) => {
                         const next = new Set(cur);
-                        if (e.currentTarget.checked) next.add(v.id);
+                        if (e.currentTarget?.checked) next.add(v.id);
                         else next.delete(v.id);
                         return next;
                       });
@@ -342,12 +380,16 @@ function VideosPage() {
                   </Text>
                 </Table.Td>
                 <Table.Td>
-                  {v.deviceId ? deviceNameById.get(v.deviceId) ?? v.deviceId : "—"}
+                  {v.deviceId
+                    ? (deviceNameById.get(v.deviceId) ?? v.deviceId)
+                    : "—"}
                 </Table.Td>
                 <Table.Td>
                   {v.recordedAt ? new Date(v.recordedAt).toLocaleString() : "—"}
                 </Table.Td>
-                <Table.Td>{v.durationSec != null ? `${v.durationSec}s` : "—"}</Table.Td>
+                <Table.Td>
+                  {v.durationSec != null ? `${v.durationSec}s` : "—"}
+                </Table.Td>
                 <Table.Td>
                   {v.sessionId ? (
                     <Badge size="sm" variant="light">
@@ -410,7 +452,9 @@ function CreateRunFromVideosModal({
 
   // Pre-fill: shared session across selection (if any), and duration = longest video.
   const sharedSession = useMemo(() => {
-    const ids = new Set(videos.map((v) => v.sessionId).filter(Boolean) as string[]);
+    const ids = new Set(
+      videos.map((v) => v.sessionId).filter(Boolean) as string[],
+    );
     return ids.size === 1 ? [...ids][0] : null;
   }, [videos]);
   const maxDur = useMemo(
@@ -471,10 +515,16 @@ function CreateRunFromVideosModal({
   };
 
   return (
-    <Modal opened onClose={onClose} title="選択した動画から Run を作成" size="xl">
+    <Modal
+      opened
+      onClose={onClose}
+      title="選択した動画から Run を作成"
+      size="xl"
+    >
       <Stack>
         <Text size="sm" c="dimmed">
-          {videos.length} 件の動画から Run を作成します。各動画はアングルとして自動で紐付きます。
+          {videos.length} 件の動画から Run
+          を作成します。各動画はアングルとして自動で紐付きます。
         </Text>
         <Select
           label="Session"
@@ -692,17 +742,26 @@ function formatRate(u: UploadItem): string {
 function VideoActions({ video }: { video: Video }) {
   const [playOpen, { open: openPlay, close: closePlay }] = useDisclosure(false);
   const [metaOpen, { open: openMeta, close: closeMeta }] = useDisclosure(false);
-  const [sessionOpen, { open: openSession, close: closeSession }] = useDisclosure(false);
+  const [sessionOpen, { open: openSession, close: closeSession }] =
+    useDisclosure(false);
   const del = useDeleteVideo();
   return (
     <Group gap={4}>
       <ActionIcon variant="subtle" onClick={openPlay} aria-label="再生">
         ▶
       </ActionIcon>
-      <ActionIcon variant="subtle" onClick={openMeta} aria-label="メタデータ編集">
+      <ActionIcon
+        variant="subtle"
+        onClick={openMeta}
+        aria-label="メタデータ編集"
+      >
         ✏️
       </ActionIcon>
-      <ActionIcon variant="subtle" onClick={openSession} aria-label="Session 紐付け">
+      <ActionIcon
+        variant="subtle"
+        onClick={openSession}
+        aria-label="Session 紐付け"
+      >
         📁
       </ActionIcon>
       <ActionIcon
@@ -710,7 +769,9 @@ function VideoActions({ video }: { video: Video }) {
         color="red"
         loading={del.isPending}
         onClick={() => {
-          if (confirm("削除しますか？ オブジェクトストレージのファイルも消えます")) {
+          if (
+            confirm("削除しますか？ オブジェクトストレージのファイルも消えます")
+          ) {
             del.mutate(video.id);
           }
         }}
@@ -720,12 +781,20 @@ function VideoActions({ video }: { video: Video }) {
       </ActionIcon>
       {playOpen && <PlaybackModal video={video} onClose={closePlay} />}
       {metaOpen && <VideoMetadataModal video={video} onClose={closeMeta} />}
-      {sessionOpen && <SessionAssignModal video={video} onClose={closeSession} />}
+      {sessionOpen && (
+        <SessionAssignModal video={video} onClose={closeSession} />
+      )}
     </Group>
   );
 }
 
-function PlaybackModal({ video, onClose }: { video: Video; onClose: () => void }) {
+function PlaybackModal({
+  video,
+  onClose,
+}: {
+  video: Video;
+  onClose: () => void;
+}) {
   return (
     <Modal opened onClose={onClose} title="動画再生 + Annotation" size="xl">
       <AnnotatedPlayer video={video} />
