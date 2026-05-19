@@ -803,7 +803,9 @@ function Timeline({
       )}
 
       {/* Region overlays — drawn over the lanes, semi-transparent so videos
-          stay visible underneath. */}
+          stay visible underneath. zIndex:2 puts them above the lane Boxes
+          (which come later in the DOM and would otherwise eat pointerdown
+          events meant for region bodies / resize handles). */}
       <Box
         style={{
           position: "absolute",
@@ -812,6 +814,7 @@ function Timeline({
           top: HEADER_HEIGHT,
           height: lanesHeight,
           pointerEvents: "none",
+          zIndex: 2,
         }}
       >
         {regions.map((r, idx) => {
