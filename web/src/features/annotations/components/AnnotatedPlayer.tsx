@@ -13,9 +13,11 @@ import { useMemo, useRef, useState } from "react";
 import {
   ApiError,
   type Annotation,
+  type PlaybackUrl,
   type Video,
   videosApi,
 } from "../../../lib/api/client";
+import { useHlsSource } from "../../../components/player/useHlsSource";
 import { useCurrentUserId } from "../../../stores/currentUser";
 import {
   useAnnotations,
@@ -34,10 +36,11 @@ import { LiveInkLayer } from "./LiveInkLayer";
 import { AnnotationToolbar } from "./AnnotationToolbar";
 
 export function AnnotatedPlayer({ video }: { video: Video }) {
-  const [url, setUrl] = useState<string | null>(null);
+  const [source, setSource] = useState<PlaybackUrl | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requested = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<DrawMode>("off");
   const [draftLabel, setDraftLabel] = useState("");
@@ -51,13 +54,15 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
     requested.current = true;
     videosApi
       .playbackUrl(video.id)
-      .then((r) => setUrl(r.url))
+      .then((r) => setSource(r))
       .catch((e) =>
         setError(e instanceof ApiError ? e.body.message : String(e)),
       );
   }
 
-  const currentSec = useVideoCurrentTime(videoRef, !!url);
+  useHlsSource(videoEl, source);
+
+  const currentSec = useVideoCurrentTime(videoRef, !!source);
 
   const visible = useMemo(() => {
     const arr = ann.data?.data ?? [];
@@ -154,8 +159,8 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
   return (
     <Stack>
       {error && <Alert color="red">{error}</Alert>}
-      {!error && !url && <Text>署名 URL を取得中...</Text>}
-      {url && (
+      {!error && !source && <Text>再生 URL を取得中...</Text>}
+      {source && (
         <div
           ref={containerRef}
           style={{
@@ -170,8 +175,10 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
           onPointerCancel={onPointerUp}
         >
           <video
-            ref={videoRef}
-            src={url}
+            ref={(el) => {
+              videoRef.current = el;
+              setVideoEl(el);
+            }}
             // Hide native controls while drawing so the toolbar at the
             // bottom doesn't eat our pointerdown events.
             controls={!drawing}

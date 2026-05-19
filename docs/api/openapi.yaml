@@ -845,7 +845,10 @@ paths:
     get:
       tags: [videos]
       operationId: getVideoPlaybackUrl
-      summary: 動画再生用の署名 URL を発行
+      summary: 動画再生用の URL を発行
+      description: |
+        HLS が ready なら master.m3u8 を指す proxy URL (kind=hls) を返す。
+        それ以外は元 MP4 の署名 URL (kind=mp4) を返す。
       responses:
         "200":
           description: OK
@@ -853,6 +856,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlaybackUrl"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /videos/{videoId}/hls/{rest}:
+    parameters:
+      - $ref: "#/components/parameters/VideoId"
+      - name: rest
+        in: path
+        required: true
+        schema:
+          type: string
+        description: |
+          master.m3u8 / {variant}/playlist.m3u8 / {variant}/seg-XXXXX.ts のいずれか。
+          API サーバが MinIO から取得して中継する。署名 URL は使わず認証は API
+          ミドルウェアに任せる。
+    get:
+      tags: [videos]
+      operationId: getVideoHlsObject
+      summary: HLS の master / variant playlist / segment を取得
+      responses:
+        "200":
+          description: HLS object body (m3u8 or mpegts)
+          content:
+            application/vnd.apple.mpegurl: {}
+            video/mp2t: {}
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -2157,7 +2185,7 @@ components:
     # ---------- Video ----------
     Video:
       type: object
-      required: [id, storageKey, displayName, timeOffsetSec, hasThumbnail, createdAt]
+      required: [id, storageKey, displayName, timeOffsetSec, hasThumbnail, hlsStatus, createdAt]
       properties:
         id:
           type: string
@@ -2188,6 +2216,12 @@ components:
         hasThumbnail:
           type: boolean
           description: サムネイルが生成済みなら true。 GET /videos/{id}/thumbnail-url で取得
+        hlsStatus:
+          type: string
+          description: |
+            HLS 変換パイプラインの状態。`ready` のときのみ playback-url が
+            HLS (kind=hls) を返す。それ以外は MP4 フォールバック。
+          enum: [pending, planning, encoding, ready, failed]
         createdAt:
           type: string
           format: date-time
@@ -2219,7 +2253,7 @@ components:
           $ref: "#/components/schemas/Pagination"
     PlaybackUrl:
       type: object
-      required: [url, expiresAt]
+      required: [url, expiresAt, kind]
       properties:
         url:
           type: string
@@ -2227,6 +2261,14 @@ components:
         expiresAt:
           type: string
           format: date-time
+        kind:
+          type: string
+          description: |
+            Playback source type. "hls" means an HLS master playlist served via
+            the in-process proxy; "mp4" means the original upload served via a
+            presigned S3 URL (used while HLS encoding is in progress or failed);
+            "image" is used by the thumbnail endpoint.
+          enum: [hls, mp4, image]
 
     # ---------- Tus hook ----------
     TusHookRequest:

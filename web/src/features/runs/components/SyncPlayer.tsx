@@ -15,11 +15,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   type Marker,
+  type PlaybackUrl,
   type Run,
   type RunVideo,
   type User,
   videosApi,
 } from "../../../lib/api/client";
+import { useHlsSource } from "../../../components/player/useHlsSource";
 import { useTopicSubscription } from "../../../lib/realtime";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUserId } from "../../../stores/currentUser";
@@ -59,7 +61,7 @@ const VIDEO_DRIFT_SNAP_SEC = 0.25;
 
 type LoadedAngle = {
   rv: RunVideo;
-  url: string;
+  source: PlaybackUrl;
 };
 
 export function SyncPlayer({
@@ -78,7 +80,7 @@ export function SyncPlayer({
   markers: Marker[];
 }) {
   const videos = run.videos ?? [];
-  const [urls, setUrls] = useState<Map<string, string>>(new Map());
+  const [urls, setUrls] = useState<Map<string, PlaybackUrl>>(new Map());
   const [urlErrors, setUrlErrors] = useState<Map<string, string>>(new Map());
   const [mainAngleId, setMainAngleId] = useState<string | null>(null);
   const [runDurationSec, setRunDurationSec] = useState<number>(0);
@@ -172,7 +174,7 @@ export function SyncPlayer({
         try {
           const r = await videosApi.playbackUrl(v.videoId);
           if (canceled) return;
-          setUrls((m) => new Map(m).set(v.videoId, r.url));
+          setUrls((m) => new Map(m).set(v.videoId, r));
         } catch (e) {
           if (canceled) return;
           setUrlErrors((m) =>
@@ -383,8 +385,11 @@ export function SyncPlayer({
   }
 
   const loaded: LoadedAngle[] = videos
-    .map((rv) => ({ rv, url: urls.get(rv.videoId) ?? "" }))
-    .filter((a) => a.url);
+    .map((rv) => {
+      const source = urls.get(rv.videoId);
+      return source ? { rv, source } : null;
+    })
+    .filter((a): a is LoadedAngle => a !== null);
 
   const mainAngle = loaded.find((a) => a.rv.id === mainAngleId);
   const others = loaded.filter((a) => a.rv.id !== mainAngleId);
@@ -669,10 +674,13 @@ function AngleVideo({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoEl, setVideoElState] = useState<HTMLVideoElement | null>(null);
   const setVideoEl = (el: HTMLVideoElement | null) => {
     videoRef.current = el;
+    setVideoElState(el);
     registerRef(el);
   };
+  useHlsSource(videoEl, angle.source);
 
   // This angle covers run time [runOffset, runOffset + (end-start)]. Outside
   // that window the source video has no content for the Run, so we cover the
@@ -712,7 +720,6 @@ function AngleVideo({
         >
           <video
             ref={setVideoEl}
-            src={angle.url}
             muted={!isMain}
             playsInline
             style={{

@@ -402,8 +402,37 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 動画再生用の署名 URL を発行 */
+        /**
+         * 動画再生用の URL を発行
+         * @description HLS が ready なら master.m3u8 を指す proxy URL (kind=hls) を返す。
+         *     それ以外は元 MP4 の署名 URL (kind=mp4) を返す。
+         */
         get: operations["getVideoPlaybackUrl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/videos/{videoId}/hls/{rest}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+                /**
+                 * @description master.m3u8 / {variant}/playlist.m3u8 / {variant}/seg-XXXXX.ts のいずれか。
+                 *     API サーバが MinIO から取得して中継する。署名 URL は使わず認証は API
+                 *     ミドルウェアに任せる。
+                 */
+                rest: string;
+            };
+            cookie?: never;
+        };
+        /** HLS の master / variant playlist / segment を取得 */
+        get: operations["getVideoHlsObject"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1014,6 +1043,12 @@ export interface components {
             timeOffsetSec: number;
             /** @description サムネイルが生成済みなら true。 GET /videos/{id}/thumbnail-url で取得 */
             hasThumbnail: boolean;
+            /**
+             * @description HLS 変換パイプラインの状態。`ready` のときのみ playback-url が
+             *     HLS (kind=hls) を返す。それ以外は MP4 フォールバック。
+             * @enum {string}
+             */
+            hlsStatus: "pending" | "planning" | "encoding" | "ready" | "failed";
             /** Format: date-time */
             createdAt: string;
         };
@@ -1036,6 +1071,14 @@ export interface components {
             url: string;
             /** Format: date-time */
             expiresAt: string;
+            /**
+             * @description Playback source type. "hls" means an HLS master playlist served via
+             *     the in-process proxy; "mp4" means the original upload served via a
+             *     presigned S3 URL (used while HLS encoding is in progress or failed);
+             *     "image" is used by the thumbnail endpoint.
+             * @enum {string}
+             */
+            kind: "hls" | "mp4" | "image";
         };
         TusHookRequest: {
             /** @description tusd hook 種別（例 pre-finish / post-finish） */
@@ -2501,6 +2544,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlaybackUrl"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getVideoHlsObject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                videoId: components["parameters"]["VideoId"];
+                /**
+                 * @description master.m3u8 / {variant}/playlist.m3u8 / {variant}/seg-XXXXX.ts のいずれか。
+                 *     API サーバが MinIO から取得して中継する。署名 URL は使わず認証は API
+                 *     ミドルウェアに任せる。
+                 */
+                rest: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description HLS object body (m3u8 or mpegts) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apple.mpegurl": unknown;
+                    "video/mp2t": unknown;
                 };
             };
             404: components["responses"]["NotFound"];

@@ -1,7 +1,11 @@
 package handler
 
 import (
+	"io"
+	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +30,7 @@ type videoDTO struct {
 	DurationSec   *int32     `json:"durationSec"`
 	TimeOffsetSec int32      `json:"timeOffsetSec"`
 	HasThumbnail  bool       `json:"hasThumbnail"`
+	HLSStatus     string     `json:"hlsStatus"`
 	CreatedAt     time.Time  `json:"createdAt"`
 }
 
@@ -54,6 +59,7 @@ func toVideoDTO(v sqlc.Video) videoDTO {
 		DurationSec:   v.DurationSec,
 		TimeOffsetSec: v.TimeOffsetSec,
 		HasThumbnail:  v.ThumbnailKey != nil && *v.ThumbnailKey != "",
+		HLSStatus:     string(v.HLSStatus),
 		CreatedAt:     v.CreatedAt.Time,
 	}
 }
@@ -74,6 +80,9 @@ type updateVideoRequest struct {
 type playbackUrlResponse struct {
 	URL       string    `json:"url"`
 	ExpiresAt time.Time `json:"expiresAt"`
+	// Kind is "hls" when the URL is a master.m3u8 (adaptive), "mp4" when the
+	// HLS pipeline is still encoding or has failed and we serve the raw upload.
+	Kind string `json:"kind"`
 }
 
 func (h *Videos) List(w http.ResponseWriter, r *http.Request) {
@@ -226,6 +235,12 @@ func (h *Videos) Delete(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
+	// Best-effort cleanup of HLS artifacts. CASCADE removed video_renditions
+	// already; this drops the S3 objects so we don't leak segments.
+	hlsPrefix := "hls/" + uuidString(v.ID) + "/"
+	if err := h.Storage.DeletePrefix(r.Context(), hlsPrefix); err != nil {
+		slog.Warn("hls cleanup failed", "videoId", uuidString(v.ID), "error", err)
+	}
 	writeNoContent(w)
 }
 
@@ -253,7 +268,7 @@ func (h *Videos) ThumbnailURL(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, playbackUrlResponse{URL: url, ExpiresAt: expires})
+	writeJSON(w, http.StatusOK, playbackUrlResponse{URL: url, ExpiresAt: expires, Kind: "image"})
 }
 
 func (h *Videos) PlaybackURL(w http.ResponseWriter, r *http.Request) {
@@ -271,10 +286,101 @@ func (h *Videos) PlaybackURL(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
+	// HLS is preferred when ready. The master playlist + variant playlists +
+	// segments are served through the in-process proxy at /videos/{id}/hls/*
+	// so we don't have to sign every segment URL individually.
+	if v.HLSStatus == sqlc.HlsStatusReady && v.HlsMasterKey != nil {
+		expires := time.Now().Add(h.Storage.PresignTTL())
+		out := playbackUrlResponse{
+			URL:       proxyHLSURL(r, uuidString(v.ID), "master.m3u8"),
+			ExpiresAt: expires,
+			Kind:      "hls",
+		}
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
 	url, expires, err := h.Storage.PresignGet(r.Context(), v.StorageKey)
 	if err != nil {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, playbackUrlResponse{URL: url, ExpiresAt: expires})
+	writeJSON(w, http.StatusOK, playbackUrlResponse{URL: url, ExpiresAt: expires, Kind: "mp4"})
+}
+
+// HLSProxy streams a single HLS object (master.m3u8, variant playlist, or
+// .ts segment) to the client. The path after /videos/{videoId}/hls/ is mapped
+// to the S3 key hls/{videoId}/{rest}. Authorization piggybacks on the API
+// middleware just like any other endpoint, so segment URLs don't need to be
+// signed individually.
+func (h *Videos) HLSProxy(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUIDParam(chi.URLParam(r, "videoId"))
+	if err != nil {
+		badRequest(w, "invalid videoId")
+		return
+	}
+	rest := chi.URLParam(r, "*")
+	if rest == "" {
+		notFound(w, "missing hls path")
+		return
+	}
+	if !isSafeHLSPath(rest) {
+		badRequest(w, "invalid hls path")
+		return
+	}
+	key := "hls/" + uuidString(id) + "/" + rest
+	body, ct, size, err := h.Storage.Get(r.Context(), key)
+	if err != nil {
+		notFound(w, "hls object not found")
+		return
+	}
+	defer body.Close()
+	if ct == "" {
+		ct = contentTypeFor(rest)
+	}
+	w.Header().Set("Content-Type", ct)
+	if size > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	}
+	// Variant playlists update progressively during encoding; tell the browser
+	// not to cache them aggressively. Segments are immutable.
+	if strings.HasSuffix(rest, ".m3u8") {
+		w.Header().Set("Cache-Control", "no-store")
+	} else {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	}
+	_, _ = io.Copy(w, body)
+}
+
+// isSafeHLSPath rejects paths that would escape the hls/{videoId}/ prefix or
+// reference unrelated files.
+func isSafeHLSPath(p string) bool {
+	if strings.Contains(p, "..") {
+		return false
+	}
+	if strings.HasPrefix(p, "/") {
+		return false
+	}
+	return strings.HasSuffix(p, ".m3u8") || strings.HasSuffix(p, ".ts")
+}
+
+func contentTypeFor(name string) string {
+	switch {
+	case strings.HasSuffix(name, ".m3u8"):
+		return "application/vnd.apple.mpegurl"
+	case strings.HasSuffix(name, ".ts"):
+		return "video/mp2t"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+// proxyHLSURL returns an absolute URL to the in-process HLS proxy for the
+// given videoId and object path. We build it from the inbound request so it
+// works behind reverse proxies as long as r.Host is set correctly.
+func proxyHLSURL(r *http.Request, videoID, sub string) string {
+	scheme := "http"
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host + "/videos/" + videoID + "/hls/" + sub
 }

@@ -17,3 +17,6 @@ sql:
           session_mode_hint: SessionModeHint
           marker_category: MarkerCategory
           annotation_type: AnnotationType
+          hls_status: HLSStatus
+          rendition_kind: RenditionKind
+          rendition_status: RenditionStatus

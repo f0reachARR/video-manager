@@ -117,6 +117,7 @@ func New(d Deps) http.Handler {
 		r.Delete("/{videoId}", d.Videos.Delete)
 		r.Get("/{videoId}/playback-url", d.Videos.PlaybackURL)
 		r.Get("/{videoId}/thumbnail-url", d.Videos.ThumbnailURL)
+		r.Get("/{videoId}/hls/*", d.Videos.HLSProxy)
 		r.Get("/{videoId}/annotations", d.Annotations.List)
 		r.Post("/{videoId}/annotations", d.Annotations.Create)
 	})

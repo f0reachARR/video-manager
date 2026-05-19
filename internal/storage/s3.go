@@ -6,12 +6,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type Config struct {
@@ -64,12 +67,21 @@ func (c *Client) PresignTTL() time.Duration { return c.ttl }
 
 // PresignGet returns a time-limited GET URL for the given object key.
 func (c *Client) PresignGet(ctx context.Context, key string) (string, time.Time, error) {
-	expires := time.Now().Add(c.ttl)
+	return c.PresignGetWithTTL(ctx, key, c.ttl)
+}
+
+// PresignGetWithTTL is PresignGet with an explicit TTL. Used by long-running
+// HLS encode jobs which need a presigned source URL valid for the whole run.
+func (c *Client) PresignGetWithTTL(ctx context.Context, key string, ttl time.Duration) (string, time.Time, error) {
+	if ttl <= 0 {
+		ttl = c.ttl
+	}
+	expires := time.Now().Add(ttl)
 	req, err := c.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(c.bucket),
 		Key:    aws.String(key),
 	}, func(o *s3.PresignOptions) {
-		o.Expires = c.ttl
+		o.Expires = ttl
 	})
 	if err != nil {
 		return "", time.Time{}, err
@@ -103,4 +115,82 @@ func (c *Client) Delete(ctx context.Context, key string) error {
 		Key:    aws.String(key + ".info"),
 	})
 	return nil
+}
+
+// PutFile uploads a local file to the given key. Streaming the body avoids
+// buffering large segments in memory.
+func (c *Client) PutFile(ctx context.Context, key, contentType, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+	stat, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", path, err)
+	}
+	in := &s3.PutObjectInput{
+		Bucket:        aws.String(c.bucket),
+		Key:           aws.String(key),
+		Body:          f,
+		ContentType:   aws.String(contentType),
+		ContentLength: aws.Int64(stat.Size()),
+	}
+	if _, err := c.s3.PutObject(ctx, in); err != nil {
+		return fmt.Errorf("put %s: %w", key, err)
+	}
+	return nil
+}
+
+// DeletePrefix removes every object under the given key prefix. Used when an
+// HLS encode is restarted (clears partial segments) or a video is deleted.
+func (c *Client) DeletePrefix(ctx context.Context, prefix string) error {
+	var token *string
+	for {
+		out, err := c.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            aws.String(c.bucket),
+			Prefix:            aws.String(prefix),
+			ContinuationToken: token,
+		})
+		if err != nil {
+			return fmt.Errorf("list %s: %w", prefix, err)
+		}
+		if len(out.Contents) > 0 {
+			objs := make([]s3types.ObjectIdentifier, 0, len(out.Contents))
+			for _, o := range out.Contents {
+				objs = append(objs, s3types.ObjectIdentifier{Key: o.Key})
+			}
+			if _, err := c.s3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+				Bucket: aws.String(c.bucket),
+				Delete: &s3types.Delete{Objects: objs, Quiet: aws.Bool(true)},
+			}); err != nil {
+				return fmt.Errorf("delete %s batch: %w", prefix, err)
+			}
+		}
+		if out.IsTruncated == nil || !*out.IsTruncated {
+			return nil
+		}
+		token = out.NextContinuationToken
+	}
+}
+
+// Get returns the body and content-type of the given object. The caller must
+// close the returned ReadCloser. Used by the in-process HLS proxy handler.
+func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, string, int64, error) {
+	out, err := c.s3.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, "", 0, err
+	}
+	ct := ""
+	if out.ContentType != nil {
+		ct = *out.ContentType
+	}
+	size := int64(0)
+	if out.ContentLength != nil {
+		size = *out.ContentLength
+	}
+	return out.Body, ct, size, nil
 }

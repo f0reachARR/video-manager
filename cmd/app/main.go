@@ -62,7 +62,11 @@ func run() error {
 
 	hub := realtime.NewHub()
 
-	workers, err := worker.Setup(ctx, database.Pool, q, store)
+	workers, err := worker.Setup(ctx, database.Pool, q, store, worker.Config{
+		Queues:             cfg.WorkerQueues,
+		DefaultConcurrency: cfg.WorkerDefaultConcurrency,
+		EncodeConcurrency:  cfg.WorkerEncodeConcurrency,
+	})
 	if err != nil {
 		return err
 	}
