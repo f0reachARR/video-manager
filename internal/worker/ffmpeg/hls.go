@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,12 +42,37 @@ const SegmentPrefix = "seg-"
 // finalized segments. Each segment basename is passed to onSegment (best-effort;
 // the caller decides whether to upload to S3). The function blocks until ffmpeg
 // exits or ctx is cancelled.
+//
+// After ffmpeg exits cleanly we do a final directory scan and fire onSegment
+// for any segments fsnotify missed. fsnotify can drop events when ffmpeg
+// finishes faster than the watcher goroutine drains its channel (especially
+// likely with passthrough `-c copy`, where the entire run can finish in a few
+// hundred milliseconds), or when events fire before watcher.Add returns. The
+// reconciliation pass guarantees every segment file on disk gets uploaded.
 func RunHLS(ctx context.Context, opt HLSOptions, onSegment func(name string)) error {
 	if opt.OutDir == "" {
 		return errors.New("hls: OutDir required")
 	}
 	if opt.SegmentSec == 0 {
 		opt.SegmentSec = 6
+	}
+
+	var emittedMu sync.Mutex
+	emitted := make(map[string]struct{})
+	emit := func(name string) {
+		if !strings.HasPrefix(name, SegmentPrefix) || !strings.HasSuffix(name, ".ts") {
+			return
+		}
+		emittedMu.Lock()
+		if _, seen := emitted[name]; seen {
+			emittedMu.Unlock()
+			return
+		}
+		emitted[name] = struct{}{}
+		emittedMu.Unlock()
+		if onSegment != nil {
+			onSegment(name)
+		}
 	}
 
 	watcher, err := fsnotify.NewWatcher()
@@ -64,7 +91,7 @@ func RunHLS(ctx context.Context, opt HLSOptions, onSegment func(name string)) er
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		watchSegments(watchCtx, watcher, onSegment)
+		watchSegments(watchCtx, watcher, emit)
 	}()
 
 	args := buildArgs(opt)
@@ -74,13 +101,28 @@ func RunHLS(ctx context.Context, opt HLSOptions, onSegment func(name string)) er
 	cmd.Stderr = &stderrTee{w: &stderr}
 	cmd.Stdout = io.Discard
 	slog.Info("starting ffmpeg HLS run", "args", strings.Join(args, " "))
-	if err := cmd.Run(); err != nil {
-		cancelWatch()
-		wg.Wait()
-		return fmt.Errorf("ffmpeg hls: %w (stderr=%q)", err, tail(stderr.String(), 4096))
-	}
+	runErr := cmd.Run()
 	cancelWatch()
 	wg.Wait()
+	if runErr != nil {
+		return fmt.Errorf("ffmpeg hls: %w (stderr=%q)", runErr, tail(stderr.String(), 4096))
+	}
+
+	// Reconciliation: walk the output dir and emit any final-named segment we
+	// haven't already seen via fsnotify. Sort so callers receive segments in
+	// playlist order even if the OS returned them otherwise.
+	entries, readErr := os.ReadDir(opt.OutDir)
+	if readErr != nil {
+		return fmt.Errorf("read out dir: %w", readErr)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		emit(name)
+	}
 	return nil
 }
 
@@ -133,25 +175,14 @@ func buildArgs(opt HLSOptions) []string {
 	return args
 }
 
-// watchSegments fires onSegment for each finalized .ts file. ffmpeg with
-// `-hls_flags temp_file` writes seg-XXXXX.ts.tmp first, then renames to
-// seg-XXXXX.ts on completion, so fsnotify.Rename / Create on the final name
+// watchSegments forwards fsnotify events for finalized .ts files to emit.
+// Dedup and prefix/suffix filtering live in the shared emit closure so the
+// post-ffmpeg reconciliation scan shares the same "already uploaded" set.
+//
+// ffmpeg with `-hls_flags temp_file` writes seg-XXXXX.ts.tmp first, then
+// renames to seg-XXXXX.ts on completion, so fsnotify.Create on the final name
 // is our completion signal.
-func watchSegments(ctx context.Context, watcher *fsnotify.Watcher, onSegment func(name string)) {
-	emitted := map[string]struct{}{}
-	emit := func(path string) {
-		name := filepath.Base(path)
-		if !strings.HasPrefix(name, SegmentPrefix) || !strings.HasSuffix(name, ".ts") {
-			return
-		}
-		if _, ok := emitted[name]; ok {
-			return
-		}
-		emitted[name] = struct{}{}
-		if onSegment != nil {
-			onSegment(name)
-		}
-	}
+func watchSegments(ctx context.Context, watcher *fsnotify.Watcher, emit func(name string)) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -160,11 +191,8 @@ func watchSegments(ctx context.Context, watcher *fsnotify.Watcher, onSegment fun
 			if !ok {
 				return
 			}
-			// On macOS/Linux, fsnotify reports Rename for old name and Create
-			// for new name after rename. Either of Create/Write/Rename on the
-			// final name means it exists and is closed.
 			if ev.Op&(fsnotify.Create|fsnotify.Rename|fsnotify.Write) != 0 {
-				emit(ev.Name)
+				emit(filepath.Base(ev.Name))
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
