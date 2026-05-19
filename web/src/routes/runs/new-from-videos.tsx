@@ -134,22 +134,25 @@ function NewFromVideosPage() {
   const [regions, setRegions] = useState<Region[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Preview playhead in wall-clock seconds from t0. Snapped to the selected
-  // region's start whenever the selection changes (or the region's start is
-  // dragged past the current playhead).
+  // Preview playhead in wall-clock seconds from t0. Always lives in
+  // [0, totalSec]; the preview now spans the full timeline regardless of
+  // selection. Picking a region just jumps the playhead to its start for
+  // convenience — no range gating.
   const [previewT, setPreviewT] = useState(0);
   const selectedRegion = useMemo(
     () => regions.find((r) => r.id === selectedId) ?? null,
     [regions, selectedId],
   );
+  // "ここからスタート" remembers the current playhead time so a later
+  // "ここまで" can finalize a fresh region. Only active when no region is
+  // selected (when one is selected, the buttons edit that region instead).
+  const [pendingStart, setPendingStart] = useState<number | null>(null);
+  // Jump playhead to region start when the user picks one from the list /
+  // timeline — makes it easy to fine-tune by playing back.
   useEffect(() => {
     if (!selectedRegion) return;
-    setPreviewT((cur) =>
-      cur < selectedRegion.startSec || cur > selectedRegion.endSec
-        ? selectedRegion.startSec
-        : cur,
-    );
-  }, [selectedRegion?.id, selectedRegion?.startSec, selectedRegion?.endSec]);
+    setPreviewT(selectedRegion.startSec);
+  }, [selectedRegion?.id]);
 
   const trackRef = useRef<HTMLDivElement>(null);
   type DragKind = "create" | "move" | "resize-start" | "resize-end";
@@ -267,6 +270,56 @@ function NewFromVideosPage() {
     setRegions((rs) => rs.filter((r) => r.id !== id));
     setSelectedId((cur) => (cur === id ? null : cur));
   };
+
+  // "ここからスタート" — if a region is selected, edit its start; otherwise
+  // remember the playhead for the next "ここまで" to commit.
+  const handleSetStart = useCallback(() => {
+    if (selectedRegion) {
+      updateRegion(selectedRegion.id, {
+        startSec: Math.min(previewT, selectedRegion.endSec - 0.5),
+      });
+    } else {
+      setPendingStart(previewT);
+    }
+  }, [selectedRegion, previewT]);
+
+  // "ここまで" — for the selected region, set its end. With no selection,
+  // commit [pendingStart, previewT] as a new region and select it.
+  const handleSetEnd = useCallback(() => {
+    if (selectedRegion) {
+      updateRegion(selectedRegion.id, {
+        endSec: Math.max(previewT, selectedRegion.startSec + 0.5),
+      });
+      return;
+    }
+    if (pendingStart == null) return;
+    const startSec = Math.min(pendingStart, previewT);
+    const endSec = Math.max(pendingStart, previewT);
+    if (endSec - startSec < 0.5) return;
+    const id = newRegionId();
+    setRegions((rs) => [
+      ...rs,
+      {
+        id,
+        startSec,
+        endSec,
+        teamId: defaultTeam,
+        robotId: defaultRobot,
+        scenarioId: defaultScenario,
+        memo: "",
+        score: "",
+      },
+    ]);
+    setSelectedId(id);
+    setPendingStart(null);
+  }, [
+    selectedRegion,
+    previewT,
+    pendingStart,
+    defaultTeam,
+    defaultRobot,
+    defaultScenario,
+  ]);
 
   // Newly-changed defaults flow into any region whose field was still null
   // (i.e. never customized). This is the "set once, apply everywhere"
@@ -436,6 +489,7 @@ function NewFromVideosPage() {
               regions={regions}
               selectedId={selectedId}
               previewT={previewT}
+              pendingStart={pendingStart}
               trackRef={trackRef}
               angleLabels={angleLabels}
               onAngleLabelChange={(id, label) =>
@@ -450,16 +504,20 @@ function NewFromVideosPage() {
           </Stack>
         </Card>
 
-        {selectedRegion && (
-          <RegionPreview
-            region={selectedRegion}
-            videos={placeable}
-            bandOf={bandOf}
-            angleLabels={angleLabels}
-            previewT={previewT}
-            onPreviewTChange={setPreviewT}
-          />
-        )}
+        <Preview
+          videos={placeable}
+          totalSec={totalSec}
+          t0Ms={t0Ms}
+          bandOf={bandOf}
+          angleLabels={angleLabels}
+          previewT={previewT}
+          onPreviewTChange={setPreviewT}
+          selectedRegion={selectedRegion}
+          pendingStart={pendingStart}
+          onSetStart={handleSetStart}
+          onSetEnd={handleSetEnd}
+          onClearPending={() => setPendingStart(null)}
+        />
 
         <Card withBorder p="sm">
           <Stack gap="xs">
@@ -632,6 +690,7 @@ function Timeline({
   regions,
   selectedId,
   previewT,
+  pendingStart,
   trackRef,
   angleLabels,
   onAngleLabelChange,
@@ -648,6 +707,7 @@ function Timeline({
   regions: Region[];
   selectedId: string | null;
   previewT: number;
+  pendingStart: number | null;
   trackRef: React.RefObject<HTMLDivElement | null>;
   angleLabels: Record<string, string>;
   onAngleLabelChange: (videoId: string, label: string) => void;
@@ -709,18 +769,33 @@ function Timeline({
       </Box>
 
       {/* Preview playhead — vertical line at the current preview time.
-          Hidden when there's no selection (previewT=0 with no region). */}
-      {selectedId !== null && (
+          Now always visible since the preview is always-on. */}
+      <Box
+        style={{
+          position: "absolute",
+          left: `calc(${LABEL_GUTTER}px + (100% - ${LABEL_GUTTER}px) * ${Math.min(1, Math.max(0, previewT / totalSec))})`,
+          top: HEADER_HEIGHT,
+          height: videos.length * LANE_HEIGHT,
+          width: 2,
+          transform: "translateX(-1px)",
+          background: "var(--mantine-color-red-6)",
+          opacity: 0.85,
+          pointerEvents: "none",
+          zIndex: 3,
+        }}
+      />
+      {/* Pending-start marker — green dashed line at the remembered
+          "ここからスタート" position, until "ここまで" commits it. */}
+      {pendingStart != null && (
         <Box
           style={{
             position: "absolute",
-            left: `calc(${LABEL_GUTTER}px + (100% - ${LABEL_GUTTER}px) * ${Math.min(1, Math.max(0, previewT / totalSec))})`,
+            left: `calc(${LABEL_GUTTER}px + (100% - ${LABEL_GUTTER}px) * ${Math.min(1, Math.max(0, pendingStart / totalSec))})`,
             top: HEADER_HEIGHT,
             height: videos.length * LANE_HEIGHT,
-            width: 2,
+            width: 0,
+            borderLeft: "2px dashed var(--mantine-color-green-6)",
             transform: "translateX(-1px)",
-            background: "var(--mantine-color-red-6)",
-            opacity: 0.85,
             pointerEvents: "none",
             zIndex: 3,
           }}
@@ -880,58 +955,67 @@ function Timeline({
   );
 }
 
-// Synced multi-angle preview for the currently selected region. Plays the
-// region's wall-clock window: each video is steered to its local time
-// (videoOffsetStart + (t - videoStartAbs)); videos whose band doesn't cover
-// the current t show "NO VIDEO" instead. The scrubber spans the region.
-function RegionPreview({
-  region,
+// Always-on multi-angle preview spanning the full timeline. Each video is
+// steered to its local time (videoOffsetStart + (t - videoStartAbs));
+// videos whose band doesn't cover the current t show "NO VIDEO" instead.
+//
+// The two big actions are "ここからスタート" / "ここまで": they either
+// edit the currently-selected region (if any) or fall back to a pending-
+// start workflow that commits a fresh region to the list on the second
+// button press.
+function Preview({
   videos,
+  totalSec,
+  t0Ms,
   bandOf,
   angleLabels,
   previewT,
   onPreviewTChange,
+  selectedRegion,
+  pendingStart,
+  onSetStart,
+  onSetEnd,
+  onClearPending,
 }: {
-  region: Region;
   videos: Video[];
+  totalSec: number;
+  t0Ms: number;
   bandOf: (v: Video) => { startSec: number; endSec: number };
   angleLabels: Record<string, string>;
   previewT: number;
   onPreviewTChange: (t: number) => void;
+  selectedRegion: Region | null;
+  pendingStart: number | null;
+  onSetStart: () => void;
+  onSetEnd: () => void;
+  onClearPending: () => void;
 }) {
-  const overlapping = useMemo(
-    () =>
-      videos.filter((v) => {
-        const b = bandOf(v);
-        return b.endSec > region.startSec && b.startSec < region.endSec;
-      }),
-    [videos, region.startSec, region.endSec, bandOf],
-  );
-
+  // Lazily fetch playback URLs for every placeable video — the preview
+  // now spans the full timeline so any of them might come into view.
   const [urls, setUrls] = useState<Map<string, string>>(new Map());
   useEffect(() => {
     let canceled = false;
-    overlapping.forEach(async (v) => {
+    videos.forEach(async (v) => {
       if (urls.has(v.id)) return;
       try {
         const r = await videosApi.playbackUrl(v.id);
         if (!canceled) setUrls((m) => new Map(m).set(v.id, r.url));
       } catch {
-        // Playback URL is best-effort; the lane just won't load.
+        // Best-effort; the lane just won't load.
       }
     });
     return () => {
       canceled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlapping]);
+  }, [videos]);
 
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const [playing, setPlaying] = useState(false);
 
-  // The play loop is wall-clock anchored, decoupled from any single video's
-  // currentTime. This lets us play through gaps where one camera isn't
-  // recording without the whole timeline freezing.
+  // Wall-clock anchored play loop. Decoupled from any single video's
+  // currentTime so gaps where one camera isn't recording don't freeze the
+  // whole timeline.
   useEffect(() => {
     if (!playing) return;
     const wallStart = performance.now();
@@ -940,8 +1024,8 @@ function RegionPreview({
     const tick = () => {
       const elapsed = (performance.now() - wallStart) / 1000;
       const next = tStart + elapsed;
-      if (next >= region.endSec) {
-        onPreviewTChange(region.endSec);
+      if (next >= totalSec) {
+        onPreviewTChange(totalSec);
         setPlaying(false);
         return;
       }
@@ -951,13 +1035,11 @@ function RegionPreview({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, region.endSec]);
+  }, [playing, totalSec]);
 
-  // Steer each video element whenever t changes. Out-of-range videos pause;
-  // in-range videos snap to their local time on big drift and play/pause to
-  // match the global "playing" state.
+  // Steer each video element whenever t changes.
   useEffect(() => {
-    for (const v of overlapping) {
+    for (const v of videos) {
       const el = videoRefs.current.get(v.id);
       if (!el) continue;
       const b = bandOf(v);
@@ -973,13 +1055,13 @@ function RegionPreview({
         try {
           el.currentTime = localT;
         } catch {
-          // Some sources reject seeks before metadata; ignore — next tick retries.
+          // Some sources reject seeks before metadata; ignore.
         }
       }
       if (playing && el.paused) el.play().catch(() => {});
       if (!playing && !el.paused) el.pause();
     }
-  }, [previewT, playing, overlapping, bandOf]);
+  }, [previewT, playing, videos, bandOf]);
 
   const handleScrubber = useCallback(
     (value: number) => {
@@ -989,38 +1071,65 @@ function RegionPreview({
     [onPreviewTChange],
   );
 
-  const localPreview = previewT - region.startSec;
-  const regionDur = Math.max(0.01, region.endSec - region.startSec);
+  // Keyboard shortcuts: space=play/pause, [=set start, ]=set end. Mounted
+  // on the document so they work regardless of focus, but skipped while
+  // typing in a form field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable)
+        return;
+      if (e.key === "[") {
+        e.preventDefault();
+        onSetStart();
+      } else if (e.key === "]") {
+        e.preventDefault();
+        onSetEnd();
+      } else if (e.code === "Space") {
+        e.preventDefault();
+        setPlaying((p) => !p);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onSetStart, onSetEnd]);
+
+  const buttonLabel = selectedRegion
+    ? { start: "[ 選択 Run の開始をここに", end: "] 選択 Run の終了をここに" }
+    : pendingStart != null
+      ? { start: "[ 開始を上書き", end: "] ここまで (Run を追加)" }
+      : { start: "[ ここからスタート", end: "] ここまで" };
+  const canSetEnd =
+    selectedRegion != null || (pendingStart != null && previewT > pendingStart);
 
   return (
     <Card withBorder p="sm">
       <Stack gap="xs">
         <Group justify="space-between">
           <Text size="sm" fw={500}>
-            プレビュー (選択中の区間)
+            プレビュー
           </Text>
           <Text size="xs" c="dimmed" ff="monospace">
-            {formatTime(Math.max(0, localPreview))} /{" "}
-            {formatTime(regionDur)}
+            {formatDateTimeFull(new Date(t0Ms + previewT * 1000))} (t+
+            {formatTime(previewT)} / {formatTime(totalSec)})
           </Text>
         </Group>
-        {overlapping.length === 0 ? (
+        {videos.length === 0 ? (
           <Text size="sm" c="dimmed">
-            この区間に重なる動画がありません。
+            配置可能な動画がありません。
           </Text>
         ) : (
           <Box
             style={{
               display: "grid",
-              gridTemplateColumns:
-                "repeat(auto-fit, minmax(240px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
               gap: 8,
             }}
           >
-            {overlapping.map((v) => {
+            {videos.map((v) => {
               const b = bandOf(v);
-              const inRange =
-                previewT >= b.startSec && previewT <= b.endSec;
+              const inRange = previewT >= b.startSec && previewT <= b.endSec;
               const url = urls.get(v.id);
               const label =
                 angleLabels[v.id]?.trim() ||
@@ -1109,8 +1218,7 @@ function RegionPreview({
             size="xs"
             variant={playing ? "filled" : "default"}
             onClick={() => {
-              if (previewT >= region.endSec - 0.05)
-                onPreviewTChange(region.startSec);
+              if (previewT >= totalSec - 0.05) onPreviewTChange(0);
               setPlaying((p) => !p);
             }}
           >
@@ -1118,13 +1226,40 @@ function RegionPreview({
           </Button>
           <input
             type="range"
-            min={region.startSec}
-            max={region.endSec}
+            min={0}
+            max={totalSec}
             step={0.05}
             value={previewT}
             onChange={(e) => handleScrubber(Number(e.target.value))}
             style={{ flex: 1 }}
           />
+        </Group>
+        <Group gap="xs">
+          <Button size="xs" variant="light" color="green" onClick={onSetStart}>
+            {buttonLabel.start}
+          </Button>
+          <Button
+            size="xs"
+            variant="light"
+            color="blue"
+            onClick={onSetEnd}
+            disabled={!canSetEnd}
+          >
+            {buttonLabel.end}
+          </Button>
+          {pendingStart != null && !selectedRegion && (
+            <>
+              <Text size="xs" c="dimmed">
+                開始: t+{formatTime(pendingStart)}
+              </Text>
+              <Button size="compact-xs" variant="subtle" onClick={onClearPending}>
+                × キャンセル
+              </Button>
+            </>
+          )}
+          <Text size="xs" c="dimmed" ml="auto">
+            ショートカット: [ 開始 / ] 終了 / Space 再生
+          </Text>
         </Group>
       </Stack>
     </Card>
