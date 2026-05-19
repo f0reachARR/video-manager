@@ -426,21 +426,23 @@ function SyncPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videos]);
 
-  // Run duration = max(videoOffsetEndSec - videoOffsetStartSec) across angles.
+  // Run timeline length is now an editable field on the Run itself. If the
+  // value is 0 (legacy / unset), fall back to "max(angle length)" so existing
+  // Runs still play before the user picks a duration.
   useEffect(() => {
-    if (videos.length === 0) {
-      setRunDurationSec(0);
-      onDurationChange(0);
-      return;
-    }
-    const d = Math.max(
-      ...videos.map((v) =>
-        Math.max(0, v.videoOffsetEndSec - v.videoOffsetStartSec),
-      ),
-    );
+    const fromRun = Math.max(0, run.durationSec ?? 0);
+    const fromVideos =
+      videos.length === 0
+        ? 0
+        : Math.max(
+            ...videos.map((v) =>
+              Math.max(0, (v.runOffsetSec ?? 0) + (v.videoOffsetEndSec - v.videoOffsetStartSec)),
+            ),
+          );
+    const d = fromRun > 0 ? fromRun : fromVideos;
     setRunDurationSec(d);
     onDurationChange(d);
-  }, [videos, onDurationChange]);
+  }, [run.durationSec, videos, onDurationChange]);
 
   // Pick a default main angle.
   useEffect(() => {
@@ -467,23 +469,38 @@ function SyncPlayer({
       if (mainEl) {
         const mainV = videos.find((v) => v.id === mainAngleId);
         if (mainV) {
+          // Run timeline t = main video's currentTime mapped back through this
+          // angle's videoOffsetStartSec + its runOffsetSec.
           const newT = Math.min(
             runDurationSec,
-            Math.max(0, mainEl.currentTime - mainV.videoOffsetStartSec),
+            Math.max(
+              0,
+              mainEl.currentTime - mainV.videoOffsetStartSec + (mainV.runOffsetSec ?? 0),
+            ),
           );
           // Only push when changed by >=50ms to avoid floods.
           if (Math.abs(newT - lastT.current) > 0.05) {
             lastT.current = newT;
             setT(newT);
-            // Drive other angles
+            // Drive other angles. Each angle's source time is
+            //   videoOffsetStartSec + (runT - runOffsetSec)
+            // and is only valid when runT is within [runOffset, runOffset+len].
             for (const v of videos) {
               if (v.id === mainAngleId) continue;
               const el = refs.current.get(v.id);
               if (!el) continue;
-              const target = v.videoOffsetStartSec + newT;
+              const runOff = v.runOffsetSec ?? 0;
+              const len = v.videoOffsetEndSec - v.videoOffsetStartSec;
+              if (newT < runOff || newT > runOff + len) {
+                if (!el.paused) el.pause();
+                continue;
+              }
+              const target = v.videoOffsetStartSec + (newT - runOff);
               if (Math.abs(el.currentTime - target) > 0.25) {
                 el.currentTime = target;
               }
+              // If main is playing and we're back in range, resume.
+              if (el.paused) void el.play().catch(() => {});
             }
             if (newT >= runDurationSec) {
               setPlaying(false);
@@ -508,7 +525,13 @@ function SyncPlayer({
     for (const v of videos) {
       const el = refs.current.get(v.id);
       if (!el) continue;
-      el.currentTime = v.videoOffsetStartSec + newT;
+      const runOff = v.runOffsetSec ?? 0;
+      const len = v.videoOffsetEndSec - v.videoOffsetStartSec;
+      if (newT < runOff || newT > runOff + len) {
+        if (!el.paused) el.pause();
+        continue;
+      }
+      el.currentTime = v.videoOffsetStartSec + (newT - runOff);
     }
     if (opts.broadcast !== false) {
       broadcastPresence();
@@ -612,16 +635,23 @@ function SyncPlayer({
       broadcastPresence();
       return;
     }
-    // Sync to current t and play together.
+    // Sync each angle to (t - runOffset). Angles outside their coverage stay
+    // paused; the rAF loop resumes them when t enters their range.
     for (const v of videos) {
       const el = refs.current.get(v.id);
       if (!el) continue;
-      el.currentTime = v.videoOffsetStartSec + t;
+      const runOff = v.runOffsetSec ?? 0;
+      const len = v.videoOffsetEndSec - v.videoOffsetStartSec;
+      if (t < runOff || t > runOff + len) continue;
+      el.currentTime = v.videoOffsetStartSec + (t - runOff);
     }
     await Promise.all(
       videos.map(async (v) => {
         const el = refs.current.get(v.id);
         if (!el) return;
+        const runOff = v.runOffsetSec ?? 0;
+        const len = v.videoOffsetEndSec - v.videoOffsetStartSec;
+        if (t < runOff || t > runOff + len) return;
         try {
           await el.play();
         } catch {
@@ -972,14 +1002,17 @@ function AngleVideo({
     registerRef(el);
   };
 
-  // This angle covers run time [0, end-start]. Outside that window the
-  // source video has no content for the Run, so we cover the player with
-  // a NO VIDEO placeholder instead of showing a frozen / wrong frame.
+  // This angle covers run time [runOffset, runOffset + (end-start)]. Outside
+  // that window the source video has no content for the Run, so we cover the
+  // player with a NO VIDEO placeholder instead of showing a frozen / wrong
+  // frame. The "before" gap appears when runOffsetSec > 0; the "after" gap
+  // appears when the angle's length is less than the Run's duration.
+  const runOff = angle.rv.runOffsetSec ?? 0;
   const angleDur = Math.max(
     0,
     angle.rv.videoOffsetEndSec - angle.rv.videoOffsetStartSec,
   );
-  const outOfRange = runT < 0 || runT > angleDur;
+  const outOfRange = runT < runOff || runT > runOff + angleDur;
 
   return (
     <Card withBorder p="xs">
@@ -1520,6 +1553,7 @@ function AddVideoModal({ run, onClose }: { run: Run; onClose: () => void }) {
           videoId,
           videoOffsetStartSec: startSec,
           videoOffsetEndSec: endSec,
+          runOffsetSec: 0,
           angleLabel,
         },
       },

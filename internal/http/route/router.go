@@ -130,6 +130,7 @@ func New(d Deps) http.Handler {
 		r.Post("/{runId}/videos", d.Runs.AddVideo)
 		r.Patch("/{runId}/videos/{runVideoId}", d.Runs.UpdateVideo)
 		r.Delete("/{runId}/videos/{runVideoId}", d.Runs.RemoveVideo)
+		r.Get("/{runId}/recommended-videos", d.Runs.RecommendedVideos)
 		r.Get("/{runId}/markers", d.Markers.List)
 		r.Post("/{runId}/markers", d.Markers.Create)
 	})

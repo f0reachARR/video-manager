@@ -12,9 +12,9 @@ import (
 )
 
 const addRunVideo = `-- name: AddRunVideo :one
-INSERT INTO run_videos (run_id, video_id, video_offset_start, video_offset_end, angle_label)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, run_id, video_id, video_offset_start, video_offset_end, angle_label, created_at
+INSERT INTO run_videos (run_id, video_id, video_offset_start, video_offset_end, run_offset_sec, angle_label)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, run_id, video_id, video_offset_start, video_offset_end, angle_label, created_at, run_offset_sec
 `
 
 type AddRunVideoParams struct {
@@ -22,6 +22,7 @@ type AddRunVideoParams struct {
 	VideoID          pgtype.UUID
 	VideoOffsetStart int32
 	VideoOffsetEnd   int32
+	RunOffsetSec     int32
 	AngleLabel       string
 }
 
@@ -31,6 +32,7 @@ func (q *Queries) AddRunVideo(ctx context.Context, arg AddRunVideoParams) (RunVi
 		arg.VideoID,
 		arg.VideoOffsetStart,
 		arg.VideoOffsetEnd,
+		arg.RunOffsetSec,
 		arg.AngleLabel,
 	)
 	var i RunVideo
@@ -42,6 +44,7 @@ func (q *Queries) AddRunVideo(ctx context.Context, arg AddRunVideoParams) (RunVi
 		&i.VideoOffsetEnd,
 		&i.AngleLabel,
 		&i.CreatedAt,
+		&i.RunOffsetSec,
 	)
 	return i, err
 }
@@ -76,7 +79,7 @@ func (q *Queries) DeleteRunVideoByRunAndVideo(ctx context.Context, arg DeleteRun
 }
 
 const getRunVideo = `-- name: GetRunVideo :one
-SELECT id, run_id, video_id, video_offset_start, video_offset_end, angle_label, created_at FROM run_videos WHERE id = $1
+SELECT id, run_id, video_id, video_offset_start, video_offset_end, angle_label, created_at, run_offset_sec FROM run_videos WHERE id = $1
 `
 
 func (q *Queries) GetRunVideo(ctx context.Context, id pgtype.UUID) (RunVideo, error) {
@@ -90,12 +93,13 @@ func (q *Queries) GetRunVideo(ctx context.Context, id pgtype.UUID) (RunVideo, er
 		&i.VideoOffsetEnd,
 		&i.AngleLabel,
 		&i.CreatedAt,
+		&i.RunOffsetSec,
 	)
 	return i, err
 }
 
 const listRunVideosByRun = `-- name: ListRunVideosByRun :many
-SELECT id, run_id, video_id, video_offset_start, video_offset_end, angle_label, created_at FROM run_videos
+SELECT id, run_id, video_id, video_offset_start, video_offset_end, angle_label, created_at, run_offset_sec FROM run_videos
 WHERE run_id = $1
 ORDER BY created_at ASC, id ASC
 `
@@ -117,6 +121,7 @@ func (q *Queries) ListRunVideosByRun(ctx context.Context, runID pgtype.UUID) ([]
 			&i.VideoOffsetEnd,
 			&i.AngleLabel,
 			&i.CreatedAt,
+			&i.RunOffsetSec,
 		); err != nil {
 			return nil, err
 		}
@@ -133,14 +138,16 @@ UPDATE run_videos
 SET
   video_offset_start = COALESCE($1, video_offset_start),
   video_offset_end = COALESCE($2, video_offset_end),
-  angle_label = COALESCE($3, angle_label)
-WHERE id = $4
-RETURNING id, run_id, video_id, video_offset_start, video_offset_end, angle_label, created_at
+  run_offset_sec = COALESCE($3, run_offset_sec),
+  angle_label = COALESCE($4, angle_label)
+WHERE id = $5
+RETURNING id, run_id, video_id, video_offset_start, video_offset_end, angle_label, created_at, run_offset_sec
 `
 
 type UpdateRunVideoParams struct {
 	VideoOffsetStart *int32
 	VideoOffsetEnd   *int32
+	RunOffsetSec     *int32
 	AngleLabel       *string
 	ID               pgtype.UUID
 }
@@ -149,6 +156,7 @@ func (q *Queries) UpdateRunVideo(ctx context.Context, arg UpdateRunVideoParams) 
 	row := q.db.QueryRow(ctx, updateRunVideo,
 		arg.VideoOffsetStart,
 		arg.VideoOffsetEnd,
+		arg.RunOffsetSec,
 		arg.AngleLabel,
 		arg.ID,
 	)
@@ -161,6 +169,7 @@ func (q *Queries) UpdateRunVideo(ctx context.Context, arg UpdateRunVideoParams) 
 		&i.VideoOffsetEnd,
 		&i.AngleLabel,
 		&i.CreatedAt,
+		&i.RunOffsetSec,
 	)
 	return i, err
 }

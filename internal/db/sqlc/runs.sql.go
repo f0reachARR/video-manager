@@ -12,21 +12,22 @@ import (
 )
 
 const createRun = `-- name: CreateRun :one
-INSERT INTO runs (session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at
+INSERT INTO runs (session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, duration_sec)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at, duration_sec
 `
 
 type CreateRunParams struct {
-	SessionID  pgtype.UUID
-	TeamID     pgtype.UUID
-	RobotID    pgtype.UUID
-	ScenarioID pgtype.UUID
-	MatchID    pgtype.UUID
-	StartedAt  pgtype.Timestamptz
-	EndedAt    pgtype.Timestamptz
-	Score      *float64
-	Memo       string
+	SessionID   pgtype.UUID
+	TeamID      pgtype.UUID
+	RobotID     pgtype.UUID
+	ScenarioID  pgtype.UUID
+	MatchID     pgtype.UUID
+	StartedAt   pgtype.Timestamptz
+	EndedAt     pgtype.Timestamptz
+	Score       *float64
+	Memo        string
+	DurationSec int32
 }
 
 func (q *Queries) CreateRun(ctx context.Context, arg CreateRunParams) (Run, error) {
@@ -40,6 +41,7 @@ func (q *Queries) CreateRun(ctx context.Context, arg CreateRunParams) (Run, erro
 		arg.EndedAt,
 		arg.Score,
 		arg.Memo,
+		arg.DurationSec,
 	)
 	var i Run
 	err := row.Scan(
@@ -54,6 +56,7 @@ func (q *Queries) CreateRun(ctx context.Context, arg CreateRunParams) (Run, erro
 		&i.Score,
 		&i.Memo,
 		&i.CreatedAt,
+		&i.DurationSec,
 	)
 	return i, err
 }
@@ -71,7 +74,7 @@ func (q *Queries) DeleteRun(ctx context.Context, id pgtype.UUID) (int64, error) 
 }
 
 const getRun = `-- name: GetRun :one
-SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at FROM runs WHERE id = $1
+SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at, duration_sec FROM runs WHERE id = $1
 `
 
 func (q *Queries) GetRun(ctx context.Context, id pgtype.UUID) (Run, error) {
@@ -89,12 +92,59 @@ func (q *Queries) GetRun(ctx context.Context, id pgtype.UUID) (Run, error) {
 		&i.Score,
 		&i.Memo,
 		&i.CreatedAt,
+		&i.DurationSec,
 	)
 	return i, err
 }
 
+const listRecommendedVideosForRun = `-- name: ListRecommendedVideosForRun :many
+SELECT v.id, v.session_id, v.device_id, v.uploader_id, v.storage_key, v.recorded_at, v.duration_sec, v.time_offset_sec, v.created_at, v.thumbnail_key
+FROM videos v
+JOIN runs r ON r.id = $1
+WHERE v.session_id = r.session_id
+  AND NOT EXISTS (
+    SELECT 1 FROM run_videos rv
+    WHERE rv.run_id = r.id AND rv.video_id = v.id
+  )
+ORDER BY v.created_at DESC, v.id DESC
+LIMIT 50
+`
+
+// Videos uploaded against the Run's session that are not yet attached to it.
+// Used to populate the "Run に追加すべき動画" recommendation list.
+func (q *Queries) ListRecommendedVideosForRun(ctx context.Context, id pgtype.UUID) ([]Video, error) {
+	rows, err := q.db.Query(ctx, listRecommendedVideosForRun, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Video
+	for rows.Next() {
+		var i Video
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.DeviceID,
+			&i.UploaderID,
+			&i.StorageKey,
+			&i.RecordedAt,
+			&i.DurationSec,
+			&i.TimeOffsetSec,
+			&i.CreatedAt,
+			&i.ThumbnailKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRunsPage = `-- name: ListRunsPage :many
-SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at
+SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at, duration_sec
 FROM runs
 WHERE
   ($2::uuid IS NULL OR session_id = $2::uuid)
@@ -148,6 +198,7 @@ func (q *Queries) ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]R
 			&i.Score,
 			&i.Memo,
 			&i.CreatedAt,
+			&i.DurationSec,
 		); err != nil {
 			return nil, err
 		}
@@ -160,7 +211,7 @@ func (q *Queries) ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]R
 }
 
 const searchRuns = `-- name: SearchRuns :many
-SELECT r.id, r.session_id, r.team_id, r.robot_id, r.scenario_id, r.match_id, r.started_at, r.ended_at, r.score, r.memo, r.created_at
+SELECT r.id, r.session_id, r.team_id, r.robot_id, r.scenario_id, r.match_id, r.started_at, r.ended_at, r.score, r.memo, r.created_at, r.duration_sec
 FROM runs r
 WHERE
   ($2::timestamptz IS NULL OR r.started_at >= $2::timestamptz)
@@ -232,6 +283,7 @@ func (q *Queries) SearchRuns(ctx context.Context, arg SearchRunsParams) ([]Run, 
 			&i.Score,
 			&i.Memo,
 			&i.CreatedAt,
+			&i.DurationSec,
 		); err != nil {
 			return nil, err
 		}
@@ -252,22 +304,24 @@ SET
   started_at = COALESCE($5::timestamptz, started_at),
   ended_at = COALESCE($6::timestamptz, ended_at),
   score = CASE WHEN $7::bool THEN $8::float8 ELSE score END,
-  memo = COALESCE($9, memo)
-WHERE id = $10
-RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at
+  memo = COALESCE($9, memo),
+  duration_sec = COALESCE($10::int, duration_sec)
+WHERE id = $11
+RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, created_at, duration_sec
 `
 
 type UpdateRunParams struct {
-	RobotID    pgtype.UUID
-	ScenarioID pgtype.UUID
-	MatchIDSet bool
-	MatchID    pgtype.UUID
-	StartedAt  pgtype.Timestamptz
-	EndedAt    pgtype.Timestamptz
-	ScoreSet   bool
-	Score      *float64
-	Memo       *string
-	ID         pgtype.UUID
+	RobotID     pgtype.UUID
+	ScenarioID  pgtype.UUID
+	MatchIDSet  bool
+	MatchID     pgtype.UUID
+	StartedAt   pgtype.Timestamptz
+	EndedAt     pgtype.Timestamptz
+	ScoreSet    bool
+	Score       *float64
+	Memo        *string
+	DurationSec *int32
+	ID          pgtype.UUID
 }
 
 func (q *Queries) UpdateRun(ctx context.Context, arg UpdateRunParams) (Run, error) {
@@ -281,6 +335,7 @@ func (q *Queries) UpdateRun(ctx context.Context, arg UpdateRunParams) (Run, erro
 		arg.ScoreSet,
 		arg.Score,
 		arg.Memo,
+		arg.DurationSec,
 		arg.ID,
 	)
 	var i Run
@@ -296,6 +351,7 @@ func (q *Queries) UpdateRun(ctx context.Context, arg UpdateRunParams) (Run, erro
 		&i.Score,
 		&i.Memo,
 		&i.CreatedAt,
+		&i.DurationSec,
 	)
 	return i, err
 }

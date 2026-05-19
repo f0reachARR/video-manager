@@ -615,6 +615,28 @@ export interface paths {
         patch: operations["updateRunVideo"];
         trace?: never;
     };
+    "/runs/{runId}/recommended-videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Run に追加すべき動画のレコメンド
+         * @description 同じ Session にアップロード済みで、まだこの Run に紐付いていない動画を返す
+         */
+        get: operations["listRecommendedVideosForRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs/{runId}/markers": {
         parameters: {
             query?: never;
@@ -1069,6 +1091,8 @@ export interface components {
             startedAt: string;
             /** Format: date-time */
             endedAt: string;
+            /** @description Run のタイムライン長（秒）。プレイヤーはこの値を上限として表示する */
+            durationSec: number;
             score?: number | null;
             memo: string;
             /** @description getRun のみで埋まる。listRuns では省略 */
@@ -1092,10 +1116,13 @@ export interface components {
             startedAt: string;
             /** Format: date-time */
             endedAt: string;
+            durationSec?: number;
             score?: number | null;
             /** @default  */
             memo: string;
             tagIds?: string[];
+            /** @description 同時にアタッチする動画。Videos 画面の複数選択 → Run 作成で使う */
+            videos?: components["schemas"]["AddRunVideoRequest"][];
         };
         UpdateRunRequest: {
             /** Format: uuid */
@@ -1108,6 +1135,7 @@ export interface components {
             startedAt?: string;
             /** Format: date-time */
             endedAt?: string;
+            durationSec?: number;
             score?: number | null;
             memo?: string;
             tagIds?: string[];
@@ -1123,9 +1151,12 @@ export interface components {
             runId: string;
             /** Format: uuid */
             videoId: string;
-            /** @description Video 内の開始秒 */
+            /** @description Source video 側で「Run の中で見せる」区間の開始秒 */
             videoOffsetStartSec: number;
+            /** @description Source video 側で「Run の中で見せる」区間の終了秒 */
             videoOffsetEndSec: number;
+            /** @description Run タイムライン上でこの動画が登場する秒。0 なら Run 開始と同時 */
+            runOffsetSec: number;
             /** @description 例 "正面" / "コート横" / "drone" */
             angleLabel: string;
         };
@@ -1134,12 +1165,15 @@ export interface components {
             videoId: string;
             videoOffsetStartSec: number;
             videoOffsetEndSec: number;
+            /** @default 0 */
+            runOffsetSec: number;
             /** @default  */
             angleLabel: string;
         };
         UpdateRunVideoRequest: {
             videoOffsetStartSec?: number;
             videoOffsetEndSec?: number;
+            runOffsetSec?: number;
             angleLabel?: string;
         };
         Marker: {
@@ -2931,6 +2965,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunVideo"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listRecommendedVideosForRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Video"][];
+                    };
                 };
             };
             404: components["responses"]["NotFound"];

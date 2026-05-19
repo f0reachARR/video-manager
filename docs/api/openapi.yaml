@@ -1217,6 +1217,30 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /runs/{runId}/recommended-videos:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [runs]
+      operationId: listRecommendedVideosForRun
+      summary: Run に追加すべき動画のレコメンド
+      description: 同じ Session にアップロード済みで、まだこの Run に紐付いていない動画を返す
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Video"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   # ---------- Markers ----------
   /runs/{runId}/markers:
     parameters:
@@ -2259,7 +2283,7 @@ components:
     # ---------- Run ----------
     Run:
       type: object
-      required: [id, sessionId, teamId, robotId, scenarioId, startedAt, endedAt, memo, createdAt]
+      required: [id, sessionId, teamId, robotId, scenarioId, startedAt, endedAt, durationSec, memo, createdAt]
       properties:
         id:
           type: string
@@ -2285,6 +2309,10 @@ components:
         endedAt:
           type: string
           format: date-time
+        durationSec:
+          type: integer
+          minimum: 0
+          description: Run のタイムライン長（秒）。プレイヤーはこの値を上限として表示する
         score:
           type: [number, "null"]
         memo:
@@ -2327,6 +2355,9 @@ components:
         endedAt:
           type: string
           format: date-time
+        durationSec:
+          type: integer
+          minimum: 0
         score:
           type: [number, "null"]
         memo:
@@ -2337,6 +2368,11 @@ components:
           items:
             type: string
             format: uuid
+        videos:
+          type: array
+          description: 同時にアタッチする動画。Videos 画面の複数選択 → Run 作成で使う
+          items:
+            $ref: "#/components/schemas/AddRunVideoRequest"
     UpdateRunRequest:
       type: object
       properties:
@@ -2355,6 +2391,9 @@ components:
         endedAt:
           type: string
           format: date-time
+        durationSec:
+          type: integer
+          minimum: 0
         score:
           type: [number, "null"]
         memo:
@@ -2378,7 +2417,7 @@ components:
     # ---------- RunVideo ----------
     RunVideo:
       type: object
-      required: [id, runId, videoId, videoOffsetStartSec, videoOffsetEndSec, angleLabel]
+      required: [id, runId, videoId, videoOffsetStartSec, videoOffsetEndSec, runOffsetSec, angleLabel]
       properties:
         id:
           type: string
@@ -2391,9 +2430,14 @@ components:
           format: uuid
         videoOffsetStartSec:
           type: integer
-          description: Video 内の開始秒
+          description: Source video 側で「Run の中で見せる」区間の開始秒
         videoOffsetEndSec:
           type: integer
+          description: Source video 側で「Run の中で見せる」区間の終了秒
+        runOffsetSec:
+          type: integer
+          minimum: 0
+          description: Run タイムライン上でこの動画が登場する秒。0 なら Run 開始と同時
         angleLabel:
           type: string
           description: 例 "正面" / "コート横" / "drone"
@@ -2408,6 +2452,10 @@ components:
           type: integer
         videoOffsetEndSec:
           type: integer
+        runOffsetSec:
+          type: integer
+          minimum: 0
+          default: 0
         angleLabel:
           type: string
           default: ""
@@ -2418,6 +2466,9 @@ components:
           type: integer
         videoOffsetEndSec:
           type: integer
+        runOffsetSec:
+          type: integer
+          minimum: 0
         angleLabel:
           type: string
 

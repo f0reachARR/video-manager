@@ -20,6 +20,7 @@ type runVideoDTO struct {
 	VideoID             string `json:"videoId"`
 	VideoOffsetStartSec int32  `json:"videoOffsetStartSec"`
 	VideoOffsetEndSec   int32  `json:"videoOffsetEndSec"`
+	RunOffsetSec        int32  `json:"runOffsetSec"`
 	AngleLabel          string `json:"angleLabel"`
 }
 
@@ -30,24 +31,26 @@ func toRunVideoDTO(rv sqlc.RunVideo) runVideoDTO {
 		VideoID:             uuidString(rv.VideoID),
 		VideoOffsetStartSec: rv.VideoOffsetStart,
 		VideoOffsetEndSec:   rv.VideoOffsetEnd,
+		RunOffsetSec:        rv.RunOffsetSec,
 		AngleLabel:          rv.AngleLabel,
 	}
 }
 
 type runDTO struct {
-	ID         string        `json:"id"`
-	SessionID  string        `json:"sessionId"`
-	TeamID     string        `json:"teamId"`
-	RobotID    string        `json:"robotId"`
-	ScenarioID string        `json:"scenarioId"`
-	MatchID    *string       `json:"matchId"`
-	StartedAt  time.Time     `json:"startedAt"`
-	EndedAt    time.Time     `json:"endedAt"`
-	Score      *float64      `json:"score"`
-	Memo       string        `json:"memo"`
-	Videos     []runVideoDTO `json:"videos,omitempty"`
-	TagIDs     []string      `json:"tagIds"`
-	CreatedAt  time.Time     `json:"createdAt"`
+	ID          string        `json:"id"`
+	SessionID   string        `json:"sessionId"`
+	TeamID      string        `json:"teamId"`
+	RobotID     string        `json:"robotId"`
+	ScenarioID  string        `json:"scenarioId"`
+	MatchID     *string       `json:"matchId"`
+	StartedAt   time.Time     `json:"startedAt"`
+	EndedAt     time.Time     `json:"endedAt"`
+	DurationSec int32         `json:"durationSec"`
+	Score       *float64      `json:"score"`
+	Memo        string        `json:"memo"`
+	Videos      []runVideoDTO `json:"videos,omitempty"`
+	TagIDs      []string      `json:"tagIds"`
+	CreatedAt   time.Time     `json:"createdAt"`
 }
 
 func toRunDTO(r sqlc.Run, videos []sqlc.RunVideo, tagIDs []pgtype.UUID) runDTO {
@@ -57,18 +60,19 @@ func toRunDTO(r sqlc.Run, videos []sqlc.RunVideo, tagIDs []pgtype.UUID) runDTO {
 		matchID = &s
 	}
 	out := runDTO{
-		ID:         uuidString(r.ID),
-		SessionID:  uuidString(r.SessionID),
-		TeamID:     uuidString(r.TeamID),
-		RobotID:    uuidString(r.RobotID),
-		ScenarioID: uuidString(r.ScenarioID),
-		MatchID:    matchID,
-		StartedAt:  r.StartedAt.Time,
-		EndedAt:    r.EndedAt.Time,
-		Score:      r.Score,
-		Memo:       r.Memo,
-		TagIDs:     make([]string, 0, len(tagIDs)),
-		CreatedAt:  r.CreatedAt.Time,
+		ID:          uuidString(r.ID),
+		SessionID:   uuidString(r.SessionID),
+		TeamID:      uuidString(r.TeamID),
+		RobotID:     uuidString(r.RobotID),
+		ScenarioID:  uuidString(r.ScenarioID),
+		MatchID:     matchID,
+		StartedAt:   r.StartedAt.Time,
+		EndedAt:     r.EndedAt.Time,
+		DurationSec: r.DurationSec,
+		Score:       r.Score,
+		Memo:        r.Memo,
+		TagIDs:      make([]string, 0, len(tagIDs)),
+		CreatedAt:   r.CreatedAt.Time,
 	}
 	if videos != nil {
 		out.Videos = make([]runVideoDTO, len(videos))
@@ -83,27 +87,32 @@ func toRunDTO(r sqlc.Run, videos []sqlc.RunVideo, tagIDs []pgtype.UUID) runDTO {
 }
 
 type createRunRequest struct {
-	SessionID  string     `json:"sessionId"`
-	TeamID     string     `json:"teamId"`
-	RobotID    string     `json:"robotId"`
-	ScenarioID string     `json:"scenarioId"`
-	MatchID    *string    `json:"matchId"`
-	StartedAt  time.Time  `json:"startedAt"`
-	EndedAt    time.Time  `json:"endedAt"`
-	Score      *float64   `json:"score"`
-	Memo       *string    `json:"memo"`
-	TagIDs     []string   `json:"tagIds"`
+	SessionID   string    `json:"sessionId"`
+	TeamID      string    `json:"teamId"`
+	RobotID     string    `json:"robotId"`
+	ScenarioID  string    `json:"scenarioId"`
+	MatchID     *string   `json:"matchId"`
+	StartedAt   time.Time `json:"startedAt"`
+	EndedAt     time.Time `json:"endedAt"`
+	DurationSec *int32    `json:"durationSec"`
+	Score       *float64  `json:"score"`
+	Memo        *string   `json:"memo"`
+	TagIDs      []string  `json:"tagIds"`
+	// When set, the new Run is created and these videos are attached in one
+	// call. Used by the "multi-select videos → 作成 Run" flow on the Videos page.
+	Videos []addRunVideoRequest `json:"videos"`
 }
 
 type updateRunRequest struct {
-	RobotID    *string             `json:"robotId"`
-	ScenarioID *string             `json:"scenarioId"`
-	MatchID    Optional[string]    `json:"matchId"`
-	StartedAt  *time.Time          `json:"startedAt"`
-	EndedAt    *time.Time          `json:"endedAt"`
-	Score      Optional[float64]   `json:"score"`
-	Memo       *string             `json:"memo"`
-	TagIDs     *[]string           `json:"tagIds"`
+	RobotID     *string           `json:"robotId"`
+	ScenarioID  *string           `json:"scenarioId"`
+	MatchID     Optional[string]  `json:"matchId"`
+	StartedAt   *time.Time        `json:"startedAt"`
+	EndedAt     *time.Time        `json:"endedAt"`
+	DurationSec *int32            `json:"durationSec"`
+	Score       Optional[float64] `json:"score"`
+	Memo        *string           `json:"memo"`
+	TagIDs      *[]string         `json:"tagIds"`
 }
 
 type runListResponse struct {
@@ -210,16 +219,25 @@ func (h *Runs) Create(w http.ResponseWriter, r *http.Request) {
 	if req.Memo != nil {
 		memo = *req.Memo
 	}
+	duration := int32(0)
+	if req.DurationSec != nil {
+		duration = *req.DurationSec
+	}
+	if duration < 0 {
+		writeError(w, http.StatusUnprocessableEntity, "validation", "durationSec must be >= 0", nil)
+		return
+	}
 	run, err := h.Q.CreateRun(r.Context(), sqlc.CreateRunParams{
-		SessionID:  sessionID,
-		TeamID:     teamID,
-		RobotID:    robotID,
-		ScenarioID: scenarioID,
-		MatchID:    matchID,
-		StartedAt:  pgtypeTimestamptz(req.StartedAt),
-		EndedAt:    pgtypeTimestamptz(req.EndedAt),
-		Score:      req.Score,
-		Memo:       memo,
+		SessionID:   sessionID,
+		TeamID:      teamID,
+		RobotID:     robotID,
+		ScenarioID:  scenarioID,
+		MatchID:     matchID,
+		StartedAt:   pgtypeTimestamptz(req.StartedAt),
+		EndedAt:     pgtypeTimestamptz(req.EndedAt),
+		Score:       req.Score,
+		Memo:        memo,
+		DurationSec: duration,
 	})
 	if err != nil {
 		internalError(w, err)
@@ -229,12 +247,39 @@ func (h *Runs) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "validation", err.Error(), nil)
 		return
 	}
+	// Optional bulk attach. Errors here are reported but don't roll back the
+	// Run itself — failed angles can be retried via AddVideo.
+	var attached []sqlc.RunVideo
+	for _, v := range req.Videos {
+		videoID, err := parseUUIDParam(v.VideoID)
+		if err != nil {
+			continue
+		}
+		if v.VideoOffsetEndSec < v.VideoOffsetStartSec {
+			continue
+		}
+		angle := ""
+		if v.AngleLabel != nil {
+			angle = *v.AngleLabel
+		}
+		rv, err := h.Q.AddRunVideo(r.Context(), sqlc.AddRunVideoParams{
+			RunID:            run.ID,
+			VideoID:          videoID,
+			VideoOffsetStart: v.VideoOffsetStartSec,
+			VideoOffsetEnd:   v.VideoOffsetEndSec,
+			RunOffsetSec:     v.RunOffsetSec,
+			AngleLabel:       angle,
+		})
+		if err == nil {
+			attached = append(attached, rv)
+		}
+	}
 	tags, err := h.Q.ListRunTagsByRun(r.Context(), run.ID)
 	if err != nil {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toRunDTO(run, nil, tags))
+	writeJSON(w, http.StatusCreated, toRunDTO(run, attached, tags))
 }
 
 func (h *Runs) Get(w http.ResponseWriter, r *http.Request) {
@@ -310,6 +355,13 @@ func (h *Runs) Update(w http.ResponseWriter, r *http.Request) {
 	if req.EndedAt != nil {
 		params.EndedAt = pgtypeTimestamptz(*req.EndedAt)
 	}
+	if req.DurationSec != nil {
+		if *req.DurationSec < 0 {
+			writeError(w, http.StatusUnprocessableEntity, "validation", "durationSec must be >= 0", nil)
+			return
+		}
+		params.DurationSec = req.DurationSec
+	}
 	if req.Score.Set {
 		params.ScoreSet = true
 		if !req.Score.Null {
@@ -367,12 +419,14 @@ type addRunVideoRequest struct {
 	VideoID             string  `json:"videoId"`
 	VideoOffsetStartSec int32   `json:"videoOffsetStartSec"`
 	VideoOffsetEndSec   int32   `json:"videoOffsetEndSec"`
+	RunOffsetSec        int32   `json:"runOffsetSec"`
 	AngleLabel          *string `json:"angleLabel"`
 }
 
 type updateRunVideoRequest struct {
 	VideoOffsetStartSec *int32  `json:"videoOffsetStartSec"`
 	VideoOffsetEndSec   *int32  `json:"videoOffsetEndSec"`
+	RunOffsetSec        *int32  `json:"runOffsetSec"`
 	AngleLabel          *string `json:"angleLabel"`
 }
 
@@ -413,6 +467,7 @@ func (h *Runs) AddVideo(w http.ResponseWriter, r *http.Request) {
 		VideoID:          videoID,
 		VideoOffsetStart: req.VideoOffsetStartSec,
 		VideoOffsetEnd:   req.VideoOffsetEndSec,
+		RunOffsetSec:     req.RunOffsetSec,
 		AngleLabel:       angle,
 	})
 	if err != nil {
@@ -438,6 +493,7 @@ func (h *Runs) UpdateVideo(w http.ResponseWriter, r *http.Request) {
 		ID:               rvID,
 		VideoOffsetStart: req.VideoOffsetStartSec,
 		VideoOffsetEnd:   req.VideoOffsetEndSec,
+		RunOffsetSec:     req.RunOffsetSec,
 		AngleLabel:       req.AngleLabel,
 	})
 	if err != nil {
@@ -449,6 +505,36 @@ func (h *Runs) UpdateVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toRunVideoDTO(rv))
+}
+
+// RecommendedVideos returns videos uploaded against the same session that
+// aren't yet attached to this Run. Useful for filling out angles.
+func (h *Runs) RecommendedVideos(w http.ResponseWriter, r *http.Request) {
+	runID, err := parseUUIDParam(chi.URLParam(r, "runId"))
+	if err != nil {
+		badRequest(w, "invalid runId")
+		return
+	}
+	if _, err := h.Q.GetRun(r.Context(), runID); err != nil {
+		if isNoRows(err) {
+			notFound(w, "run not found")
+			return
+		}
+		internalError(w, err)
+		return
+	}
+	rows, err := h.Q.ListRecommendedVideosForRun(r.Context(), runID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	out := make([]videoDTO, len(rows))
+	for i, v := range rows {
+		out[i] = toVideoDTO(v)
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Data []videoDTO `json:"data"`
+	}{Data: out})
 }
 
 func (h *Runs) RemoveVideo(w http.ResponseWriter, r *http.Request) {

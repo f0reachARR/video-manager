@@ -1,6 +1,6 @@
 -- name: AddRunVideo :one
-INSERT INTO run_videos (run_id, video_id, video_offset_start, video_offset_end, angle_label)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO run_videos (run_id, video_id, video_offset_start, video_offset_end, run_offset_sec, angle_label)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: GetRunVideo :one
@@ -16,6 +16,7 @@ UPDATE run_videos
 SET
   video_offset_start = COALESCE(sqlc.narg('video_offset_start'), video_offset_start),
   video_offset_end = COALESCE(sqlc.narg('video_offset_end'), video_offset_end),
+  run_offset_sec = COALESCE(sqlc.narg('run_offset_sec'), run_offset_sec),
   angle_label = COALESCE(sqlc.narg('angle_label'), angle_label)
 WHERE id = sqlc.arg('id')
 RETURNING *;

@@ -1,6 +1,6 @@
 -- name: CreateRun :one
-INSERT INTO runs (session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO runs (session_id, team_id, robot_id, scenario_id, match_id, started_at, ended_at, score, memo, duration_sec)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: GetRun :one
@@ -28,12 +28,27 @@ SET
   started_at = COALESCE(sqlc.narg('started_at')::timestamptz, started_at),
   ended_at = COALESCE(sqlc.narg('ended_at')::timestamptz, ended_at),
   score = CASE WHEN sqlc.arg('score_set')::bool THEN sqlc.narg('score')::float8 ELSE score END,
-  memo = COALESCE(sqlc.narg('memo'), memo)
+  memo = COALESCE(sqlc.narg('memo'), memo),
+  duration_sec = COALESCE(sqlc.narg('duration_sec')::int, duration_sec)
 WHERE id = sqlc.arg('id')
 RETURNING *;
 
 -- name: DeleteRun :execrows
 DELETE FROM runs WHERE id = $1;
+
+-- Videos uploaded against the Run's session that are not yet attached to it.
+-- Used to populate the "Run に追加すべき動画" recommendation list.
+-- name: ListRecommendedVideosForRun :many
+SELECT v.*
+FROM videos v
+JOIN runs r ON r.id = $1
+WHERE v.session_id = r.session_id
+  AND NOT EXISTS (
+    SELECT 1 FROM run_videos rv
+    WHERE rv.run_id = r.id AND rv.video_id = v.id
+  )
+ORDER BY v.created_at DESC, v.id DESC
+LIMIT 50;
 
 -- name: SearchRuns :many
 SELECT r.*

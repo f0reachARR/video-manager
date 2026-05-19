@@ -189,17 +189,18 @@ type Robot struct {
 }
 
 type Run struct {
-	ID         pgtype.UUID
-	SessionID  pgtype.UUID
-	TeamID     pgtype.UUID
-	RobotID    pgtype.UUID
-	ScenarioID pgtype.UUID
-	MatchID    pgtype.UUID
-	StartedAt  pgtype.Timestamptz
-	EndedAt    pgtype.Timestamptz
-	Score      *float64
-	Memo       string
-	CreatedAt  pgtype.Timestamptz
+	ID          pgtype.UUID
+	SessionID   pgtype.UUID
+	TeamID      pgtype.UUID
+	RobotID     pgtype.UUID
+	ScenarioID  pgtype.UUID
+	MatchID     pgtype.UUID
+	StartedAt   pgtype.Timestamptz
+	EndedAt     pgtype.Timestamptz
+	Score       *float64
+	Memo        string
+	CreatedAt   pgtype.Timestamptz
+	DurationSec int32
 }
 
 type RunTag struct {
@@ -215,6 +216,7 @@ type RunVideo struct {
 	VideoOffsetEnd   int32
 	AngleLabel       string
 	CreatedAt        pgtype.Timestamptz
+	RunOffsetSec     int32
 }
 
 type Scenario struct {

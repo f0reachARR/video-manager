@@ -147,6 +147,13 @@ export const useRemoveRunVideo = () => {
   });
 };
 
+export const useRecommendedRunVideos = (runId: string | null | undefined) =>
+  useQuery({
+    queryKey: ["runs", runId, "recommended-videos"] as const,
+    queryFn: () => runsApi.recommendedVideos(runId as string),
+    enabled: !!runId,
+  });
+
 // ---- Search ----
 export const useSearchRuns = (params: SearchRunsParams) =>
   useQuery({

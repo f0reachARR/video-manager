@@ -70,6 +70,9 @@ type Querier interface {
 	ListDevicesPage(ctx context.Context, arg ListDevicesPageParams) ([]Device, error)
 	ListMarkersByRun(ctx context.Context, arg ListMarkersByRunParams) ([]Marker, error)
 	ListMatchesPage(ctx context.Context, arg ListMatchesPageParams) ([]Match, error)
+	// Videos uploaded against the Run's session that are not yet attached to it.
+	// Used to populate the "Run に追加すべき動画" recommendation list.
+	ListRecommendedVideosForRun(ctx context.Context, id pgtype.UUID) ([]Video, error)
 	ListRobotsByTeam(ctx context.Context, teamID pgtype.UUID) ([]Robot, error)
 	ListRobotsPage(ctx context.Context, arg ListRobotsPageParams) ([]Robot, error)
 	ListRunTagsByRun(ctx context.Context, runID pgtype.UUID) ([]pgtype.UUID, error)

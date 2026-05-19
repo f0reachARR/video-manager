@@ -348,6 +348,8 @@ export const runsApi = {
     }),
   removeVideo: (runId: string, runVideoId: string) =>
     request<void>(`/runs/${runId}/videos/${runVideoId}`, { method: "DELETE" }),
+  recommendedVideos: (runId: string) =>
+    request<{ data: Video[] }>(`/runs/${runId}/recommended-videos`),
 };
 
 // ---- Search ----
