@@ -564,6 +564,14 @@ function SyncPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Emit immediately when our Main angle changes so followers switch with us
+  // instead of waiting for the next periodic tick.
+  useEffect(() => {
+    broadcastPresence();
+    // broadcastPresence reads via refs and publishPresence is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainAngleId]);
+
   // Prune stale presence entries; clear follow if the followed user vanished.
   useEffect(() => {
     const id = setInterval(() => {
@@ -652,6 +660,7 @@ function SyncPlayer({
               angle={mainAngle}
               isMain
               overlayMode={overlayMode}
+              runT={t}
               registerRef={(el) => {
                 if (el) refs.current.set(mainAngle.rv.id, el);
                 else refs.current.delete(mainAngle.rv.id);
@@ -667,6 +676,7 @@ function SyncPlayer({
                   key={angle.rv.id}
                   angle={angle}
                   overlayMode="off"
+                  runT={t}
                   onSelectMain={() => setMainAngleId(angle.rv.id)}
                   registerRef={(el) => {
                     if (el) refs.current.set(angle.rv.id, el);
@@ -946,12 +956,14 @@ function AngleVideo({
   onSelectMain,
   registerRef,
   overlayMode,
+  runT,
 }: {
   angle: LoadedAngle;
   isMain?: boolean;
   onSelectMain?: () => void;
   registerRef: (el: HTMLVideoElement | null) => void;
   overlayMode: OverlayMode;
+  runT: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -959,6 +971,15 @@ function AngleVideo({
     videoRef.current = el;
     registerRef(el);
   };
+
+  // This angle covers run time [0, end-start]. Outside that window the
+  // source video has no content for the Run, so we cover the player with
+  // a NO VIDEO placeholder instead of showing a frozen / wrong frame.
+  const angleDur = Math.max(
+    0,
+    angle.rv.videoOffsetEndSec - angle.rv.videoOffsetStartSec,
+  );
+  const outOfRange = runT < 0 || runT > angleDur;
 
   return (
     <Card withBorder p="xs">
@@ -999,10 +1020,30 @@ function AngleVideo({
               maxHeight: isMain ? "60vh" : "150px",
               background: "#000",
               display: "block",
+              visibility: outOfRange ? "hidden" : undefined,
             }}
           >
             <track kind="captions" />
           </video>
+          {outOfRange && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: "#000",
+                color: "#aaa",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontFamily: "monospace",
+                fontSize: isMain ? 20 : 11,
+                letterSpacing: 2,
+                pointerEvents: "none",
+              }}
+            >
+              NO VIDEO
+            </div>
+          )}
           <RunVideoOverlay
             videoId={angle.rv.videoId}
             videoRef={videoRef}
