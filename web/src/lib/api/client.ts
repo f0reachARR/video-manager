@@ -69,6 +69,12 @@ export type Tournament = components["schemas"]["Tournament"];
 export type CreateTournamentRequest = components["schemas"]["CreateTournamentRequest"];
 export type UpdateTournamentRequest = components["schemas"]["UpdateTournamentRequest"];
 export type TournamentList = components["schemas"]["TournamentList"];
+export type TournamentTeamList = components["schemas"]["TournamentTeamList"];
+export type TournamentRobotList = components["schemas"]["TournamentRobotList"];
+export type ReplaceTournamentTeamsRequest =
+  components["schemas"]["ReplaceTournamentTeamsRequest"];
+export type ReplaceTournamentRobotsRequest =
+  components["schemas"]["ReplaceTournamentRobotsRequest"];
 
 export type ScoutingNote = components["schemas"]["ScoutingNote"];
 export type CreateScoutingNoteRequest = components["schemas"]["CreateScoutingNoteRequest"];
@@ -489,6 +495,20 @@ export const tournamentsApi = {
     request<Tournament>(`/tournaments/${id}`, { method: "PATCH", json: body }),
   remove: (id: string) =>
     request<void>(`/tournaments/${id}`, { method: "DELETE" }),
+  listTeams: (id: string) =>
+    request<TournamentTeamList>(`/tournaments/${id}/teams`),
+  replaceTeams: (id: string, body: ReplaceTournamentTeamsRequest) =>
+    request<TournamentTeamList>(`/tournaments/${id}/teams`, {
+      method: "PUT",
+      json: body,
+    }),
+  listRobots: (id: string) =>
+    request<TournamentRobotList>(`/tournaments/${id}/robots`),
+  replaceRobots: (id: string, body: ReplaceTournamentRobotsRequest) =>
+    request<TournamentRobotList>(`/tournaments/${id}/robots`, {
+      method: "PUT",
+      json: body,
+    }),
 };
 
 // ---- Matches ----

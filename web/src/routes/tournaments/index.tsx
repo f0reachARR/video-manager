@@ -3,15 +3,15 @@ import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { ResourcePage } from "../components/layout/ResourcePage";
-import type { Tournament } from "../lib/api/client";
+import { ResourcePage } from "../../components/layout/ResourcePage";
+import type { Tournament } from "../../lib/api/client";
 import {
   useDeleteTournament,
   useTournaments,
-} from "../features/tournaments/api/queries";
-import { TournamentFormModal } from "../features/tournaments/components/TournamentFormModal";
+} from "../../features/tournaments/api/queries";
+import { TournamentFormModal } from "../../features/tournaments/components/TournamentFormModal";
 
-export const Route = createFileRoute("/tournaments")({
+export const Route = createFileRoute("/tournaments/")({
   component: TournamentsPage,
 });
 
@@ -38,7 +38,7 @@ function TournamentsPage() {
             <Table.Th>開始日</Table.Th>
             <Table.Th>終了日</Table.Th>
             <Table.Th>作成日時</Table.Th>
-            <Table.Th style={{ width: 140 }}>操作</Table.Th>
+            <Table.Th style={{ width: 200 }}>操作</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -47,8 +47,8 @@ function TournamentsPage() {
               <Table.Td
                 onClick={() =>
                   navigate({
-                    to: "/matches",
-                    search: { tournamentId: t.id } as never,
+                    to: "/tournaments/$tournamentId",
+                    params: { tournamentId: t.id },
                   })
                 }
               >
@@ -59,6 +59,18 @@ function TournamentsPage() {
               <Table.Td>{new Date(t.createdAt).toLocaleString()}</Table.Td>
               <Table.Td>
                 <Group gap={4}>
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    onClick={() =>
+                      navigate({
+                        to: "/matches",
+                        search: { tournamentId: t.id } as never,
+                      })
+                    }
+                  >
+                    試合一覧
+                  </Button>
                   <ActionIcon
                     variant="subtle"
                     onClick={() => setEditing(t)}
