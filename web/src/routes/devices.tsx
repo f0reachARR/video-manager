@@ -1,14 +1,4 @@
-import {
-  ActionIcon,
-  Button,
-  Group,
-  Modal,
-  NumberInput,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-} from "@mantine/core";
+import { ActionIcon, Button, Group, Table, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
@@ -16,11 +6,10 @@ import { useState } from "react";
 import { ResourcePage } from "../components/layout/ResourcePage";
 import type { Device } from "../lib/api/client";
 import {
-  useCreateDevice,
   useDeleteDevice,
   useDevices,
-  useUpdateDevice,
-} from "../lib/queries";
+} from "../features/devices/api/queries";
+import { DeviceEditModal } from "../features/devices/components/DeviceEditModal";
 
 export const Route = createFileRoute("/devices")({
   component: DevicesPage,
@@ -118,51 +107,5 @@ function DeviceActions({ device, onEdit }: { device: Device; onEdit: () => void 
         🗑️
       </ActionIcon>
     </Group>
-  );
-}
-
-function DeviceEditModal({
-  opened,
-  onClose,
-  device,
-}: {
-  opened: boolean;
-  onClose: () => void;
-  device: Device | null;
-}) {
-  const [name, setName] = useState(device?.name ?? "");
-  const [offset, setOffset] = useState<number>(device?.defaultTimeOffsetSec ?? 0);
-  const create = useCreateDevice();
-  const update = useUpdateDevice();
-
-  const submit = () => {
-    const payload = { name, defaultTimeOffsetSec: offset };
-    if (device) {
-      update.mutate({ id: device.id, body: payload }, { onSuccess: onClose });
-    } else {
-      create.mutate(payload, { onSuccess: onClose });
-    }
-  };
-
-  return (
-    <Modal opened={opened} onClose={onClose} title={device ? "機材編集" : "機材新規作成"}>
-      <Stack>
-        <TextInput label="名前" value={name} onChange={(e) => setName(e.currentTarget.value)} required />
-        <NumberInput
-          label="Default Time Offset (秒)"
-          description="プラスなら機材時刻が進んでいる。0 で OK"
-          value={offset}
-          onChange={(v) => setOffset(typeof v === "number" ? v : 0)}
-        />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            キャンセル
-          </Button>
-          <Button onClick={submit} loading={create.isPending || update.isPending} disabled={!name.trim()}>
-            保存
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
   );
 }

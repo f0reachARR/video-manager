@@ -3,12 +3,8 @@ import {
   Avatar,
   Button,
   Group,
-  Modal,
-  Select,
-  Stack,
   Table,
   Text,
-  TextInput,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -16,13 +12,9 @@ import { useMemo, useState } from "react";
 
 import { ResourcePage } from "../../components/layout/ResourcePage";
 import { type Robot, robotImagesApi } from "../../lib/api/client";
-import {
-  useCreateRobot,
-  useDeleteRobot,
-  useRobots,
-  useTeams,
-  useUpdateRobot,
-} from "../../lib/queries";
+import { useDeleteRobot, useRobots } from "../../features/robots/api/queries";
+import { useTeams } from "../../features/teams/api/queries";
+import { RobotEditModal } from "../../features/robots/components/RobotEditModal";
 
 export const Route = createFileRoute("/robots/")({
   component: RobotsPage,
@@ -81,7 +73,11 @@ function RobotsPage() {
             <Table.Tr key={r.id}>
               <Table.Td>
                 <Avatar
-                  src={r.primaryImageId ? robotImagesApi.thumbUrl(r.primaryImageId) : undefined}
+                  src={
+                    r.primaryImageId
+                      ? robotImagesApi.thumbUrl(r.primaryImageId)
+                      : undefined
+                  }
                   size={40}
                   radius="sm"
                 />
@@ -161,75 +157,5 @@ function RobotActions({
         🗑️
       </ActionIcon>
     </Group>
-  );
-}
-
-function RobotEditModal({
-  opened,
-  onClose,
-  robot,
-  teamOptions,
-}: {
-  opened: boolean;
-  onClose: () => void;
-  robot: Robot | null;
-  teamOptions: { value: string; label: string }[];
-}) {
-  const [name, setName] = useState(robot?.name ?? "");
-  const [version, setVersion] = useState(robot?.version ?? "");
-  const [teamId, setTeamId] = useState<string | null>(
-    robot?.teamId ?? teamOptions[0]?.value ?? null,
-  );
-  const create = useCreateRobot();
-  const update = useUpdateRobot();
-
-  const submit = () => {
-    if (robot) {
-      update.mutate(
-        { id: robot.id, body: { name, version } },
-        { onSuccess: onClose },
-      );
-    } else {
-      if (!teamId) return;
-      create.mutate(
-        { teamId, name, version },
-        { onSuccess: onClose },
-      );
-    }
-  };
-
-  return (
-    <Modal opened={opened} onClose={onClose} title={robot ? "ロボット編集" : "ロボット新規作成"}>
-      <Stack>
-        <TextInput label="名前" value={name} onChange={(e) => setName(e.currentTarget.value)} required />
-        <TextInput
-          label="バージョン"
-          value={version}
-          onChange={(e) => setVersion(e.currentTarget.value)}
-          placeholder="例: v1"
-        />
-        {!robot && (
-          <Select
-            label="チーム"
-            data={teamOptions}
-            value={teamId}
-            onChange={setTeamId}
-            required
-          />
-        )}
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            キャンセル
-          </Button>
-          <Button
-            onClick={submit}
-            loading={create.isPending || update.isPending}
-            disabled={!name.trim() || (!robot && !teamId)}
-          >
-            保存
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
   );
 }

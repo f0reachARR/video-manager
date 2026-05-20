@@ -1,26 +1,12 @@
-import {
-  ActionIcon,
-  Button,
-  ColorInput,
-  Group,
-  Modal,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-} from "@mantine/core";
+import { ActionIcon, Button, Group, Table, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { ResourcePage } from "../components/layout/ResourcePage";
 import type { User } from "../lib/api/client";
-import {
-  useCreateUser,
-  useDeleteUser,
-  useUpdateUser,
-  useUsers,
-} from "../lib/queries";
+import { useDeleteUser, useUsers } from "../features/users/api/queries";
+import { UserEditModal } from "../features/users/components/UserEditModal";
 
 export const Route = createFileRoute("/users")({
   component: UsersPage,
@@ -89,10 +75,13 @@ function UsersPage() {
               </Table.Td>
               <Table.Td>{new Date(u.createdAt).toLocaleString()}</Table.Td>
               <Table.Td>
-                <RowActions user={u} onEdit={() => {
-                  setEditing(u);
-                  open();
-                }} />
+                <RowActions
+                  user={u}
+                  onEdit={() => {
+                    setEditing(u);
+                    open();
+                  }}
+                />
               </Table.Td>
             </Table.Tr>
           ))}
@@ -138,54 +127,5 @@ function RowActions({ user, onEdit }: { user: User; onEdit: () => void }) {
         🗑️
       </ActionIcon>
     </Group>
-  );
-}
-
-function UserEditModal({
-  opened,
-  onClose,
-  user,
-}: {
-  opened: boolean;
-  onClose: () => void;
-  user: User | null;
-}) {
-  const [name, setName] = useState(user?.name ?? "");
-  const [color, setColor] = useState(user?.color ?? "");
-  const create = useCreateUser();
-  const update = useUpdateUser();
-
-  const handleClose = () => {
-    onClose();
-  };
-
-  const handleSubmit = () => {
-    const payload = { name, color: color || null };
-    if (user) {
-      update.mutate({ id: user.id, body: payload }, { onSuccess: handleClose });
-    } else {
-      create.mutate(payload, { onSuccess: handleClose });
-    }
-  };
-
-  return (
-    <Modal opened={opened} onClose={handleClose} title={user ? "ユーザー編集" : "ユーザー新規作成"}>
-      <Stack>
-        <TextInput label="名前" value={name} onChange={(e) => setName(e.currentTarget.value)} required />
-        <ColorInput label="色 (任意)" value={color} onChange={setColor} format="hex" />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={handleClose}>
-            キャンセル
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            loading={create.isPending || update.isPending}
-            disabled={!name.trim()}
-          >
-            保存
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
   );
 }
