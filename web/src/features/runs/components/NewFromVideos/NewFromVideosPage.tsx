@@ -1,34 +1,27 @@
 import {
-  ActionIcon,
   Alert,
   Anchor,
   Button,
   Card,
   Container,
   Group,
-  NumberInput,
-  Select,
   Stack,
-  Table,
   Text,
-  TextInput,
   Title,
 } from "@mantine/core";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Video } from "../../../../lib/api/client";
-import { formatDateTimeFull } from "../../../../lib/time";
-import { useRobots } from "../../../robots/api/queries";
-import { useScenarios } from "../../../scenarios/api/queries";
 import { useSessions } from "../../../sessions/api/queries";
-import { useTeams } from "../../../teams/api/queries";
 import { useVideos } from "../../../videos/api/queries";
 import { useCreateRun } from "../../api/queries";
-import { formatTime } from "../../lib/format";
+import { DefaultMetadataCard } from "./DefaultMetadataCard";
 import { Preview } from "./Preview";
+import { RegionsTable } from "./RegionsTable";
 import { Timeline } from "./Timeline";
 import { newRegionId, type Region } from "./types";
+import { useRegionDrag } from "./useRegionDrag";
 
 export function NewFromVideosPage({
   sessionId,
@@ -40,9 +33,6 @@ export function NewFromVideosPage({
   const navigate = useNavigate();
 
   const sessions = useSessions();
-  const teams = useTeams();
-  const robots = useRobots();
-  const scenarios = useScenarios();
   const create = useCreateRun();
   // Fetch all videos in the Session — we then filter by the IDs in search
   // params. Avoids N round-trips and reuses the same list endpoint the
@@ -122,114 +112,19 @@ export function NewFromVideosPage({
   }, [selectedRegion?.id]);
 
   const trackRef = useRef<HTMLDivElement>(null);
-  type DragKind = "create" | "move" | "resize-start" | "resize-end";
-  const dragRef = useRef<{
-    kind: DragKind;
-    regionId: string;
-    startSec: number;
-    initStart: number;
-    initEnd: number;
-  } | null>(null);
-
-  const xToSec = (clientX: number, rect: DOMRect) => {
-    const px = clientX - rect.left - 120; // LABEL_GUTTER
-    const w = Math.max(1, rect.width - 120);
-    return (px / w) * totalSec;
-  };
-
-  const startTrackDrag = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    if (placeable.length === 0) return;
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const sec = Math.max(0, Math.min(totalSec, xToSec(e.clientX, rect)));
-    const id = newRegionId();
-    setRegions((rs) => [
-      ...rs,
-      {
-        id,
-        startSec: sec,
-        endSec: sec,
+  const { startTrackDrag, startRegionDrag, onPointerMove, endDrag } =
+    useRegionDrag({
+      trackRef,
+      totalSec,
+      placeableCount: placeable.length,
+      defaults: {
         teamId: defaultTeam,
         robotId: defaultRobot,
         scenarioId: defaultScenario,
-        memo: "",
-        score: "",
       },
-    ]);
-    setSelectedId(id);
-    dragRef.current = {
-      kind: "create",
-      regionId: id,
-      startSec: sec,
-      initStart: sec,
-      initEnd: sec,
-    };
-    (e.currentTarget as Element).setPointerCapture(e.pointerId);
-  };
-
-  const startRegionDrag =
-    (region: Region, kind: "move" | "resize-start" | "resize-end") =>
-    (e: React.PointerEvent) => {
-      e.stopPropagation();
-      const rect = trackRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setSelectedId(region.id);
-      dragRef.current = {
-        kind,
-        regionId: region.id,
-        startSec: xToSec(e.clientX, rect),
-        initStart: region.startSec,
-        initEnd: region.endSec,
-      };
-      (e.currentTarget as Element).setPointerCapture(e.pointerId);
-    };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const cur = Math.max(0, Math.min(totalSec, xToSec(e.clientX, rect)));
-    setRegions((rs) =>
-      rs.map((r) => {
-        if (r.id !== drag.regionId) return r;
-        let s = drag.initStart;
-        let eEnd = drag.initEnd;
-        if (drag.kind === "create") {
-          s = Math.min(drag.startSec, cur);
-          eEnd = Math.max(drag.startSec, cur);
-        } else if (drag.kind === "move") {
-          const dx = cur - drag.startSec;
-          const len = drag.initEnd - drag.initStart;
-          s = Math.max(0, Math.min(totalSec - len, drag.initStart + dx));
-          eEnd = s + len;
-        } else if (drag.kind === "resize-start") {
-          s = Math.max(0, Math.min(drag.initEnd - 0.1, cur));
-          eEnd = drag.initEnd;
-        } else if (drag.kind === "resize-end") {
-          s = drag.initStart;
-          eEnd = Math.max(drag.initStart + 0.1, Math.min(totalSec, cur));
-        }
-        return { ...r, startSec: s, endSec: eEnd };
-      }),
-    );
-  };
-
-  const endDrag = () => {
-    const drag = dragRef.current;
-    dragRef.current = null;
-    if (!drag) return;
-    if (drag.kind === "create") {
-      // Tossing off a click without any movement creates a zero-length
-      // region; drop those so the table doesn't fill with phantom rows.
-      setRegions((rs) =>
-        rs.filter(
-          (r) => r.id !== drag.regionId || r.endSec - r.startSec >= 0.5,
-        ),
-      );
-    }
-  };
+      setRegions,
+      setSelectedId,
+    });
 
   const updateRegion = (id: string, patch: Partial<Region>) =>
     setRegions((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -392,57 +287,14 @@ export function NewFromVideosPage({
           </Group>
         </Group>
 
-        <Card withBorder p="sm">
-          <Stack gap="xs">
-            <Text size="sm" fw={500}>
-              デフォルトのメタデータ
-            </Text>
-            <Text size="xs" c="dimmed">
-              ここで設定した値が新しい区間に流し込まれます。区間ごとに下の表で上書き可。
-            </Text>
-            <Group grow>
-              <Select
-                label="Team"
-                data={(teams.data?.data ?? []).map((t) => ({
-                  value: t.id,
-                  label: t.name,
-                }))}
-                value={defaultTeam}
-                onChange={(v) => {
-                  setDefaultTeam(v);
-                  setDefaultRobot(null);
-                }}
-                searchable
-                clearable
-              />
-              <Select
-                label="Robot"
-                data={(robots.data?.data ?? [])
-                  .filter((r) => !defaultTeam || r.teamId === defaultTeam)
-                  .map((r) => ({
-                    value: r.id,
-                    label: r.name,
-                  }))}
-                value={defaultRobot}
-                onChange={setDefaultRobot}
-                searchable
-                clearable
-                disabled={!defaultTeam}
-              />
-              <Select
-                label="Scenario"
-                data={(scenarios.data?.data ?? []).map((s) => ({
-                  value: s.id,
-                  label: s.name,
-                }))}
-                value={defaultScenario}
-                onChange={setDefaultScenario}
-                searchable
-                clearable
-              />
-            </Group>
-          </Stack>
-        </Card>
+        <DefaultMetadataCard
+          defaultTeam={defaultTeam}
+          defaultRobot={defaultRobot}
+          defaultScenario={defaultScenario}
+          onChangeTeam={setDefaultTeam}
+          onChangeRobot={setDefaultRobot}
+          onChangeScenario={setDefaultScenario}
+        />
 
         <Card withBorder p="sm">
           <Stack gap="xs">
@@ -492,157 +344,14 @@ export function NewFromVideosPage({
           onClearPending={() => setPendingStart(null)}
         />
 
-        <Card withBorder p="sm">
-          <Stack gap="xs">
-            <Text size="sm" fw={500}>
-              Run リスト ({regions.length})
-            </Text>
-            {regions.length === 0 ? (
-              <Text size="sm" c="dimmed">
-                まだ区間がありません。上のタイムラインをドラッグして追加してください。
-              </Text>
-            ) : (
-              <Table withRowBorders={false} highlightOnHover>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th style={{ width: 30 }}>#</Table.Th>
-                    <Table.Th>開始時刻</Table.Th>
-                    <Table.Th style={{ width: 90 }}>長さ</Table.Th>
-                    <Table.Th>Team</Table.Th>
-                    <Table.Th>Robot</Table.Th>
-                    <Table.Th>Scenario</Table.Th>
-                    <Table.Th style={{ width: 90 }}>Score</Table.Th>
-                    <Table.Th>Memo</Table.Th>
-                    <Table.Th style={{ width: 40 }} />
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {regions
-                    .map((r, i) => ({ r, i }))
-                    .sort((a, b) => a.r.startSec - b.r.startSec)
-                    .map(({ r, i }) => {
-                      const dur = Math.max(0, r.endSec - r.startSec);
-                      const startAbs = new Date(t0Ms + r.startSec * 1000);
-                      const isSel = r.id === selectedId;
-                      return (
-                        <Table.Tr
-                          key={r.id}
-                          bg={
-                            isSel
-                              ? "var(--mantine-color-blue-light)"
-                              : undefined
-                          }
-                          onClick={() => setSelectedId(r.id)}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <Table.Td>{i + 1}</Table.Td>
-                          <Table.Td>
-                            <Text size="xs">{formatDateTimeFull(startAbs)}</Text>
-                            <Text size="xs" c="dimmed">
-                              t+{formatTime(r.startSec)}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text size="xs" ff="monospace">
-                              {formatTime(dur)}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Select
-                              size="xs"
-                              data={(teams.data?.data ?? []).map((t) => ({
-                                value: t.id,
-                                label: t.name,
-                              }))}
-                              value={r.teamId}
-                              onChange={(v) =>
-                                updateRegion(r.id, {
-                                  teamId: v,
-                                  robotId: null,
-                                })
-                              }
-                              searchable
-                            />
-                          </Table.Td>
-                          <Table.Td>
-                            <Select
-                              size="xs"
-                              data={(robots.data?.data ?? [])
-                                .filter(
-                                  (rb) =>
-                                    !r.teamId || rb.teamId === r.teamId,
-                                )
-                                .map((rb) => ({
-                                  value: rb.id,
-                                  label: rb.name,
-                                }))}
-                              value={r.robotId}
-                              onChange={(v) =>
-                                updateRegion(r.id, { robotId: v })
-                              }
-                              searchable
-                              disabled={!r.teamId}
-                            />
-                          </Table.Td>
-                          <Table.Td>
-                            <Select
-                              size="xs"
-                              data={(scenarios.data?.data ?? []).map((s) => ({
-                                value: s.id,
-                                label: s.name,
-                              }))}
-                              value={r.scenarioId}
-                              onChange={(v) =>
-                                updateRegion(r.id, { scenarioId: v })
-                              }
-                              searchable
-                            />
-                          </Table.Td>
-                          <Table.Td>
-                            <NumberInput
-                              size="xs"
-                              value={r.score}
-                              onChange={(v) =>
-                                updateRegion(r.id, {
-                                  score: typeof v === "number" ? v : "",
-                                })
-                              }
-                              allowDecimal
-                            />
-                          </Table.Td>
-                          <Table.Td>
-                            <TextInput
-                              size="xs"
-                              value={r.memo}
-                              onChange={(e) =>
-                                updateRegion(r.id, {
-                                  memo: e.currentTarget.value,
-                                })
-                              }
-                            />
-                          </Table.Td>
-                          <Table.Td>
-                            <ActionIcon
-                              size="sm"
-                              variant="subtle"
-                              color="red"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeRegion(r.id);
-                              }}
-                              aria-label="削除"
-                            >
-                              ✕
-                            </ActionIcon>
-                          </Table.Td>
-                        </Table.Tr>
-                      );
-                    })}
-                </Table.Tbody>
-              </Table>
-            )}
-          </Stack>
-        </Card>
+        <RegionsTable
+          regions={regions}
+          selectedId={selectedId}
+          t0Ms={t0Ms}
+          onSelect={setSelectedId}
+          onUpdate={updateRegion}
+          onRemove={removeRegion}
+        />
 
         {unplaceable.length > 0 && (
           <Alert color="yellow" title="配置できない動画">

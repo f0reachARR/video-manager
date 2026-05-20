@@ -1,6 +1,5 @@
 import {
   Alert,
-  Badge,
   Button,
   Card,
   Grid,
@@ -11,43 +10,32 @@ import {
   Text,
 } from "@mantine/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-import {
-  ApiError,
-  type Marker,
-  type PlaybackUrl,
-  type Run,
-  type RunVideo,
-  type User,
-  videosApi,
-} from "../../../lib/api/client";
-import { useHlsSource } from "../../../components/player/useHlsSource";
-import { useTopicSubscription } from "../../../lib/realtime";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCurrentUserId } from "../../../stores/currentUser";
-import { useUsers } from "../../users/api/queries";
+
+import type { Marker, Run, User } from "../../../../lib/api/client";
+import { useTopicSubscription } from "../../../../lib/realtime";
+import { useCurrentUserId } from "../../../../stores/currentUser";
+import { useUsers } from "../../../users/api/queries";
 import {
-  RunVideoOverlay,
-  type OverlayMode,
-} from "../../annotations/components/RunVideoOverlay";
-import { AnnotationToolbar } from "../../annotations/components/AnnotationToolbar";
-import { markerCategoryColor } from "../../markers/lib/category";
-import { formatTime } from "../lib/format";
+  AnnotationToolbar,
+} from "../../../annotations/components/AnnotationToolbar";
+import type { OverlayMode } from "../../../annotations/components/RunVideoOverlay";
+import { formatTime } from "../../lib/format";
 import {
   angleDuration,
   isAngleInRange,
   runTimeToVideoTime,
-} from "../lib/timeMap";
-import {
-  presenceColor,
-  presenceLabel,
-  type Presence,
-} from "../lib/presence";
+} from "../../lib/timeMap";
 import {
   usePresence,
   type LocalPresenceSnapshot,
   type RemoteFollowTick,
-} from "../hooks/usePresence";
+} from "../../hooks/usePresence";
+import { AngleVideo, type LoadedAngle } from "./AngleVideo";
+import { MarkerStrip } from "./MarkerStrip";
+import { PresenceStrip } from "./PresenceStrip";
+import { SyncControls } from "./SyncControls";
+import { usePlaybackUrls } from "./usePlaybackUrls";
 
 // How far the followed presence can drift from us before we forcibly re-seek.
 // Smaller than the WS tick latency on purpose — half a second of drift is
@@ -58,11 +46,6 @@ const SYNC_DRIFT_THRESHOLD_SEC = 0.5;
 // we snap it back. Larger than SYNC_DRIFT_THRESHOLD_SEC because the rAF tick
 // only nudges every frame and steady-state drift of ~100ms is expected.
 const VIDEO_DRIFT_SNAP_SEC = 0.25;
-
-type LoadedAngle = {
-  rv: RunVideo;
-  source: PlaybackUrl;
-};
 
 export function SyncPlayer({
   run,
@@ -80,8 +63,7 @@ export function SyncPlayer({
   markers: Marker[];
 }) {
   const videos = run.videos ?? [];
-  const [urls, setUrls] = useState<Map<string, PlaybackUrl>>(new Map());
-  const [urlErrors, setUrlErrors] = useState<Map<string, string>>(new Map());
+  const { urls, urlErrors } = usePlaybackUrls(videos);
   const [mainAngleId, setMainAngleId] = useState<string | null>(null);
   const [runDurationSec, setRunDurationSec] = useState<number>(0);
   const setT = onTChange;
@@ -164,35 +146,6 @@ export function SyncPlayer({
     },
     () => qc.invalidateQueries({ queryKey: ["markers", run.id] }),
   );
-
-  // Resolve playback URLs once per video id.
-  useEffect(() => {
-    let canceled = false;
-    Promise.all(
-      videos.map(async (v) => {
-        if (urls.has(v.videoId)) return;
-        try {
-          const r = await videosApi.playbackUrl(v.videoId);
-          if (canceled) return;
-          setUrls((m) => new Map(m).set(v.videoId, r));
-        } catch (e) {
-          if (canceled) return;
-          setUrlErrors((m) =>
-            new Map(m).set(
-              v.videoId,
-              e instanceof ApiError ? e.body.message : String(e),
-            ),
-          );
-        }
-      }),
-    );
-    return () => {
-      canceled = true;
-    };
-    // We intentionally key only on videos identity; urls map updates trigger
-    // React state and don't need to retrigger this effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videos]);
 
   // Run timeline length is now an editable field on the Run itself. If the
   // value is 0 (legacy / unset), fall back to "max(angle length)" so existing
@@ -484,284 +437,16 @@ export function SyncPlayer({
             onChange={seek}
             label={(v) => formatTime(v)}
           />
-          {/* Marker overlay — pointer-events:none so the slider stays draggable. */}
-          {runDurationSec > 0 && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                pointerEvents: "none",
-              }}
-            >
-              {markers.map((m) => {
-                const pct = Math.max(
-                  0,
-                  Math.min(100, (m.runOffsetSec / runDurationSec) * 100),
-                );
-                return (
-                  <div
-                    key={m.id}
-                    title={`${formatTime(m.runOffsetSec)} ${m.category}${m.label ? ` — ${m.label}` : ""}`}
-                    style={{
-                      position: "absolute",
-                      left: `${pct}%`,
-                      top: "50%",
-                      transform: "translate(-50%, -50%)",
-                      width: 4,
-                      height: 18,
-                      background: `var(--mantine-color-${markerCategoryColor[m.category]}-6)`,
-                      borderRadius: 2,
-                      boxShadow: "0 0 0 1px rgba(255,255,255,0.6)",
-                    }}
-                  />
-                );
-              })}
-            </div>
-          )}
-          {/* Presence dots — each other viewer's playback position. Click to follow. */}
-          {runDurationSec > 0 && (
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                top: -18,
-                height: 16,
-              }}
-            >
-              {[...presence.presences.values()].map((p) => {
-                const pct = Math.max(
-                  0,
-                  Math.min(100, (p.tSec / runDurationSec) * 100),
-                );
-                const color = presenceColor(p, usersById);
-                const name = presenceLabel(p, usersById);
-                const isFollowed = presence.followTarget === p.senderId;
-                return (
-                  <button
-                    type="button"
-                    key={p.senderId}
-                    onClick={() => {
-                      presence.followIndividual(isFollowed ? null : p.senderId);
-                    }}
-                    title={`${name} — ${formatTime(p.tSec)}${p.isBroadcaster ? " (全員に追従させ中)" : ""}${isFollowed ? "（追従中。クリックで解除）" : "（クリックで追従）"}`}
-                    style={{
-                      position: "absolute",
-                      left: `${pct}%`,
-                      top: 0,
-                      transform: "translateX(-50%)",
-                      width: p.isBroadcaster ? 16 : 12,
-                      height: p.isBroadcaster ? 16 : 12,
-                      borderRadius: "50%",
-                      background: color,
-                      border: isFollowed
-                        ? "2px solid #fff"
-                        : p.isBroadcaster
-                          ? "2px solid #fff"
-                          : "1px solid rgba(255,255,255,0.7)",
-                      boxShadow: p.isBroadcaster
-                        ? `0 0 0 2px ${color}`
-                        : "0 0 0 1px rgba(0,0,0,0.3)",
-                      cursor: "pointer",
-                      padding: 0,
-                    }}
-                    aria-label={`follow ${name}`}
-                  />
-                );
-              })}
-            </div>
-          )}
+          <MarkerStrip markers={markers} durationSec={runDurationSec} />
+          <PresenceStrip
+            presences={presence.presences}
+            usersById={usersById}
+            durationSec={runDurationSec}
+            followTarget={presence.followTarget}
+            onToggleFollow={(id) => presence.followIndividual(id)}
+          />
         </div>
       </Group>
     </Stack>
   );
 }
-
-function SyncControls({
-  presences,
-  usersById,
-  myBroadcasting,
-  followTarget,
-  onToggleBroadcast,
-  onUnfollow,
-}: {
-  presences: Map<string, Presence>;
-  usersById: Map<string, User>;
-  myBroadcasting: boolean;
-  followTarget: string | null;
-  onToggleBroadcast: () => void;
-  onUnfollow: () => void;
-}) {
-  // The "current broadcaster" is whoever among visible presences has
-  // isBroadcaster=true. If nobody, the slot is free.
-  const currentBroadcaster = useMemo(() => {
-    for (const p of presences.values()) {
-      if (p.isBroadcaster) return p;
-    }
-    return null;
-  }, [presences]);
-
-  const someoneElseBroadcasting =
-    currentBroadcaster !== null && !myBroadcasting;
-  const followedPresence = followTarget ? presences.get(followTarget) : null;
-
-  return (
-    <>
-      <Button
-        size="xs"
-        variant={myBroadcasting ? "filled" : "default"}
-        color={myBroadcasting ? "blue" : undefined}
-        onClick={onToggleBroadcast}
-      >
-        {myBroadcasting
-          ? "🛰 自分に追従中 (停止)"
-          : someoneElseBroadcasting
-            ? "🛰 自分に追従させる (奪う)"
-            : "🛰 全員に追従させる"}
-      </Button>
-      {someoneElseBroadcasting && currentBroadcaster && (
-        <Badge
-          size="xs"
-          color="blue"
-          variant="dot"
-          style={{
-            background: presenceColor(currentBroadcaster, usersById),
-            color: "#fff",
-          }}
-        >
-          {presenceLabel(currentBroadcaster, usersById)} に全員追従中
-        </Badge>
-      )}
-      {followedPresence && !myBroadcasting && (
-        <Badge
-          size="xs"
-          color="cyan"
-          variant="light"
-          rightSection={
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              onClick={onUnfollow}
-              style={{ marginLeft: 4 }}
-            >
-              ×
-            </Button>
-          }
-        >
-          {presenceLabel(followedPresence, usersById)} を追従中
-        </Badge>
-      )}
-    </>
-  );
-}
-
-function AngleVideo({
-  angle,
-  isMain,
-  onSelectMain,
-  registerRef,
-  overlayMode,
-  overlayLabel,
-  runT,
-}: {
-  angle: LoadedAngle;
-  isMain?: boolean;
-  onSelectMain?: () => void;
-  registerRef: (el: HTMLVideoElement | null) => void;
-  overlayMode: OverlayMode;
-  overlayLabel?: string;
-  runT: number;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [videoEl, setVideoElState] = useState<HTMLVideoElement | null>(null);
-  const setVideoEl = (el: HTMLVideoElement | null) => {
-    videoRef.current = el;
-    setVideoElState(el);
-    registerRef(el);
-  };
-  useHlsSource(videoEl, angle.source);
-
-  // This angle covers run time [runOffset, runOffset + (end-start)]. Outside
-  // that window the source video has no content for the Run, so we cover the
-  // player with a NO VIDEO placeholder instead of showing a frozen / wrong
-  // frame. The "before" gap appears when runOffsetSec > 0; the "after" gap
-  // appears when the angle's length is less than the Run's duration.
-  const outOfRange = !isAngleInRange(angle.rv, runT);
-
-  return (
-    <Card withBorder p="xs">
-      <Stack gap={4}>
-        <Group justify="space-between" wrap="nowrap">
-          <Text size="xs" fw={500} truncate>
-            {angle.rv.angleLabel || "(無名アングル)"}
-          </Text>
-          <Group gap={4}>
-            {isMain && (
-              <Badge size="xs" variant="filled">
-                Main
-              </Badge>
-            )}
-            {!isMain && onSelectMain && (
-              <Button size="compact-xs" variant="subtle" onClick={onSelectMain}>
-                Main にする
-              </Button>
-            )}
-          </Group>
-        </Group>
-        <div
-          ref={containerRef}
-          style={{
-            position: "relative",
-            // Live ink mode hides the native controls to free up pointer space.
-            touchAction:
-              isMain && overlayMode === "liveInk" ? "none" : undefined,
-          }}
-        >
-          <video
-            ref={setVideoEl}
-            muted={!isMain}
-            playsInline
-            style={{
-              width: "100%",
-              maxHeight: isMain ? "60vh" : "150px",
-              background: "#000",
-              display: "block",
-              visibility: outOfRange ? "hidden" : undefined,
-            }}
-          >
-            <track kind="captions" />
-          </video>
-          {outOfRange && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                background: "#000",
-                color: "#aaa",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontFamily: "monospace",
-                fontSize: isMain ? 20 : 11,
-                letterSpacing: 2,
-                pointerEvents: "none",
-              }}
-            >
-              NO VIDEO
-            </div>
-          )}
-          <RunVideoOverlay
-            videoId={angle.rv.videoId}
-            videoRef={videoRef}
-            containerRef={containerRef}
-            mode={isMain ? overlayMode : "off"}
-            canEdit={!!isMain}
-            draftLabel={overlayLabel}
-          />
-        </div>
-      </Stack>
-    </Card>
-  );
-}
-

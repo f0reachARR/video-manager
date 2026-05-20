@@ -5,13 +5,9 @@ import {
   Card,
   Chip,
   Group,
-  Modal,
-  NumberInput,
-  Select,
   Stack,
   Table,
   Text,
-  TextInput,
   Title,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
@@ -25,6 +21,8 @@ import {
   useMarkers,
   useUpdateMarker,
 } from "../../markers/api/queries";
+import { MarkerEditModal } from "../../markers/components/MarkerEditModal";
+import { MarkerTimelineBar } from "../../markers/components/MarkerTimelineBar";
 import {
   markerCategoryColor,
   markerCategoryLabel,
@@ -118,40 +116,12 @@ export function MarkersSection({
         </Stack>
       </Card>
 
-      {durationSec > 0 && markers.length > 0 && (
-        <Card withBorder p="xs">
-          <div style={{ position: "relative", height: 24 }}>
-            {markers.map((m) => {
-              const pct = Math.max(
-                0,
-                Math.min(100, (m.runOffsetSec / durationSec) * 100),
-              );
-              return (
-                <button
-                  type="button"
-                  key={m.id}
-                  onClick={() => onSeek(m.runOffsetSec)}
-                  title={`${formatTime(m.runOffsetSec)} ${markerCategoryLabel[m.category]}${m.label ? ` — ${m.label}` : ""}`}
-                  style={{
-                    position: "absolute",
-                    left: `${pct}%`,
-                    top: 0,
-                    transform: "translateX(-50%)",
-                    width: 8,
-                    height: 24,
-                    background: `var(--mantine-color-${markerCategoryColor[m.category]}-6)`,
-                    border: 0,
-                    borderRadius: 2,
-                    cursor: "pointer",
-                    padding: 0,
-                  }}
-                  aria-label={`marker at ${m.runOffsetSec}s`}
-                />
-              );
-            })}
-          </div>
-        </Card>
-      )}
+      <MarkerTimelineBar
+        markers={markers}
+        durationSec={durationSec}
+        onSeek={onSeek}
+        formatTime={formatTime}
+      />
 
       <Table striped withRowBorders={false}>
         <Table.Thead>
@@ -262,78 +232,5 @@ export function MarkersSection({
         />
       )}
     </Stack>
-  );
-}
-
-function MarkerEditModal({
-  mode,
-  initial,
-  durationSec,
-  onClose,
-  onSubmit,
-  saving,
-}: {
-  mode: "create" | "edit";
-  initial: { runOffsetSec: number; label: string; category: MarkerCategory };
-  durationSec: number;
-  onClose: () => void;
-  onSubmit: (body: {
-    runOffsetSec: number;
-    label: string;
-    category: MarkerCategory;
-  }) => void;
-  saving: boolean;
-}) {
-  const [offset, setOffset] = useState<number>(initial.runOffsetSec);
-  const [label, setLabel] = useState<string>(initial.label);
-  const [category, setCategory] = useState<MarkerCategory>(initial.category);
-  return (
-    <Modal
-      opened
-      onClose={onClose}
-      title={mode === "create" ? "Marker 追加" : "Marker 編集"}
-    >
-      <Stack>
-        <NumberInput
-          label="位置 (秒、Run 開始から)"
-          value={offset}
-          min={0}
-          max={durationSec > 0 ? durationSec : undefined}
-          onChange={(v) => setOffset(typeof v === "number" ? v : 0)}
-        />
-        <Select
-          label="Category"
-          data={markerCategories.map((c) => ({
-            value: c,
-            label: markerCategoryLabel[c],
-          }))}
-          value={category}
-          onChange={(v) => v && setCategory(v as MarkerCategory)}
-        />
-        <TextInput
-          label="Label"
-          value={label}
-          onChange={(e) => setLabel(e.currentTarget.value)}
-          placeholder="例: 脱輪 / 完璧"
-        />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            キャンセル
-          </Button>
-          <Button
-            loading={saving}
-            onClick={() =>
-              onSubmit({
-                runOffsetSec: Math.max(0, Math.round(offset)),
-                label,
-                category,
-              })
-            }
-          >
-            {mode === "create" ? "追加" : "保存"}
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
   );
 }

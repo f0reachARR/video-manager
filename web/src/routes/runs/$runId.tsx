@@ -21,10 +21,8 @@ import { formatDateTimeFull, formatDateTimeShort } from "../../lib/time";
 import { SyncPlayer } from "../../features/runs/components/SyncPlayer";
 import { MarkersSection } from "../../features/runs/components/MarkersSection";
 import { AnglesTimeline } from "../../features/runs/components/AnglesTimeline";
-import {
-  AddVideoModal,
-  RunVideosTable,
-} from "../../features/runs/components/RunVideosTable";
+import { AddRunVideoModal } from "../../features/runs/components/AddRunVideoModal";
+import { RunVideosTable } from "../../features/runs/components/RunVideosTable";
 import { RecommendedVideos } from "../../features/runs/components/RecommendedVideos";
 import { RunMetadataEditor } from "../../features/runs/components/RunMetadataEditor";
 import { RunRobotImagesStrip } from "../../features/robot-images/components/RunRobotImagesStrip";
@@ -161,7 +159,7 @@ function RunDetailPage() {
         saving={updateRun.isPending}
       />
 
-      {addVideoOpen && <AddVideoModal run={r} onClose={closeAddVideo} />}
+      {addVideoOpen && <AddRunVideoModal run={r} onClose={closeAddVideo} />}
     </Stack>
   );
 }

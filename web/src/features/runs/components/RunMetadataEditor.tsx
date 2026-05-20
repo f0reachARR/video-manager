@@ -7,7 +7,7 @@ import {
   Textarea,
 } from "@mantine/core";
 import { DateTimePicker } from "@mantine/dates";
-import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
 
 import type { Run } from "../../../lib/api/client";
 
@@ -18,6 +18,15 @@ export type RunMetadataPayload = {
   durationSec?: number;
   score?: number | null;
   memo?: string;
+};
+
+type FormValues = {
+  robotId: string;
+  scenarioId: string;
+  startedAt: Date | null;
+  durationSec: number;
+  score: number | null;
+  memo: string;
 };
 
 export function RunMetadataEditor({
@@ -33,90 +42,116 @@ export function RunMetadataEditor({
   onSave: (body: RunMetadataPayload) => void;
   saving: boolean;
 }) {
-  const [robotId, setRobotId] = useState<string>(run.robotId);
-  const [scenarioId, setScenarioId] = useState<string>(run.scenarioId);
-  const [startedAt, setStartedAt] = useState<Date | null>(
-    new Date(run.startedAt),
-  );
-  const [durationSec, setDurationSec] = useState<number | "">(
-    run.durationSec ?? 0,
-  );
-  const [score, setScore] = useState<number | "">(run.score ?? "");
-  const [memo, setMemo] = useState<string>(run.memo);
-  const startedAtIso = startedAt?.toISOString();
-  const dirty =
-    robotId !== run.robotId ||
-    scenarioId !== run.scenarioId ||
-    (startedAtIso !== undefined && startedAtIso !== run.startedAt) ||
-    (durationSec === "" ? 0 : durationSec) !== (run.durationSec ?? 0) ||
-    (score === "" ? null : score) !== (run.score ?? null) ||
-    memo !== run.memo;
+  const form = useForm({
+    defaultValues: {
+      robotId: run.robotId,
+      scenarioId: run.scenarioId,
+      startedAt: new Date(run.startedAt),
+      durationSec: run.durationSec ?? 0,
+      score: run.score ?? null,
+      memo: run.memo,
+    } as FormValues,
+    onSubmit: ({ value }) => {
+      onSave({
+        robotId: value.robotId,
+        scenarioId: value.scenarioId,
+        startedAt: value.startedAt?.toISOString(),
+        durationSec: Math.max(0, Math.round(value.durationSec)),
+        score: value.score,
+        memo: value.memo,
+      });
+    },
+  });
 
   return (
-    <Stack>
-      <Group grow>
-        <Select
-          label="Robot"
-          data={robotOptions}
-          value={robotId}
-          onChange={(v) => v && setRobotId(v)}
-        />
-        <Select
-          label="Scenario"
-          data={scenarioOptions}
-          value={scenarioId}
-          onChange={(v) => v && setScenarioId(v)}
-        />
-      </Group>
-      <Group grow>
-        <DateTimePicker
-          label="開始時刻"
-          value={startedAt}
-          onChange={(v) => setStartedAt(v ? new Date(v) : null)}
-          withSeconds
-        />
-        <NumberInput
-          label="Duration (sec)"
-          description="終了時刻は開始 + Duration"
-          value={durationSec}
-          min={0}
-          onChange={(v) => setDurationSec(typeof v === "number" ? v : "")}
-        />
-        <NumberInput
-          label="Score"
-          value={score}
-          onChange={(v) => setScore(typeof v === "number" ? v : "")}
-          allowDecimal
-        />
-      </Group>
-      <Textarea
-        label="Memo"
-        value={memo}
-        onChange={(e) => setMemo(e.currentTarget.value)}
-        autosize
-        minRows={2}
-      />
-      <Group justify="flex-end">
-        <Button
-          disabled={!dirty}
-          loading={saving}
-          onClick={() =>
-            onSave({
-              robotId,
-              scenarioId,
-              startedAt: startedAt?.toISOString(),
-              durationSec: Math.max(
-                0,
-                Math.round(typeof durationSec === "number" ? durationSec : 0),
-              ),
-              score: score === "" ? null : score,
-              memo,
-            })
-          }
-        >
-          保存
-        </Button>
-      </Group>
-    </Stack>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        form.handleSubmit();
+      }}
+    >
+      <Stack>
+        <Group grow>
+          <form.Field name="robotId">
+            {(field) => (
+              <Select
+                label="Robot"
+                data={robotOptions}
+                value={field.state.value}
+                onChange={(v) => v && field.handleChange(v)}
+              />
+            )}
+          </form.Field>
+          <form.Field name="scenarioId">
+            {(field) => (
+              <Select
+                label="Scenario"
+                data={scenarioOptions}
+                value={field.state.value}
+                onChange={(v) => v && field.handleChange(v)}
+              />
+            )}
+          </form.Field>
+        </Group>
+        <Group grow>
+          <form.Field name="startedAt">
+            {(field) => (
+              <DateTimePicker
+                label="開始時刻"
+                value={field.state.value}
+                onChange={(v) => field.handleChange(v ? new Date(v) : null)}
+                withSeconds
+              />
+            )}
+          </form.Field>
+          <form.Field name="durationSec">
+            {(field) => (
+              <NumberInput
+                label="Duration (sec)"
+                description="終了時刻は開始 + Duration"
+                value={field.state.value}
+                min={0}
+                onChange={(v) =>
+                  field.handleChange(typeof v === "number" ? v : 0)
+                }
+              />
+            )}
+          </form.Field>
+          <form.Field name="score">
+            {(field) => (
+              <NumberInput
+                label="Score"
+                value={field.state.value ?? ""}
+                onChange={(v) =>
+                  field.handleChange(typeof v === "number" ? v : null)
+                }
+                allowDecimal
+              />
+            )}
+          </form.Field>
+        </Group>
+        <form.Field name="memo">
+          {(field) => (
+            <Textarea
+              label="Memo"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.currentTarget.value)}
+              autosize
+              minRows={2}
+            />
+          )}
+        </form.Field>
+        <Group justify="flex-end">
+          <form.Subscribe selector={(s) => s.isDirty}>
+            {(isDirty) => (
+              <Button type="submit" disabled={!isDirty} loading={saving}>
+                保存
+              </Button>
+            )}
+          </form.Subscribe>
+        </Group>
+      </Stack>
+    </form>
   );
 }

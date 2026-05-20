@@ -8,13 +8,24 @@ import {
   Textarea,
 } from "@mantine/core";
 import { DateTimePicker } from "@mantine/dates";
-import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
 
 import { useRobots } from "../../robots/api/queries";
 import { useScenarios } from "../../scenarios/api/queries";
 import { useSessions } from "../../sessions/api/queries";
 import { useTeams } from "../../teams/api/queries";
 import { useCreateRun } from "../api/queries";
+
+type FormValues = {
+  sessionId: string | null;
+  teamId: string | null;
+  robotId: string | null;
+  scenarioId: string | null;
+  startedAt: Date | null;
+  durationSec: number;
+  score: number | null;
+  memo: string;
+};
 
 function DateTimeWithQuickAdjust({
   label,
@@ -71,127 +82,195 @@ export function RunCreateModal({
   const robots = useRobots();
   const teams = useTeams();
   const create = useCreateRun();
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [teamId, setTeamId] = useState<string | null>(null);
-  const [robotId, setRobotId] = useState<string | null>(null);
-  const [scenarioId, setScenarioId] = useState<string | null>(null);
-  const [startedAt, setStartedAt] = useState<Date | null>(null);
-  const [durationSec, setDurationSec] = useState<number | "">(90);
-  const [score, setScore] = useState<number | "">("");
-  const [memo, setMemo] = useState("");
 
-  const submit = () => {
-    if (!sessionId || !teamId || !robotId || !scenarioId || !startedAt) {
-      return;
-    }
-    const dur =
-      typeof durationSec === "number" && durationSec > 0 ? durationSec : 0;
-    create.mutate(
-      {
-        sessionId,
-        teamId,
-        robotId,
-        scenarioId,
-        startedAt: startedAt.toISOString(),
-        durationSec: Math.max(0, Math.round(dur)),
-        score: score === "" ? null : score,
-        memo,
-      },
-      { onSuccess: onClose },
-    );
-  };
+  const form = useForm({
+    defaultValues: {
+      sessionId: null,
+      teamId: null,
+      robotId: null,
+      scenarioId: null,
+      startedAt: null,
+      durationSec: 90,
+      score: null,
+      memo: "",
+    } as FormValues,
+    onSubmit: ({ value }) => {
+      if (
+        !value.sessionId ||
+        !value.teamId ||
+        !value.robotId ||
+        !value.scenarioId ||
+        !value.startedAt
+      ) {
+        return;
+      }
+      create.mutate(
+        {
+          sessionId: value.sessionId,
+          teamId: value.teamId,
+          robotId: value.robotId,
+          scenarioId: value.scenarioId,
+          startedAt: value.startedAt.toISOString(),
+          durationSec: Math.max(0, Math.round(value.durationSec || 0)),
+          score: value.score,
+          memo: value.memo,
+        },
+        { onSuccess: onClose },
+      );
+    },
+  });
 
   return (
     <Modal opened={opened} onClose={onClose} title="Run を作成" size="lg">
-      <Stack>
-        <Select
-          label="Session"
-          data={(sessions.data?.data ?? []).map((s) => ({
-            value: s.id,
-            label: s.name,
-          }))}
-          value={sessionId}
-          onChange={setSessionId}
-          searchable
-          required
-        />
-        <Group grow>
-          <Select
-            label="Team"
-            data={(teams.data?.data ?? []).map((t) => ({
-              value: t.id,
-              label: t.name,
-            }))}
-            value={teamId}
-            onChange={(v) => {
-              setTeamId(v);
-              setRobotId(null);
-            }}
-            required
-          />
-          <Select
-            label="Robot"
-            data={(robots.data?.data ?? [])
-              .filter((r) => !teamId || r.teamId === teamId)
-              .map((r) => ({ value: r.id, label: r.name }))}
-            value={robotId}
-            onChange={setRobotId}
-            disabled={!teamId}
-            required
-          />
-        </Group>
-        <Select
-          label="Scenario"
-          data={(scenarios.data?.data ?? []).map((s) => ({
-            value: s.id,
-            label: s.name,
-          }))}
-          value={scenarioId}
-          onChange={setScenarioId}
-          required
-        />
-        <Group grow align="flex-start">
-          <DateTimeWithQuickAdjust
-            label="開始"
-            value={startedAt}
-            onChange={setStartedAt}
-          />
-          <NumberInput
-            label="Duration (sec)"
-            description="終了時刻は開始 + Duration で自動計算"
-            value={durationSec}
-            min={0}
-            onChange={(v) => setDurationSec(typeof v === "number" ? v : "")}
-          />
-        </Group>
-        <NumberInput
-          label="Score"
-          value={score}
-          onChange={(v) => setScore(typeof v === "number" ? v : "")}
-          allowDecimal
-        />
-        <Textarea
-          label="Memo"
-          value={memo}
-          onChange={(e) => setMemo(e.currentTarget.value)}
-          autosize
-          minRows={2}
-        />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            キャンセル
-          </Button>
-          <Button
-            onClick={submit}
-            loading={create.isPending}
-            disabled={
-              !sessionId || !teamId || !robotId || !scenarioId || !startedAt
-            }
-          >
-            作成
-          </Button>
-        </Group>
-      </Stack>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+      >
+        <Stack>
+          <form.Field name="sessionId">
+            {(field) => (
+              <Select
+                label="Session"
+                data={(sessions.data?.data ?? []).map((s) => ({
+                  value: s.id,
+                  label: s.name,
+                }))}
+                value={field.state.value}
+                onChange={field.handleChange}
+                searchable
+                required
+              />
+            )}
+          </form.Field>
+          <Group grow>
+            <form.Field name="teamId">
+              {(field) => (
+                <Select
+                  label="Team"
+                  data={(teams.data?.data ?? []).map((t) => ({
+                    value: t.id,
+                    label: t.name,
+                  }))}
+                  value={field.state.value}
+                  onChange={(v) => {
+                    field.handleChange(v);
+                    form.setFieldValue("robotId", null);
+                  }}
+                  required
+                />
+              )}
+            </form.Field>
+            <form.Subscribe selector={(s) => s.values.teamId}>
+              {(teamId) => (
+                <form.Field name="robotId">
+                  {(field) => (
+                    <Select
+                      label="Robot"
+                      data={(robots.data?.data ?? [])
+                        .filter((r) => !teamId || r.teamId === teamId)
+                        .map((r) => ({ value: r.id, label: r.name }))}
+                      value={field.state.value}
+                      onChange={field.handleChange}
+                      disabled={!teamId}
+                      required
+                    />
+                  )}
+                </form.Field>
+              )}
+            </form.Subscribe>
+          </Group>
+          <form.Field name="scenarioId">
+            {(field) => (
+              <Select
+                label="Scenario"
+                data={(scenarios.data?.data ?? []).map((s) => ({
+                  value: s.id,
+                  label: s.name,
+                }))}
+                value={field.state.value}
+                onChange={field.handleChange}
+                required
+              />
+            )}
+          </form.Field>
+          <Group grow align="flex-start">
+            <form.Field name="startedAt">
+              {(field) => (
+                <DateTimeWithQuickAdjust
+                  label="開始"
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                />
+              )}
+            </form.Field>
+            <form.Field name="durationSec">
+              {(field) => (
+                <NumberInput
+                  label="Duration (sec)"
+                  description="終了時刻は開始 + Duration で自動計算"
+                  value={field.state.value}
+                  min={0}
+                  onChange={(v) =>
+                    field.handleChange(typeof v === "number" ? v : 0)
+                  }
+                />
+              )}
+            </form.Field>
+          </Group>
+          <form.Field name="score">
+            {(field) => (
+              <NumberInput
+                label="Score"
+                value={field.state.value ?? ""}
+                onChange={(v) =>
+                  field.handleChange(typeof v === "number" ? v : null)
+                }
+                allowDecimal
+              />
+            )}
+          </form.Field>
+          <form.Field name="memo">
+            {(field) => (
+              <Textarea
+                label="Memo"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.currentTarget.value)}
+                autosize
+                minRows={2}
+              />
+            )}
+          </form.Field>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={onClose}>
+              キャンセル
+            </Button>
+            <form.Subscribe
+              selector={(s) => [
+                s.values.sessionId,
+                s.values.teamId,
+                s.values.robotId,
+                s.values.scenarioId,
+                s.values.startedAt,
+              ]}
+            >
+              {([sessionId, teamId, robotId, scenarioId, startedAt]) => (
+                <Button
+                  type="submit"
+                  loading={create.isPending}
+                  disabled={
+                    !sessionId || !teamId || !robotId || !scenarioId || !startedAt
+                  }
+                >
+                  作成
+                </Button>
+              )}
+            </form.Subscribe>
+          </Group>
+        </Stack>
+      </form>
     </Modal>
   );
 }

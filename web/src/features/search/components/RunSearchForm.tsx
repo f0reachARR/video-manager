@@ -10,7 +10,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import { DateTimePicker } from "@mantine/dates";
-import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
 
 import type { MarkerCategory } from "../../../lib/api/client";
 import { markerCategories } from "../../markers/api/queries";
@@ -34,6 +34,26 @@ export type RunSearchParams = {
   q?: string;
 };
 
+type FormValues = {
+  from: Date | null;
+  to: Date | null;
+  robotId: string | null;
+  scenarioId: string | null;
+  tagIds: string[];
+  categories: MarkerCategory[];
+  q: string;
+};
+
+const initial: FormValues = {
+  from: null,
+  to: null,
+  robotId: null,
+  scenarioId: null,
+  tagIds: [],
+  categories: [],
+  q: "",
+};
+
 export function RunSearchForm({
   onApply,
   isFetching,
@@ -45,124 +65,149 @@ export function RunSearchForm({
   const scenarios = useScenarios();
   const tags = useTags();
 
-  // Draft state — only applied on "検索"
-  const [draftFrom, setDraftFrom] = useState<Date | null>(null);
-  const [draftTo, setDraftTo] = useState<Date | null>(null);
-  const [draftRobotId, setDraftRobotId] = useState<string | null>(null);
-  const [draftScenarioId, setDraftScenarioId] = useState<string | null>(null);
-  const [draftTagIds, setDraftTagIds] = useState<string[]>([]);
-  const [draftCategories, setDraftCategories] = useState<MarkerCategory[]>([]);
-  const [draftQ, setDraftQ] = useState("");
-
-  const apply = () => {
-    onApply({
-      from: draftFrom?.toISOString(),
-      to: draftTo?.toISOString(),
-      robotId: draftRobotId ?? undefined,
-      scenarioId: draftScenarioId ?? undefined,
-      tagIds: draftTagIds.length > 0 ? draftTagIds : undefined,
-      markerCategories:
-        draftCategories.length > 0 ? draftCategories : undefined,
-      q: draftQ.trim() ? draftQ.trim() : undefined,
-    });
-  };
-
-  const clear = () => {
-    setDraftFrom(null);
-    setDraftTo(null);
-    setDraftRobotId(null);
-    setDraftScenarioId(null);
-    setDraftTagIds([]);
-    setDraftCategories([]);
-    setDraftQ("");
-    onApply({});
-  };
+  const form = useForm({
+    defaultValues: initial,
+    onSubmit: ({ value }) => {
+      onApply({
+        from: value.from?.toISOString(),
+        to: value.to?.toISOString(),
+        robotId: value.robotId ?? undefined,
+        scenarioId: value.scenarioId ?? undefined,
+        tagIds: value.tagIds.length > 0 ? value.tagIds : undefined,
+        markerCategories:
+          value.categories.length > 0 ? value.categories : undefined,
+        q: value.q.trim() ? value.q.trim() : undefined,
+      });
+    },
+  });
 
   return (
     <Card withBorder>
-      <Stack>
-        <Group grow>
-          <DateTimePicker
-            label="開始日時 (から)"
-            value={draftFrom}
-            onChange={(v) => setDraftFrom(v ? new Date(v) : null)}
-            clearable
-          />
-          <DateTimePicker
-            label="開始日時 (まで)"
-            value={draftTo}
-            onChange={(v) => setDraftTo(v ? new Date(v) : null)}
-            clearable
-          />
-        </Group>
-        <Group grow>
-          <Select
-            label="Robot"
-            data={(robots.data?.data ?? []).map((r) => ({
-              value: r.id,
-              label: r.name,
-            }))}
-            value={draftRobotId}
-            onChange={setDraftRobotId}
-            searchable
-            clearable
-          />
-          <Select
-            label="Scenario"
-            data={(scenarios.data?.data ?? []).map((s) => ({
-              value: s.id,
-              label: s.name,
-            }))}
-            value={draftScenarioId}
-            onChange={setDraftScenarioId}
-            searchable
-            clearable
-          />
-        </Group>
-        <MultiSelect
-          label="Tag (すべて含む)"
-          data={(tags.data?.data ?? []).map((t) => ({
-            value: t.id,
-            label: t.name,
-          }))}
-          value={draftTagIds}
-          onChange={setDraftTagIds}
-          searchable
-          clearable
-        />
-        <Stack gap={4}>
-          <Text size="sm" fw={500}>
-            Marker category (いずれか含む)
-          </Text>
-          <Chip.Group
-            multiple
-            value={draftCategories}
-            onChange={(v) => setDraftCategories(v as MarkerCategory[])}
-          >
-            <Group gap={4}>
-              {markerCategories.map((c) => (
-                <Chip key={c} value={c} size="sm">
-                  {markerCategoryLabel[c]}
-                </Chip>
-              ))}
-            </Group>
-          </Chip.Group>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+      >
+        <Stack>
+          <Group grow>
+            <form.Field name="from">
+              {(field) => (
+                <DateTimePicker
+                  label="開始日時 (から)"
+                  value={field.state.value}
+                  onChange={(v) => field.handleChange(v ? new Date(v) : null)}
+                  clearable
+                />
+              )}
+            </form.Field>
+            <form.Field name="to">
+              {(field) => (
+                <DateTimePicker
+                  label="開始日時 (まで)"
+                  value={field.state.value}
+                  onChange={(v) => field.handleChange(v ? new Date(v) : null)}
+                  clearable
+                />
+              )}
+            </form.Field>
+          </Group>
+          <Group grow>
+            <form.Field name="robotId">
+              {(field) => (
+                <Select
+                  label="Robot"
+                  data={(robots.data?.data ?? []).map((r) => ({
+                    value: r.id,
+                    label: r.name,
+                  }))}
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                  searchable
+                  clearable
+                />
+              )}
+            </form.Field>
+            <form.Field name="scenarioId">
+              {(field) => (
+                <Select
+                  label="Scenario"
+                  data={(scenarios.data?.data ?? []).map((s) => ({
+                    value: s.id,
+                    label: s.name,
+                  }))}
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                  searchable
+                  clearable
+                />
+              )}
+            </form.Field>
+          </Group>
+          <form.Field name="tagIds">
+            {(field) => (
+              <MultiSelect
+                label="Tag (すべて含む)"
+                data={(tags.data?.data ?? []).map((t) => ({
+                  value: t.id,
+                  label: t.name,
+                }))}
+                value={field.state.value}
+                onChange={field.handleChange}
+                searchable
+                clearable
+              />
+            )}
+          </form.Field>
+          <form.Field name="categories">
+            {(field) => (
+              <Stack gap={4}>
+                <Text size="sm" fw={500}>
+                  Marker category (いずれか含む)
+                </Text>
+                <Chip.Group
+                  multiple
+                  value={field.state.value}
+                  onChange={(v) => field.handleChange(v as MarkerCategory[])}
+                >
+                  <Group gap={4}>
+                    {markerCategories.map((c) => (
+                      <Chip key={c} value={c} size="sm">
+                        {markerCategoryLabel[c]}
+                      </Chip>
+                    ))}
+                  </Group>
+                </Chip.Group>
+              </Stack>
+            )}
+          </form.Field>
+          <form.Field name="q">
+            {(field) => (
+              <TextInput
+                label="Memo を含む"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.currentTarget.value)}
+                placeholder="部分一致"
+              />
+            )}
+          </form.Field>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                form.reset();
+                onApply({});
+              }}
+            >
+              クリア
+            </Button>
+            <Button type="submit" loading={isFetching}>
+              検索
+            </Button>
+          </Group>
         </Stack>
-        <TextInput
-          label="Memo を含む"
-          value={draftQ}
-          onChange={(e) => setDraftQ(e.currentTarget.value)}
-          placeholder="部分一致"
-        />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={clear}>
-            クリア
-          </Button>
-          <Button onClick={apply} loading={isFetching}>
-            検索
-          </Button>
-        </Group>
-      </Stack>
+      </form>
     </Card>
   );
 }
