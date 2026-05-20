@@ -117,6 +117,100 @@ func TestSessionsCandidatesOverlapAndGap(t *testing.T) {
 	}
 }
 
+// Regression test: a Session created without ended_at (the typical
+// "morning, leave it open for the day" case) used to be treated as a zero
+// duration moment, so any video taken more than 30 minutes after started_at
+// fell outside the gap threshold and was hidden from the link-later UI.
+func TestSessionsCandidatesIncludesOpenEndedSession(t *testing.T) {
+	env := setupEnv(t)
+	ctx := t.Context()
+
+	storageKey := "test-key-open-ended"
+	if _, err := env.Pool.Exec(ctx, `
+		INSERT INTO videos (storage_key, recorded_at, duration_sec)
+		VALUES ($1, '2026-05-01T14:00:00Z'::timestamptz, 60)
+	`, storageKey); err != nil {
+		t.Fatalf("insert video: %v", err)
+	}
+	var videoID string
+	if err := env.Pool.QueryRow(ctx,
+		`SELECT id FROM videos WHERE storage_key = $1`, storageKey).Scan(&videoID); err != nil {
+		t.Fatalf("select video id: %v", err)
+	}
+
+	// Session started 4 hours before the video, ended_at omitted entirely.
+	var sess sessionResp
+	rec := env.do(t, http.MethodPost, "/sessions", map[string]any{
+		"name":      "Morning practice",
+		"modeHint":  "practice",
+		"startedAt": "2026-05-01T10:00:00Z",
+	}, &sess)
+	mustStatus(t, rec, http.StatusCreated)
+
+	var list sessionCandidateListResp
+	rec = env.do(t, http.MethodGet, "/sessions/candidates?videoId="+videoID, nil, &list)
+	mustStatus(t, rec, http.StatusOK)
+
+	if len(list.Data) != 2 {
+		t.Fatalf("expected 2 candidates (existing + new), got %d: %+v", len(list.Data), list)
+	}
+	if list.Data[0].Type != "existing" || list.Data[0].Session == nil || list.Data[0].Session.ID != sess.ID {
+		t.Errorf("expected open-ended session as first candidate, got %+v", list.Data[0])
+	}
+	if list.Data[0].GapSec == nil || *list.Data[0].GapSec != 0 {
+		t.Errorf("open-ended session should have gap=0, got %v", list.Data[0].GapSec)
+	}
+}
+
+// Regression test: a Session whose interval contains the video must appear
+// as a candidate even when its started_at is well outside the previous ±24h
+// fetch window. Example: a long-running "tournament weekend" session started
+// 3 days ago and not yet closed.
+func TestSessionsCandidatesIncludesContainingSessionFromLongAgo(t *testing.T) {
+	env := setupEnv(t)
+	ctx := t.Context()
+
+	storageKey := "test-key-old-containing"
+	if _, err := env.Pool.Exec(ctx, `
+		INSERT INTO videos (storage_key, recorded_at, duration_sec)
+		VALUES ($1, '2026-05-04T14:00:00Z'::timestamptz, 60)
+	`, storageKey); err != nil {
+		t.Fatalf("insert video: %v", err)
+	}
+	var videoID string
+	if err := env.Pool.QueryRow(ctx,
+		`SELECT id FROM videos WHERE storage_key = $1`, storageKey).Scan(&videoID); err != nil {
+		t.Fatalf("select video id: %v", err)
+	}
+
+	// Session that started 3 days ago and is still open (no ended_at). The
+	// video falls inside that span, so it must surface as a candidate.
+	var sess sessionResp
+	rec := env.do(t, http.MethodPost, "/sessions", map[string]any{
+		"name":      "Weekend tournament",
+		"modeHint":  "practice",
+		"startedAt": "2026-05-01T08:00:00Z",
+	}, &sess)
+	mustStatus(t, rec, http.StatusCreated)
+
+	var list sessionCandidateListResp
+	rec = env.do(t, http.MethodGet, "/sessions/candidates?videoId="+videoID, nil, &list)
+	mustStatus(t, rec, http.StatusOK)
+
+	found := false
+	for _, c := range list.Data {
+		if c.Type == "existing" && c.Session != nil && c.Session.ID == sess.ID {
+			found = true
+			if c.GapSec == nil || *c.GapSec != 0 {
+				t.Errorf("containing session should have gap=0, got %v", c.GapSec)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected containing session %s in candidates, got %+v", sess.ID, list)
+	}
+}
+
 func TestSessionsCandidatesRequiresVideoID(t *testing.T) {
 	env := setupEnv(t)
 	rec := env.do(t, http.MethodGet, "/sessions/candidates", nil, nil)

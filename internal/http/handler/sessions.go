@@ -13,11 +13,9 @@ type Sessions struct {
 	Q *sqlc.Queries
 }
 
-// candidateWindow is the half-window we query in SQL for nearby sessions.
-// The final 30-minute gap rule is enforced in Go after this fetch.
-const candidateWindow = 24 * time.Hour
-
 // candidateGapThreshold is the spec-defined 30 minute Session adjacency gap.
+// Adjacent (non-containing) sessions farther than this from the video are
+// excluded; sessions that contain the video are returned unconditionally.
 const candidateGapThreshold = 30 * time.Minute
 
 type sessionCandidateDTO struct {
@@ -309,9 +307,13 @@ func (h *Sessions) Candidates(w http.ResponseWriter, r *http.Request) {
 	}
 	videoEnd := recordedAt.Add(time.Duration(durationSec) * time.Second)
 
-	sessions, err := h.Q.ListSessionsInWindow(r.Context(), sqlc.ListSessionsInWindowParams{
-		WindowStart: pgtypeTimestamptz(recordedAt.Add(-candidateWindow)),
-		WindowEnd:   pgtypeTimestamptz(videoEnd.Add(candidateWindow)),
+	// The SQL bounds the result by interval overlap against [videoStart-gap,
+	// videoEnd+gap] and treats open-ended sessions as extending to +infinity,
+	// so containing sessions match regardless of how old their started_at is.
+	// We still re-check gap in Go to populate gapSec for the UI.
+	sessions, err := h.Q.ListSessionCandidatesForVideo(r.Context(), sqlc.ListSessionCandidatesForVideoParams{
+		WindowStart: pgtypeTimestamptz(recordedAt.Add(-candidateGapThreshold)),
+		WindowEnd:   pgtypeTimestamptz(videoEnd.Add(candidateGapThreshold)),
 	})
 	if err != nil {
 		internalError(w, err)
@@ -321,9 +323,6 @@ func (h *Sessions) Candidates(w http.ResponseWriter, r *http.Request) {
 	out := make([]sessionCandidateDTO, 0, len(sessions)+1)
 	for _, s := range sessions {
 		gap := computeSessionGap(s, recordedAt, videoEnd)
-		if gap > candidateGapThreshold {
-			continue
-		}
 		dto := toSessionDTO(s)
 		gapSec := int32(gap / time.Second)
 		out = append(out, sessionCandidateDTO{
@@ -338,13 +337,24 @@ func (h *Sessions) Candidates(w http.ResponseWriter, r *http.Request) {
 
 func computeSessionGap(s sqlc.Session, videoStart, videoEnd time.Time) time.Duration {
 	if !s.StartedAt.Valid {
-		return time.Duration(1<<62) // effectively infinity
+		return time.Duration(1 << 62) // effectively infinity
 	}
 	sessStart := s.StartedAt.Time
-	sessEnd := sessStart
-	if s.EndedAt.Valid {
-		sessEnd = s.EndedAt.Time
+
+	// A session without ended_at is treated as still ongoing — any video at or
+	// after sessStart is considered "inside" the session (gap=0). Without this
+	// the gap was computed against sessEnd = sessStart, which meant a Session
+	// created with only started_at would reject every video taken more than
+	// 30 minutes later, even though the user clearly intends it to span the
+	// rest of the practice day.
+	if !s.EndedAt.Valid {
+		if videoEnd.Before(sessStart) {
+			return sessStart.Sub(videoEnd)
+		}
+		return 0
 	}
+
+	sessEnd := s.EndedAt.Time
 	switch {
 	case videoEnd.Before(sessStart):
 		return sessStart.Sub(videoEnd)

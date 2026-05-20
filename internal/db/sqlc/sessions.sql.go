@@ -81,21 +81,34 @@ func (q *Queries) GetSession(ctx context.Context, id pgtype.UUID) (Session, erro
 	return i, err
 }
 
-const listSessionsInWindow = `-- name: ListSessionsInWindow :many
+const listSessionCandidatesForVideo = `-- name: ListSessionCandidatesForVideo :many
 SELECT id, name, started_at, ended_at, location, mode_hint, tournament_id, created_at
 FROM sessions
 WHERE started_at IS NOT NULL
-  AND started_at BETWEEN $1::timestamptz AND $2::timestamptz
+  AND started_at <= $1::timestamptz
+  AND COALESCE(ended_at, 'infinity'::timestamptz)
+      >= $2::timestamptz
 ORDER BY started_at ASC
 `
 
-type ListSessionsInWindowParams struct {
-	WindowStart pgtype.Timestamptz
+type ListSessionCandidatesForVideoParams struct {
 	WindowEnd   pgtype.Timestamptz
+	WindowStart pgtype.Timestamptz
 }
 
-func (q *Queries) ListSessionsInWindow(ctx context.Context, arg ListSessionsInWindowParams) ([]Session, error) {
-	rows, err := q.db.Query(ctx, listSessionsInWindow, arg.WindowStart, arg.WindowEnd)
+// Sessions that either:
+//
+//	(a) contain the video's time range (treating ended_at IS NULL as an
+//	    ongoing / open session that extends to +infinity), or
+//	(b) are adjacent within the caller's gap window. The caller passes
+//	    window_start = videoStart - gap_threshold and window_end =
+//	    videoEnd + gap_threshold.
+//
+// Open sessions (ended_at IS NULL) match regardless of how old their
+// started_at is, so a forgotten "in progress" session still appears for
+// today's upload — that's exactly the post-hoc linking UX we want.
+func (q *Queries) ListSessionCandidatesForVideo(ctx context.Context, arg ListSessionCandidatesForVideoParams) ([]Session, error) {
+	rows, err := q.db.Query(ctx, listSessionCandidatesForVideo, arg.WindowEnd, arg.WindowStart)
 	if err != nil {
 		return nil, err
 	}

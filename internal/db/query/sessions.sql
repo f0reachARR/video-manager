@@ -30,11 +30,22 @@ SET
 WHERE id = sqlc.arg('id')
 RETURNING *;
 
--- name: ListSessionsInWindow :many
+-- name: ListSessionCandidatesForVideo :many
+-- Sessions that either:
+--   (a) contain the video's time range (treating ended_at IS NULL as an
+--       ongoing / open session that extends to +infinity), or
+--   (b) are adjacent within the caller's gap window. The caller passes
+--       window_start = videoStart - gap_threshold and window_end =
+--       videoEnd + gap_threshold.
+-- Open sessions (ended_at IS NULL) match regardless of how old their
+-- started_at is, so a forgotten "in progress" session still appears for
+-- today's upload — that's exactly the post-hoc linking UX we want.
 SELECT *
 FROM sessions
 WHERE started_at IS NOT NULL
-  AND started_at BETWEEN sqlc.arg('window_start')::timestamptz AND sqlc.arg('window_end')::timestamptz
+  AND started_at <= sqlc.arg('window_end')::timestamptz
+  AND COALESCE(ended_at, 'infinity'::timestamptz)
+      >= sqlc.arg('window_start')::timestamptz
 ORDER BY started_at ASC;
 
 -- name: DeleteSession :execrows

@@ -95,7 +95,16 @@ type Querier interface {
 	ListScenarios(ctx context.Context) ([]Scenario, error)
 	ListScenariosPage(ctx context.Context, arg ListScenariosPageParams) ([]Scenario, error)
 	ListScoutingNotesByMatch(ctx context.Context, matchID pgtype.UUID) ([]ScoutingNote, error)
-	ListSessionsInWindow(ctx context.Context, arg ListSessionsInWindowParams) ([]Session, error)
+	// Sessions that either:
+	//   (a) contain the video's time range (treating ended_at IS NULL as an
+	//       ongoing / open session that extends to +infinity), or
+	//   (b) are adjacent within the caller's gap window. The caller passes
+	//       window_start = videoStart - gap_threshold and window_end =
+	//       videoEnd + gap_threshold.
+	// Open sessions (ended_at IS NULL) match regardless of how old their
+	// started_at is, so a forgotten "in progress" session still appears for
+	// today's upload — that's exactly the post-hoc linking UX we want.
+	ListSessionCandidatesForVideo(ctx context.Context, arg ListSessionCandidatesForVideoParams) ([]Session, error)
 	ListSessionsPage(ctx context.Context, arg ListSessionsPageParams) ([]Session, error)
 	ListTags(ctx context.Context) ([]Tag, error)
 	ListTagsPage(ctx context.Context, arg ListTagsPageParams) ([]Tag, error)
