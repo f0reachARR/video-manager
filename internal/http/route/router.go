@@ -70,6 +70,17 @@ func New(d Deps) http.Handler {
 		})
 	}
 
+	r.Post("/uploads/tus-hook", d.Uploads.TusHook)
+
+	r.Group(func(r chi.Router) {
+		r.Use(appmid.RequireAuth())
+		mountAuthedRoutes(r, d)
+	})
+
+	return r
+}
+
+func mountAuthedRoutes(r chi.Router, d Deps) {
 	r.Route("/users", func(r chi.Router) {
 		r.Get("/", d.Users.List)
 		r.Post("/", d.Users.Create)
@@ -193,12 +204,8 @@ func New(d Deps) http.Handler {
 		r.Delete("/{annotationId}", d.Annotations.Delete)
 	})
 
-	r.Post("/uploads/tus-hook", d.Uploads.TusHook)
-
 	if d.WS != nil {
 		r.Get("/ws/run/{runId}", d.WS.SubscribeRun)
 		r.Get("/ws/video/{videoId}", d.WS.SubscribeVideo)
 	}
-
-	return r
 }

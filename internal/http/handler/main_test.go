@@ -34,6 +34,9 @@ type testEnv struct {
 	Q        *sqlc.Queries
 	Router   http.Handler
 	Enqueuer *stubEnqueuer
+	// DefaultUserID is injected as X-User-Id on every do() request so tests
+	// satisfy RequireAuth without each having to seed a user themselves.
+	DefaultUserID string
 }
 
 func setupEnv(t *testing.T) *testEnv {
@@ -64,7 +67,15 @@ func setupEnv(t *testing.T) *testEnv {
 		// branch reads the header directly.
 		AuthMiddleware: appmid.AuthDeps{Q: q, DevBypass: true},
 	})
-	return &testEnv{Pool: pool, Q: q, Router: r, Enqueuer: enq}
+	u, err := q.CreateUser(context.Background(), sqlc.CreateUserParams{Name: "test-default"})
+	if err != nil {
+		t.Fatalf("seed default user: %v", err)
+	}
+	var idStr string
+	if err := pool.QueryRow(context.Background(), `SELECT $1::uuid::text`, u.ID).Scan(&idStr); err != nil {
+		t.Fatalf("format default user id: %v", err)
+	}
+	return &testEnv{Pool: pool, Q: q, Router: r, Enqueuer: enq, DefaultUserID: idStr}
 }
 
 // do executes a request against the test router and decodes the JSON body into
@@ -86,6 +97,9 @@ func (e *testEnv) doWithHeaders(t *testing.T, method, path string, in any, out a
 	req := httptest.NewRequest(method, path, body)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if e.DefaultUserID != "" {
+		req.Header.Set("X-User-Id", e.DefaultUserID)
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)

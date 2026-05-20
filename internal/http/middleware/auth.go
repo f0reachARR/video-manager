@@ -81,6 +81,22 @@ func resolveHeaderUser(r *http.Request, deps AuthDeps) *sqlc.User {
 	return loadUser(r, deps, v)
 }
 
+// RequireAuth rejects requests that do not have a user attached by LoadUser.
+// Must be mounted after LoadUser. Returns 401 with the standard error body.
+func RequireAuth() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if auth.UserFromContext(r.Context()) == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"code":"unauthorized","message":"authentication required"}`))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func loadUser(r *http.Request, deps AuthDeps, idStr string) *sqlc.User {
 	id, err := uuid.Parse(idStr)
 	if err != nil {

@@ -40,12 +40,19 @@ func TestUsersCRUD(t *testing.T) {
 		t.Errorf("get id mismatch")
 	}
 
-	// list contains created
+	// list contains created (setupEnv also seeds a default user for auth, so
+	// just assert the created user appears rather than counting rows).
 	var list userListResp
 	rec = env.do(t, http.MethodGet, "/users?limit=10", nil, &list)
 	mustStatus(t, rec, http.StatusOK)
-	if len(list.Data) != 1 || list.Data[0].ID != created.ID {
-		t.Errorf("list: got %+v", list)
+	found := false
+	for _, u := range list.Data {
+		if u.ID == created.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("list missing created user: %+v", list)
 	}
 
 	// patch: clear color via explicit null
@@ -93,17 +100,19 @@ func TestUsersListPagination(t *testing.T) {
 		ids = append(ids, u.ID)
 	}
 
-	// Fetch first page of two.
+	// setupEnv seeds a default user (created_at < any seeded above), so we
+	// have 4 rows total. Page through them in groups of 3 to land u3 alone
+	// on the final page.
 	var page userListResp
-	rec := env.do(t, http.MethodGet, "/users?limit=2", nil, &page)
+	rec := env.do(t, http.MethodGet, "/users?limit=3", nil, &page)
 	mustStatus(t, rec, http.StatusOK)
-	if len(page.Data) != 2 || !page.Pagination.HasMore || page.Pagination.NextCursor == nil {
+	if len(page.Data) != 3 || !page.Pagination.HasMore || page.Pagination.NextCursor == nil {
 		t.Fatalf("first page: %+v", page)
 	}
 
 	// Fetch next page.
 	var rest userListResp
-	rec = env.do(t, http.MethodGet, "/users?limit=2&cursor="+*page.Pagination.NextCursor, nil, &rest)
+	rec = env.do(t, http.MethodGet, "/users?limit=3&cursor="+*page.Pagination.NextCursor, nil, &rest)
 	mustStatus(t, rec, http.StatusOK)
 	if len(rest.Data) != 1 || rest.Pagination.HasMore {
 		t.Errorf("second page: %+v", rest)
