@@ -71,7 +71,15 @@ func (h *Uploads) TusHook(w http.ResponseWriter, r *http.Request) {
 	// idempotency: tusd may retry; if we've already created a Video row, return success.
 	if existing, err := h.Q.GetVideoByStorageKey(r.Context(), storageKey); err == nil {
 		id := uuidString(existing.ID)
-		writeJSON(w, http.StatusOK, tusHookResponse{VideoID: &id})
+		writeJSON(w, http.StatusOK, tusHookResponse{
+			VideoID: &id,
+			// Forward the video id back to the browser via the
+			// upload-completion response headers so bulk-upload UIs can
+			// surface "→ Run作成" without an extra round-trip.
+			HTTPResponse: &tusHTTPResponse{
+				Headers: map[string]string{"X-Video-Id": id},
+			},
+		})
 		return
 	} else if !isNoRows(err) {
 		internalError(w, err)
@@ -114,7 +122,12 @@ func (h *Uploads) TusHook(w http.ResponseWriter, r *http.Request) {
 		// race: another concurrent hook may have inserted under the same storage key
 		if existing, err2 := h.Q.GetVideoByStorageKey(r.Context(), storageKey); err2 == nil {
 			id := uuidString(existing.ID)
-			writeJSON(w, http.StatusOK, tusHookResponse{VideoID: &id})
+			writeJSON(w, http.StatusOK, tusHookResponse{
+				VideoID: &id,
+				HTTPResponse: &tusHTTPResponse{
+					Headers: map[string]string{"X-Video-Id": id},
+				},
+			})
 			return
 		}
 		internalError(w, err)
@@ -158,5 +171,10 @@ func (h *Uploads) TusHook(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, tusHookResponse{VideoID: &id})
+	writeJSON(w, http.StatusOK, tusHookResponse{
+		VideoID: &id,
+		HTTPResponse: &tusHTTPResponse{
+			Headers: map[string]string{"X-Video-Id": id},
+		},
+	})
 }

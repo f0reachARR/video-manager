@@ -17,10 +17,9 @@ export type BulkVideoUploadItem = {
   state: "uploading" | "done" | "error" | "canceled";
   error?: string;
   upload: Upload;
-  // Resolved video id once the server posts back via the tus hook
-  // metadata. tus-js-client doesn't surface the response body in a
-  // type-safe way, so we leave this undefined until the caller does
-  // a queries refetch.
+  // Populated from the tus post-finish response body once the server
+  // creates the Video row. Used by the P6 Run-creation shortcut.
+  videoId?: string;
 };
 
 type UploadParams = {
@@ -102,12 +101,22 @@ export function useVideoBulkUpload(params: UploadParams | null) {
         setItems((u) =>
           u.map((x) => (x.key === sf.key ? { ...x, ...patch } : x)),
         );
+      // We capture the tus completion response to extract the X-Video-Id
+      // header (set by the API's post-finish hook). tus-js-client doesn't
+      // give us the final response in `onSuccess`, so we tap each
+      // response via `onAfterResponse` and remember the most recent
+      // video id for this upload — the final PATCH gets the header.
+      let capturedVideoId: string | undefined;
       const upload = new Upload(sf.file, {
         endpoint: TUSD_ENDPOINT,
         retryDelays: [0, 1000, 3000, 5000, 10000],
         chunkSize: 8 * 1024 * 1024,
         removeFingerprintOnSuccess: true,
         metadata: meta,
+        onAfterResponse(_req, res) {
+          const v = res.getHeader("X-Video-Id");
+          if (v) capturedVideoId = v;
+        },
         onError(err) {
           update({ state: "error", error: err.message });
         },
@@ -116,7 +125,11 @@ export function useVideoBulkUpload(params: UploadParams | null) {
           update({ progress: pct, bytesUploaded: sent });
         },
         onSuccess() {
-          update({ state: "done", progress: 100 });
+          update({
+            state: "done",
+            progress: 100,
+            videoId: capturedVideoId,
+          });
         },
       });
       const item: BulkVideoUploadItem = {

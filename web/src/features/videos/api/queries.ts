@@ -14,6 +14,13 @@ export const useVideos = (params: VideoListParams = {}) =>
     queryFn: () => videosApi.list({ limit: 200, ...params }),
   });
 
+export const useVideo = (id: string | null | undefined) =>
+  useQuery({
+    queryKey: ["videos", "detail", id ?? ""] as const,
+    queryFn: () => videosApi.get(id as string),
+    enabled: !!id,
+  });
+
 export const useUpdateVideo = () => {
   const qc = useQueryClient();
   return useMutation({

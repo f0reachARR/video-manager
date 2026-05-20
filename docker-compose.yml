@@ -73,6 +73,9 @@ services:
       - -hooks-http=${TUSD_HOOK_URL:-http://host.docker.internal:8080/uploads/tus-hook}
       - -hooks-enabled-events=post-finish
       - -cors-allow-origin=${ALLOWED_ORIGINS:-http://localhost:5173}
+      # Expose the API's post-finish header so bulk-upload UIs can read
+      # the created video id straight off the tus completion response.
+      - -cors-expose-headers=Upload-Offset,Location,Upload-Length,Tus-Version,Tus-Resumable,Tus-Max-Size,Tus-Extension,Upload-Metadata,Upload-Defer-Length,Upload-Concat,X-Video-Id
       - -behind-proxy
     ports:
       - "${TUSD_PORT:-1080}:1080"

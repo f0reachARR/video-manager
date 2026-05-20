@@ -20,6 +20,7 @@ import {
   isSelectable,
 } from "../features/bulk-upload/components/FileTable";
 import { TournamentSelector } from "../features/bulk-upload/components/TournamentSelector";
+import { CreateRunFromVideoModal } from "../features/bulk-upload/components/CreateRunFromVideoModal";
 import { TeamRobotSelector } from "../features/bulk-upload/components/TeamRobotSelector";
 import { useDirectoryScan } from "../features/bulk-upload/hooks/useDirectoryScan";
 import { useImageBulkUpload } from "../features/bulk-upload/hooks/useImageBulkUpload";
@@ -67,6 +68,7 @@ function BulkUploadPage() {
   );
   const [clearing, setClearing] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [runForVideoId, setRunForVideoId] = useState<string | null>(null);
   const [teamId, setTeamIdState] = useState<string | null>(() =>
     typeof window !== "undefined"
       ? window.localStorage.getItem(LS_TEAM_KEY)
@@ -329,9 +331,10 @@ function BulkUploadPage() {
                     onToggle: toggle,
                     onToggleAll: makeToggleAll(videoFiles),
                   }}
+                  onCreateRun={(vid) => setRunForVideoId(vid)}
                 />
                 <Text size="xs" c="dimmed">
-                  ハッシュ済 + 新規 + 未アップロードの動画だけが選択できます。
+                  ハッシュ済 + 新規 + 未アップロードの動画だけが選択できます。アップロード完了行や既にアップ済の行は「+ Run」から即 Run を作成できます。
                 </Text>
               </Stack>
             </Tabs.Panel>
@@ -404,6 +407,14 @@ function BulkUploadPage() {
           </Tabs>
         </Card>
       </Stack>
+      <CreateRunFromVideoModal
+        videoId={runForVideoId}
+        tournamentId={tournamentId}
+        defaultSessionId={sessionId}
+        defaultTeamId={teamId}
+        defaultRobotId={robotId}
+        onClose={() => setRunForVideoId(null)}
+      />
     </ResourcePage>
   );
 }

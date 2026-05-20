@@ -1,4 +1,4 @@
-import { Badge, Checkbox, Group, Loader, Progress, Table, Text } from "@mantine/core";
+import { Badge, Button, Checkbox, Group, Loader, Progress, Table, Text } from "@mantine/core";
 
 import type { ScannedFile } from "../hooks/useDirectoryScan";
 import type { BulkImageUploadItem } from "../hooks/useImageBulkUpload";
@@ -17,6 +17,10 @@ type Props = {
   } | null;
   uploads?: Map<string, BulkVideoUploadItem>;
   imageUploads?: Record<string, BulkImageUploadItem>;
+  // P6: clicking 「Run作成」 invokes this with the resolved video id.
+  // Only rendered on video rows whose status has yielded a video id
+  // (either freshly uploaded or already-known via the dedup check).
+  onCreateRun?: (videoId: string) => void;
 };
 
 const KIND_LABEL: Record<ScannedFile["mediaKind"], string> = {
@@ -61,6 +65,7 @@ export function FileTable({
   selection,
   uploads,
   imageUploads,
+  onCreateRun,
 }: Props) {
   if (files.length === 0) {
     return (
@@ -122,10 +127,30 @@ export function FileTable({
                 </Badge>
               </Table.Td>
               <Table.Td>
-                <Text>{f.file.name}</Text>
+                <Group gap="xs" wrap="nowrap" justify="space-between">
+                  <Text>{f.file.name}</Text>
+                  {(() => {
+                    const vid = up?.videoId ?? f.knownResult?.videoId;
+                    if (!onCreateRun || !vid || f.mediaKind !== "video") return null;
+                    return (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={() => onCreateRun(vid)}
+                      >
+                        + Run
+                      </Button>
+                    );
+                  })()}
+                </Group>
                 {f.knownResult?.videoId && (
                   <Text size="xs" c="dimmed" ff="monospace">
                     → video {f.knownResult.videoId}
+                  </Text>
+                )}
+                {up?.videoId && !f.knownResult?.videoId && (
+                  <Text size="xs" c="dimmed" ff="monospace">
+                    → video {up.videoId}
                   </Text>
                 )}
                 {f.knownResult?.robotImageId && (
