@@ -76,6 +76,15 @@ export type ReplaceTournamentTeamsRequest =
 export type ReplaceTournamentRobotsRequest =
   components["schemas"]["ReplaceTournamentRobotsRequest"];
 
+export type BulkUploadMediaKind = components["schemas"]["BulkUploadMediaKind"];
+export type BulkUploadCheckItem = components["schemas"]["BulkUploadCheckItem"];
+export type BulkUploadCheckRequest =
+  components["schemas"]["BulkUploadCheckRequest"];
+export type BulkUploadCheckResult =
+  components["schemas"]["BulkUploadCheckResult"];
+export type BulkUploadCheckResponse =
+  components["schemas"]["BulkUploadCheckResponse"];
+
 export type ScoutingNote = components["schemas"]["ScoutingNote"];
 export type CreateScoutingNoteRequest = components["schemas"]["CreateScoutingNoteRequest"];
 export type ScoutingNoteList = components["schemas"]["ScoutingNoteList"];
@@ -508,6 +517,15 @@ export const tournamentsApi = {
     request<TournamentRobotList>(`/tournaments/${id}/robots`, {
       method: "PUT",
       json: body,
+    }),
+  checkBulkUploads: (id: string, body: BulkUploadCheckRequest) =>
+    request<BulkUploadCheckResponse>(
+      `/tournaments/${id}/bulk-uploads/check`,
+      { method: "POST", json: body },
+    ),
+  clearBulkUploadFingerprints: (id: string) =>
+    request<void>(`/tournaments/${id}/bulk-uploads/fingerprints`, {
+      method: "DELETE",
     }),
 };
 
