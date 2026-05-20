@@ -18,6 +18,10 @@ import (
 type Videos struct {
 	Q       *sqlc.Queries
 	Storage *storage.Client
+	// HLSBaseURL, when non-empty, overrides the scheme+host used to build HLS
+	// proxy playback URLs. No trailing slash. Empty means derive from the
+	// inbound request.
+	HLSBaseURL string
 }
 
 type videoDTO struct {
@@ -293,7 +297,7 @@ func (h *Videos) PlaybackURL(w http.ResponseWriter, r *http.Request) {
 	if v.HLSStatus == sqlc.HlsStatusReady && v.HlsMasterKey != nil {
 		expires := time.Now().Add(h.Storage.PresignTTL())
 		out := playbackUrlResponse{
-			URL:       proxyHLSURL(r, uuidString(v.ID), "master.m3u8"),
+			URL:       h.proxyHLSURL(r, uuidString(v.ID), "master.m3u8"),
 			ExpiresAt: expires,
 			Kind:      "hls",
 		}
@@ -509,12 +513,17 @@ func contentTypeFor(name string) string {
 }
 
 // proxyHLSURL returns an absolute URL to the in-process HLS proxy for the
-// given videoId and object path. We build it from the inbound request so it
+// given videoId and object path. When HLSBaseURL is configured it is used
+// verbatim; otherwise the base is derived from the inbound request, which
 // works behind reverse proxies as long as r.Host is set correctly.
-func proxyHLSURL(r *http.Request, videoID, sub string) string {
-	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "https"
+func (h *Videos) proxyHLSURL(r *http.Request, videoID, sub string) string {
+	base := h.HLSBaseURL
+	if base == "" {
+		scheme := "http"
+		if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+			scheme = "https"
+		}
+		base = scheme + "://" + r.Host
 	}
-	return scheme + "://" + r.Host + "/videos/" + videoID + "/hls/" + sub
+	return base + "/videos/" + videoID + "/hls/" + sub
 }

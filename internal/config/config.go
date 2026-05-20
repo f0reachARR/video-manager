@@ -23,6 +23,13 @@ type Config struct {
 	S3UsePathStyle bool          `env:"S3_USE_PATH_STYLE" envDefault:"true"`
 	S3PresignTTL   time.Duration `env:"S3_PRESIGN_TTL" envDefault:"10m"`
 
+	// HLSBaseURL overrides the base URL used when handing out HLS proxy
+	// playback URLs. When empty, the URL is derived from the inbound request
+	// (scheme + Host). Set this when the public-facing origin differs from
+	// what r.Host reports, e.g. behind a CDN or when serving HLS from a
+	// separate hostname. No trailing slash.
+	HLSBaseURL string `env:"HLS_BASE_URL" envDefault:""`
+
 	// Worker queue configuration. The app process polls "default" by default;
 	// dedicated worker nodes can set WORKER_QUEUES="default,encode" (or just
 	// "encode") to pull the heavy HLS encode jobs.
@@ -66,6 +73,7 @@ func Load() (*Config, error) {
 	}
 
 	cfg.AllowedOrigins = trimAll(cfg.AllowedOrigins)
+	cfg.HLSBaseURL = strings.TrimRight(strings.TrimSpace(cfg.HLSBaseURL), "/")
 	cfg.WorkerQueues = trimAll(cfg.WorkerQueues)
 	if len(cfg.WorkerQueues) == 0 {
 		cfg.WorkerQueues = []string{"default"}

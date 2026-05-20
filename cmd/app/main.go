@@ -134,7 +134,7 @@ func run() error {
 		Scenarios:      &handler.Scenarios{Q: q},
 		Tags:           &handler.Tags{Q: q},
 		Sessions:       &handler.Sessions{Q: q},
-		Videos:         &handler.Videos{Q: q, Storage: store},
+		Videos:         &handler.Videos{Q: q, Storage: store, HLSBaseURL: cfg.HLSBaseURL},
 		Runs:           &handler.Runs{Q: q},
 		Markers:        &handler.Markers{Q: q, Hub: hub},
 		Tournaments:    &handler.Tournaments{Q: q},
