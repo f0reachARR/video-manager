@@ -1,9 +1,10 @@
-import { Alert, Anchor, Breadcrumbs, Center, Loader, Stack, Text, Title } from "@mantine/core";
+import { Alert, Anchor, Badge, Breadcrumbs, Center, Group, Loader, Stack, Text, Title } from "@mantine/core";
 import { Link, createFileRoute } from "@tanstack/react-router";
 
 import { ResourcePage } from "../../components/layout/ResourcePage";
 import { ApiError } from "../../lib/api/client";
 import { useRobot } from "../../features/robots/api/queries";
+import { useTeam } from "../../features/teams/api/queries";
 import { RobotImageManager } from "../../features/robot-images/components/RobotImageManager";
 
 export const Route = createFileRoute("/robots/$robotId/images")({
@@ -13,6 +14,7 @@ export const Route = createFileRoute("/robots/$robotId/images")({
 function RobotImagesPage() {
   const { robotId } = Route.useParams();
   const robot = useRobot(robotId);
+  const team = useTeam(robot.data?.teamId);
 
   if (robot.isLoading) {
     return (
@@ -32,13 +34,11 @@ function RobotImagesPage() {
   }
 
   const r = robot.data;
+  const teamName = team.data?.name ?? r.teamId;
+  const descriptionParts = [`チーム: ${teamName}`];
+  if (r.version) descriptionParts.push(`バージョン: ${r.version}`);
   return (
-    <ResourcePage
-      title={`${r.name} の画像`}
-      description={
-        r.version ? `バージョン: ${r.version}` : undefined
-      }
-    >
+    <ResourcePage title={`${r.name} の画像`} description={descriptionParts.join(" / ")}>
       <Stack>
         <Breadcrumbs>
           <Anchor component={Link} to="/robots">
@@ -47,6 +47,16 @@ function RobotImagesPage() {
           <Text>{r.name}</Text>
           <Text>画像</Text>
         </Breadcrumbs>
+        <Group gap="xs">
+          <Badge color="blue" variant="light">
+            チーム: {teamName}
+          </Badge>
+          {r.version && (
+            <Badge color="gray" variant="light">
+              {r.version}
+            </Badge>
+          )}
+        </Group>
         <Title order={4}>写真 (時系列順)</Title>
         <RobotImageManager robot={r} />
       </Stack>
