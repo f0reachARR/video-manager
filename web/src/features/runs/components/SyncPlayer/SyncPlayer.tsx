@@ -21,11 +21,7 @@ import {
 } from "../../../annotations/components/AnnotationToolbar";
 import type { OverlayMode } from "../../../annotations/components/RunVideoOverlay";
 import { formatTime } from "../../lib/format";
-import {
-  angleDuration,
-  isAngleInRange,
-  runTimeToVideoTime,
-} from "../../lib/timeMap";
+import { angleDuration } from "../../lib/timeMap";
 import {
   usePresence,
   type LocalPresenceSnapshot,
@@ -35,17 +31,13 @@ import { AngleVideo, type LoadedAngle } from "./AngleVideo";
 import { MarkerStrip } from "./MarkerStrip";
 import { PresenceStrip } from "./PresenceStrip";
 import { SyncControls } from "./SyncControls";
+import { usePlaybackClock } from "./usePlaybackClock";
 import { usePlaybackUrls } from "./usePlaybackUrls";
 
 // How far the followed presence can drift from us before we forcibly re-seek.
 // Smaller than the WS tick latency on purpose — half a second of drift is
 // already audibly out of sync.
 const SYNC_DRIFT_THRESHOLD_SEC = 0.5;
-
-// How far a <video>'s currentTime can drift from the wall-clock target before
-// we snap it back. Larger than SYNC_DRIFT_THRESHOLD_SEC because the rAF tick
-// only nudges every frame and steady-state drift of ~100ms is expected.
-const VIDEO_DRIFT_SNAP_SEC = 0.25;
 
 export function SyncPlayer({
   run,
@@ -66,12 +58,7 @@ export function SyncPlayer({
   const { urls, urlErrors } = usePlaybackUrls(videos);
   const [mainAngleId, setMainAngleId] = useState<string | null>(null);
   const [runDurationSec, setRunDurationSec] = useState<number>(0);
-  const setT = onTChange;
-  const [playing, setPlaying] = useState(false);
   const refs = useRef<Map<string, HTMLVideoElement>>(new Map());
-  const animationRef = useRef<number | null>(null);
-  const lastPlaybackTime = useRef<number>(0);
-  const lastT = useRef<number>(0);
 
   // Overlay (Annotation 追加 / ライブインク) — applies to the main angle.
   const [overlayMode, setOverlayMode] = useState<OverlayMode>("off");
@@ -87,21 +74,32 @@ export function SyncPlayer({
     return m;
   }, [usersQ.data]);
 
-  // Refs mirror React state so callbacks closed over by presence can read
-  // current values without re-binding.
-  const playingRef = useRef(false);
-  playingRef.current = playing;
+  // Refs mirror state so callbacks closed over by presence can read current
+  // values without re-binding.
   const runDurationRef = useRef(0);
   runDurationRef.current = runDurationSec;
   const mainAngleIdRef = useRef<string | null>(null);
   mainAngleIdRef.current = mainAngleId;
 
+  // Owns the rAF clock, per-video element steering, and seek/togglePlay.
+  // We pass a no-op for onAfterUserChange initially and rewire it below
+  // once `presence` is available — presence.broadcastNow reads state via
+  // refs so the late binding is safe.
+  const onAfterUserChangeRef = useRef<() => void>(() => {});
+  const clock = usePlaybackClock({
+    videos,
+    runDurationSec,
+    refs,
+    onTChange,
+    onAfterUserChange: () => onAfterUserChangeRef.current(),
+  });
+
   const presence = usePresence({
     runId: run.id,
     getLocalSnapshot: () => ({
       userId: currentUserId,
-      tSec: lastT.current,
-      playing: playingRef.current,
+      tSec: clock.lastT.current,
+      playing: clock.playingRef.current,
       mainAngleId: mainAngleIdRef.current,
     } satisfies LocalPresenceSnapshot),
     onFollowTick: (tick: RemoteFollowTick) => {
@@ -116,9 +114,9 @@ export function SyncPlayer({
       }
       const latency = Math.max(0, (Date.now() - tick.ts) / 1000);
       const targetT = tick.tSec + (tick.playing ? latency : 0);
-      const drift = Math.abs(targetT - lastT.current);
+      const drift = Math.abs(targetT - clock.lastT.current);
       if (drift > SYNC_DRIFT_THRESHOLD_SEC) {
-        seek(
+        clock.seek(
           Math.min(runDurationRef.current, Math.max(0, targetT)),
           { broadcast: false },
         );
@@ -128,10 +126,11 @@ export function SyncPlayer({
         : null;
       const actuallyPlaying = mainEl ? !mainEl.paused : false;
       if (tick.playing !== actuallyPlaying) {
-        void applyExternalPlaying(tick.playing);
+        void clock.applyExternalPlaying(tick.playing);
       }
     },
   });
+  onAfterUserChangeRef.current = presence.broadcastNow;
 
   // Subscribe to the Run's realtime topic. Marker events refetch the markers
   // query; presence ticks are handled by usePresence's publisher socket.
@@ -176,112 +175,11 @@ export function SyncPlayer({
     }
   }, [videos, mainAngleId]);
 
-  // Wall-clock anchor for the playhead. We DON'T derive `t` from the main
-  // video's currentTime anymore because that breaks during gaps (no video
-  // means nothing to drive the clock). Instead the rAF loop walks the clock
-  // forward from a known (t, wall-time) anchor and steers each <video> to
-  // match. togglePlay / seek reset the anchor.
-  const playAnchorT = useRef(0);
-  const playAnchorWall = useRef(0);
-
-  // rAF loop drives the shared timeline from a wall clock anchor.
   useEffect(() => {
-    if (!playing) {
-      if (animationRef.current !== null) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
-      return;
-    }
-    const tick = (now: number) => {
-      const elapsed = (now - playAnchorWall.current) / 1000;
-      const newT = Math.min(
-        runDurationSec,
-        Math.max(0, playAnchorT.current + elapsed),
-      );
-
-      // Steer every video to (newT - runOffset). Out-of-range angles get
-      // paused; the next tick that lands inside their window will re-play
-      // them. Includes the main angle — the wall clock is the ground truth.
-      for (const v of videos) {
-        const el = refs.current.get(v.id);
-        if (!el) continue;
-        if (!isAngleInRange(v, newT)) {
-          if (!el.paused) el.pause();
-          continue;
-        }
-        const target = runTimeToVideoTime(v, newT);
-        if (Math.abs(el.currentTime - target) > VIDEO_DRIFT_SNAP_SEC) {
-          el.currentTime = target;
-        }
-        if (el.paused) void el.play().catch(() => {});
-      }
-
-      if (Math.abs(newT - lastT.current) > 0.05) {
-        lastT.current = newT;
-        setT(newT);
-      }
-      if (newT >= runDurationSec) {
-        setPlaying(false);
-        return;
-      }
-      lastPlaybackTime.current = now;
-      animationRef.current = requestAnimationFrame(tick);
-    };
-    animationRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (animationRef.current !== null)
-        cancelAnimationFrame(animationRef.current);
-    };
-  }, [playing, mainAngleId, runDurationSec, videos]);
-
-  const seek = (newT: number, opts: { broadcast?: boolean } = {}) => {
-    lastT.current = newT;
-    setT(newT);
-    // Reset the wall-clock anchor so the rAF tick keeps walking forward from
-    // the new position rather than jumping back.
-    playAnchorT.current = newT;
-    playAnchorWall.current = performance.now();
-    for (const v of videos) {
-      const el = refs.current.get(v.id);
-      if (!el) continue;
-      if (!isAngleInRange(v, newT)) {
-        if (!el.paused) el.pause();
-        continue;
-      }
-      el.currentTime = runTimeToVideoTime(v, newT);
-    }
-    if (opts.broadcast !== false) {
-      presence.broadcastNow();
-    }
-  };
-
-  useEffect(() => {
-    registerSeek(seek);
-    // seek closes over `videos`; re-register when angles change.
+    registerSeek(clock.seek);
+    // clock.seek closes over `videos`; re-register when angles change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videos, registerSeek]);
-
-  const applyExternalPlaying = async (shouldPlay: boolean) => {
-    if (shouldPlay) {
-      // play() is a no-op for an already-playing element, so it's safe to
-      // call repeatedly. Track per-video success — if every play() got
-      // rejected (autoplay blocked), leave React `playing` false so the next
-      // incoming sync ping will retry.
-      const results = await Promise.allSettled(
-        videos.map(async (v) => {
-          const el = refs.current.get(v.id);
-          if (!el) throw new Error("video element not mounted");
-          await el.play();
-        }),
-      );
-      const anyOk = results.some((r) => r.status === "fulfilled");
-      if (anyOk) setPlaying(true);
-    } else {
-      for (const v of videos) refs.current.get(v.id)?.pause();
-      setPlaying(false);
-    }
-  };
 
   // Emit immediately when our Main angle changes so followers switch with us
   // instead of waiting for the next periodic tick.
@@ -290,42 +188,6 @@ export function SyncPlayer({
     // broadcastNow reads everything via refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainAngleId]);
-
-  const togglePlay = async () => {
-    if (playing) {
-      for (const v of videos) refs.current.get(v.id)?.pause();
-      setPlaying(false);
-      // Local play state has changed; emit immediately so other viewers see it.
-      playingRef.current = false;
-      presence.broadcastNow();
-      return;
-    }
-    // Anchor the wall clock to the current t. The rAF loop will then walk
-    // forward from here even if no video is in range yet (pre-video gap).
-    playAnchorT.current = t;
-    playAnchorWall.current = performance.now();
-    for (const v of videos) {
-      const el = refs.current.get(v.id);
-      if (!el) continue;
-      if (!isAngleInRange(v, t)) continue;
-      el.currentTime = runTimeToVideoTime(v, t);
-    }
-    await Promise.all(
-      videos.map(async (v) => {
-        const el = refs.current.get(v.id);
-        if (!el) return;
-        if (!isAngleInRange(v, t)) return;
-        try {
-          await el.play();
-        } catch {
-          // ignore autoplay errors
-        }
-      }),
-    );
-    setPlaying(true);
-    playingRef.current = true;
-    presence.broadcastNow();
-  };
 
   if (videos.length === 0) {
     return (
@@ -419,11 +281,11 @@ export function SyncPlayer({
 
       <Group>
         <Button
-          onClick={togglePlay}
+          onClick={clock.togglePlay}
           size="sm"
-          variant={playing ? "outline" : "filled"}
+          variant={clock.playing ? "outline" : "filled"}
         >
-          {playing ? "⏸ Pause" : "▶ Play"}
+          {clock.playing ? "⏸ Pause" : "▶ Play"}
         </Button>
         <Text size="sm" ff="monospace" w={120}>
           {formatTime(t)} / {formatTime(runDurationSec)}
@@ -434,7 +296,7 @@ export function SyncPlayer({
             min={0}
             max={runDurationSec || 1}
             step={0.1}
-            onChange={seek}
+            onChange={clock.seek}
             label={(v) => formatTime(v)}
           />
           <MarkerStrip markers={markers} durationSec={runDurationSec} />

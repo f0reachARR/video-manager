@@ -10,21 +10,17 @@ import {
 } from "@mantine/core";
 import { useMemo, useRef, useState } from "react";
 
-import {
-  ApiError,
-  type Annotation,
-  type PlaybackUrl,
-  type Video,
-  videosApi,
-} from "../../../lib/api/client";
+import type { Annotation, Video } from "../../../lib/api/client";
 import { useHlsSource } from "../../../components/player/useHlsSource";
 import { useCurrentUserId } from "../../../stores/currentUser";
+import { useVideoPlaybackUrl } from "../../videos/hooks/useVideoPlaybackUrl";
 import {
   useAnnotations,
   useCreateAnnotation,
   useDeleteAnnotation,
 } from "../api/queries";
-import { AnnotationLayer, drawAnnotation } from "../lib/shapes";
+import { AnnotationLayer } from "../lib/shapes";
+import { useAnnotationPngExport } from "../lib/useAnnotationPngExport";
 import {
   type DrawMode,
   modeHint,
@@ -36,9 +32,7 @@ import { LiveInkLayer } from "./LiveInkLayer";
 import { AnnotationToolbar } from "./AnnotationToolbar";
 
 export function AnnotatedPlayer({ video }: { video: Video }) {
-  const [source, setSource] = useState<PlaybackUrl | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const requested = useRef(false);
+  const { source, error } = useVideoPlaybackUrl(video.id);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -49,16 +43,6 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
   const ann = useAnnotations(video.id);
   const create = useCreateAnnotation(video.id);
   const del = useDeleteAnnotation(video.id);
-
-  if (!requested.current) {
-    requested.current = true;
-    videosApi
-      .playbackUrl(video.id)
-      .then((r) => setSource(r))
-      .catch((e) =>
-        setError(e instanceof ApiError ? e.body.message : String(e)),
-      );
-  }
 
   useHlsSource(videoEl, source);
 
@@ -112,46 +96,11 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
     if (videoRef.current) videoRef.current.currentTime = sec;
   };
 
-  const [exportError, setExportError] = useState<string | null>(null);
-  const exportPng = async () => {
-    setExportError(null);
-    const el = videoRef.current;
-    if (!el || !el.videoWidth) {
-      setExportError("動画がまだ準備中です");
-      return;
-    }
-    const w = el.videoWidth;
-    const h = el.videoHeight;
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    try {
-      ctx.drawImage(el, 0, 0, w, h);
-    } catch (e) {
-      setExportError(
-        "動画フレームの取得に失敗 (MinIO CORS 設定が必要かも): " + String(e),
-      );
-      return;
-    }
-    for (const a of visible) {
-      drawAnnotation(ctx, a, w, h);
-    }
-    let dataUrl: string;
-    try {
-      dataUrl = canvas.toDataURL("image/png");
-    } catch (e) {
-      setExportError("PNG 化に失敗 (CORS タインテッド): " + String(e));
-      return;
-    }
-    const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = `video-${video.id}-${Math.round(el.currentTime * 10) / 10}s.png`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  };
+  const png = useAnnotationPngExport({
+    video,
+    videoRef,
+    visibleAnnotations: visible,
+  });
 
   const drawing = mode !== "off";
   const cursor = drawing ? "crosshair" : "default";
@@ -211,7 +160,7 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
             ユーザ未選択: authorId は null になります
           </Text>
         )}
-        <Button size="xs" variant="default" ml="auto" onClick={exportPng}>
+        <Button size="xs" variant="default" ml="auto" onClick={png.exportPng}>
           🖼 PNG エクスポート
         </Button>
       </Group>
@@ -220,9 +169,9 @@ export function AnnotatedPlayer({ video }: { video: Video }) {
           {modeHint(mode)}
         </Text>
       )}
-      {exportError && (
-        <Alert color="orange" onClose={() => setExportError(null)} withCloseButton>
-          {exportError}
+      {png.error && (
+        <Alert color="orange" onClose={png.dismissError} withCloseButton>
+          {png.error}
         </Alert>
       )}
 

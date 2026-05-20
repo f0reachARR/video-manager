@@ -1,10 +1,15 @@
 import { Card, Group, Stack, Text } from "@mantine/core";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
 
-import type { Run, RunVideo } from "../../../lib/api/client";
-import { useUpdateRun, useUpdateRunVideo } from "../api/queries";
-import { useVideos } from "../../videos/api/queries";
-import { formatTime } from "../lib/format";
+import type { Run } from "../../../../lib/api/client";
+import { useVideos } from "../../../videos/api/queries";
+import { formatTime } from "../../lib/format";
+import { useAngleTrackDrag } from "./useAngleTrackDrag";
+
+// The label gutter on the left of each track. The bar area starts after
+// this many pixels; everything that maps "Run time -> screen X" has to
+// account for it (drag math + playhead positioning).
+const LABEL_GUTTER = 84;
 
 // Visual multi-track view of every angle attached to the Run. Each track
 // shows the angle as a colored bar at its current runOffsetSec position; the
@@ -23,8 +28,6 @@ export function AnglesTimeline({
   onSeek: (sec: number) => void;
 }) {
   const videos = run.videos ?? [];
-  const update = useUpdateRunVideo();
-  const updateRun = useUpdateRun();
   const trackRef = useRef<HTMLDivElement>(null);
 
   // Source-video duration is the upper bound for videoOffsetEndSec — without
@@ -39,134 +42,17 @@ export function AnglesTimeline({
     return m;
   }, [sourceVideos.data]);
 
-  type DragKind = "move" | "trim-start" | "trim-end";
-  type DragState = {
-    rvId: string;
-    kind: DragKind;
-    startX: number;
-    initRunOff: number;
-    initVStart: number;
-    initVEnd: number;
-    // Captured at pointerdown so the drag math can clamp vEnd. undefined if
-    // the source duration isn't loaded yet — in that case we don't clamp,
-    // matching the pre-fix behavior. Legacy data already past the source
-    // length keeps initVEnd as a floor so we never silently shrink it.
-    vEndMax: number | undefined;
-  } | null;
-  // These hooks must come before the early-return below; otherwise toggling
-  // videos.length between 0 and >0 changes the hook count and React throws
-  // "Rendered more hooks than during the previous render."
-  const dragRef = useRef<DragState>(null);
-  // Pending offsets while dragging — committed on pointerup.
-  const [pending, setPending] = useState<
-    Map<string, { runOff: number; vStart: number; vEnd: number }>
-  >(new Map());
+  // Drag/trim state machine — kept above the early return so the hook count
+  // stays stable when toggling videos.length between 0 and >0.
+  const drag = useAngleTrackDrag({
+    runId: run.id,
+    trackRef,
+    durationSec,
+    sourceDurations,
+    labelGutter: LABEL_GUTTER,
+  });
 
   if (videos.length === 0 || durationSec <= 0) return null;
-
-  // The label gutter on the left of each track. The bar area starts after
-  // this many pixels; everything that maps "Run time -> screen X" has to
-  // account for it (drag math + playhead positioning).
-  const LABEL_GUTTER = 84;
-
-  const pxPerSec = (rect: DOMRect) =>
-    Math.max(0, rect.width - LABEL_GUTTER) / durationSec;
-
-  const onPointerDown =
-    (rv: RunVideo, kind: DragKind) => (e: React.PointerEvent) => {
-      e.stopPropagation();
-      (e.target as Element).setPointerCapture?.(e.pointerId);
-      const srcDur = sourceDurations.get(rv.videoId);
-      dragRef.current = {
-        rvId: rv.id,
-        kind,
-        startX: e.clientX,
-        initRunOff: rv.runOffsetSec ?? 0,
-        initVStart: rv.videoOffsetStartSec,
-        initVEnd: rv.videoOffsetEndSec,
-        vEndMax:
-          srcDur == null ? undefined : Math.max(srcDur, rv.videoOffsetEndSec),
-      };
-    };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const track = trackRef.current;
-    if (!track) return;
-    const rect = track.getBoundingClientRect();
-    const pps = pxPerSec(rect);
-    if (pps <= 0) return;
-    const dx = (e.clientX - drag.startX) / pps;
-    let runOff = drag.initRunOff;
-    let vStart = drag.initVStart;
-    let vEnd = drag.initVEnd;
-    if (drag.kind === "move") {
-      runOff = Math.max(0, Math.round(drag.initRunOff + dx));
-    } else if (drag.kind === "trim-start") {
-      vStart = Math.max(0, Math.round(drag.initVStart + dx));
-      if (vStart > vEnd - 1) vStart = vEnd - 1;
-      // Trimming the start visually keeps the right edge fixed at the
-      // (runOff + (end - start)) position, so runOff shifts to compensate.
-      runOff = Math.max(0, drag.initRunOff + (vStart - drag.initVStart));
-    } else if (drag.kind === "trim-end") {
-      vEnd = Math.max(vStart + 1, Math.round(drag.initVEnd + dx));
-      if (drag.vEndMax != null) vEnd = Math.min(drag.vEndMax, vEnd);
-    }
-    setPending((cur) => {
-      const next = new Map(cur);
-      next.set(drag.rvId, { runOff, vStart, vEnd });
-      return next;
-    });
-  };
-
-  const onPointerUp = () => {
-    const drag = dragRef.current;
-    dragRef.current = null;
-    if (!drag) return;
-    const p = pending.get(drag.rvId);
-    if (!p) return;
-    const body: {
-      runOffsetSec?: number;
-      videoOffsetStartSec?: number;
-      videoOffsetEndSec?: number;
-    } = {};
-    if (p.runOff !== drag.initRunOff) body.runOffsetSec = p.runOff;
-    if (p.vStart !== drag.initVStart) body.videoOffsetStartSec = p.vStart;
-    if (p.vEnd !== drag.initVEnd) body.videoOffsetEndSec = p.vEnd;
-
-    // If the new bar extends past the current Run duration, bump it so the
-    // user doesn't have to manually grow durationSec to keep the angle visible.
-    const newEnd = p.runOff + (p.vEnd - p.vStart);
-    const needsExtend = newEnd > durationSec;
-
-    if (Object.keys(body).length > 0) {
-      update.mutate(
-        { runId: run.id, runVideoId: drag.rvId, body },
-        {
-          onSettled: () => {
-            setPending((cur) => {
-              const next = new Map(cur);
-              next.delete(drag.rvId);
-              return next;
-            });
-          },
-        },
-      );
-      if (needsExtend) {
-        updateRun.mutate({
-          id: run.id,
-          body: { durationSec: Math.ceil(newEnd) },
-        });
-      }
-    } else {
-      setPending((cur) => {
-        const next = new Map(cur);
-        next.delete(drag.rvId);
-        return next;
-      });
-    }
-  };
 
   return (
     <Card withBorder p="xs">
@@ -182,9 +68,9 @@ export function AnglesTimeline({
         <div
           ref={trackRef}
           style={{ position: "relative", userSelect: "none" }}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
+          onPointerMove={drag.onPointerMove}
+          onPointerUp={drag.onPointerUp}
+          onPointerCancel={drag.onPointerUp}
         >
           {/* Playhead — spans the whole track stack, positioned inside the
               bar area (after the LABEL_GUTTER), so its X aligns with every
@@ -228,7 +114,7 @@ export function AnglesTimeline({
             </Text>
           </div>
           {videos.map((rv, idx) => {
-            const p = pending.get(rv.id);
+            const p = drag.pending.get(rv.id);
             const runOff = p ? p.runOff : rv.runOffsetSec ?? 0;
             const vStart = p ? p.vStart : rv.videoOffsetStartSec;
             const vEnd = p ? p.vEnd : rv.videoOffsetEndSec;
@@ -263,7 +149,7 @@ export function AnglesTimeline({
                 <div
                   style={{
                     position: "absolute",
-                    left: 84,
+                    left: LABEL_GUTTER,
                     right: 0,
                     top: 0,
                     bottom: 0,
@@ -276,7 +162,7 @@ export function AnglesTimeline({
                     role="button"
                     tabIndex={0}
                     onClick={() => onSeek(runOff)}
-                    onPointerDown={onPointerDown(rv, "move")}
+                    onPointerDown={drag.onPointerDown(rv, "move")}
                     style={{
                       position: "absolute",
                       left: `${leftPct}%`,
@@ -300,7 +186,7 @@ export function AnglesTimeline({
                   </div>
                   {/* Left edge handle */}
                   <div
-                    onPointerDown={onPointerDown(rv, "trim-start")}
+                    onPointerDown={drag.onPointerDown(rv, "trim-start")}
                     style={{
                       position: "absolute",
                       left: `calc(${leftPct}% - 4px)`,
@@ -314,7 +200,7 @@ export function AnglesTimeline({
                   />
                   {/* Right edge handle */}
                   <div
-                    onPointerDown={onPointerDown(rv, "trim-end")}
+                    onPointerDown={drag.onPointerDown(rv, "trim-end")}
                     style={{
                       position: "absolute",
                       left: `calc(${leftPct + widthPct}% - 4px)`,
