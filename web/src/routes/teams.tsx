@@ -198,13 +198,17 @@ function TeamEditModal({
                     style={{ flex: 1 }}
                     placeholder={`ロボット名 ${i + 1}`}
                     value={rn}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      // Capture the value synchronously: React reuses the
+                      // synthetic event and currentTarget may be null by
+                      // the time the state updater runs.
+                      const v = e.currentTarget.value;
                       setRobotNames((arr) => {
                         const next = [...arr];
-                        next[i] = e.currentTarget.value;
+                        next[i] = v;
                         return next;
-                      })
-                    }
+                      });
+                    }}
                   />
                   <ActionIcon
                     variant="subtle"
