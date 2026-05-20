@@ -1881,6 +1881,46 @@ paths:
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
 
+  /tournaments/{tournamentId}/bulk-uploads/check:
+    parameters:
+      - $ref: "#/components/parameters/TournamentId"
+    post:
+      tags: [tournaments]
+      operationId: checkBulkUploads
+      summary: 既知ファイルかどうかを大会単位で問い合わせ
+      description: |
+        ディレクトリで列挙したファイルそれぞれの head ハッシュ + size を渡し、
+        既知/未知の判定と既知の場合の参照先 (video_id / robot_image_id) を得る。
+        並び順は入力と同じ。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkUploadCheckRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkUploadCheckResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /tournaments/{tournamentId}/bulk-uploads/fingerprints:
+    parameters:
+      - $ref: "#/components/parameters/TournamentId"
+    delete:
+      tags: [tournaments]
+      operationId: clearBulkUploadFingerprints
+      summary: 大会単位の重複判定キャッシュを一括クリア
+      responses:
+        "204":
+          description: Cleared
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /tournaments/{tournamentId}/robots:
     parameters:
       - $ref: "#/components/parameters/TournamentId"
@@ -3257,6 +3297,67 @@ components:
           items:
             type: string
             format: uuid
+
+    BulkUploadMediaKind:
+      type: string
+      enum: [video, image]
+    BulkUploadCheckItem:
+      type: object
+      required: [headHashHex, sizeBytes, filename, mediaKind]
+      properties:
+        headHashHex:
+          type: string
+          description: SHA-256 of the first 1 MiB of the file, hex-encoded (64 chars).
+          minLength: 64
+          maxLength: 64
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 0
+        filename:
+          type: string
+        mediaKind:
+          $ref: "#/components/schemas/BulkUploadMediaKind"
+    BulkUploadCheckRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/BulkUploadCheckItem"
+    BulkUploadCheckResult:
+      type: object
+      required: [headHashHex, sizeBytes, known]
+      properties:
+        headHashHex:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        known:
+          type: boolean
+        mediaKind:
+          $ref: "#/components/schemas/BulkUploadMediaKind"
+        videoId:
+          type: [string, "null"]
+          format: uuid
+        robotImageId:
+          type: [string, "null"]
+          format: uuid
+        filename:
+          type: [string, "null"]
+        createdAt:
+          type: [string, "null"]
+          format: date-time
+    BulkUploadCheckResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/BulkUploadCheckResult"
 
     # ---------- Match (Phase 2) ----------
     Match:

@@ -2,9 +2,11 @@ package handler
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
 )
@@ -15,8 +17,9 @@ type JobEnqueuer interface {
 }
 
 type Uploads struct {
-	Q      *sqlc.Queries
-	Worker JobEnqueuer
+	Q           *sqlc.Queries
+	Worker      JobEnqueuer
+	BulkUploads *BulkUploads
 }
 
 // tusHookRequest mirrors the JSON tusd v2 sends to its HTTP hook endpoint.
@@ -123,6 +126,36 @@ func (h *Uploads) TusHook(w http.ResponseWriter, r *http.Request) {
 	if h.Worker != nil {
 		if err := h.Worker.EnqueueProbe(r.Context(), id); err != nil {
 			slog.Warn("enqueue probe failed", "error", err, "videoId", id)
+		}
+	}
+	if h.BulkUploads != nil {
+		// Bulk-upload dedup: the browser pre-computes a 1 MiB head hash and
+		// pairs it with the tournament. We only record when both are present;
+		// regular (non-bulk) uploads simply skip this branch.
+		if tidStr := meta["tournamentId"]; tidStr != "" {
+			tid, err := parseUUIDParam(tidStr)
+			if err != nil {
+				slog.Warn("tus hook: invalid tournamentId metadata", "value", tidStr)
+			} else if hh := meta["headHashHex"]; hh != "" {
+				headHash, err := hex.DecodeString(hh)
+				if err != nil {
+					slog.Warn("tus hook: invalid headHashHex metadata", "value", hh)
+				} else {
+					sizeStr := meta["sizeBytes"]
+					if sizeStr == "" {
+						sizeStr = strconv.FormatInt(req.Event.Upload.Size, 10)
+					}
+					size, err := strconv.ParseInt(sizeStr, 10, 64)
+					if err != nil {
+						slog.Warn("tus hook: invalid sizeBytes metadata", "value", sizeStr)
+					} else {
+						filename := meta["filename"]
+						if err := h.BulkUploads.RegisterVideoFingerprint(r.Context(), tid, video.ID, headHash, size, filename); err != nil {
+							slog.Warn("register video fingerprint failed", "error", err, "videoId", id)
+						}
+					}
+				}
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, tusHookResponse{VideoID: &id})

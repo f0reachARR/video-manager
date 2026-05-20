@@ -56,12 +56,13 @@ func setupEnv(t *testing.T) *testEnv {
 		Runs:      &handler.Runs{Q: q},
 		Markers:     &handler.Markers{Q: q},
 		Tournaments: &handler.Tournaments{Q: q, Pool: pool},
+		BulkUploads: &handler.BulkUploads{Q: q},
 		Matches:     &handler.Matches{Q: q},
 		Annotations:   &handler.Annotations{Q: q},
 		ScoutingNotes: &handler.ScoutingNotes{Q: q},
 		// Videos handler depends on a Storage client; not exercised in these tests.
 		Videos:  &handler.Videos{Q: q},
-		Uploads: &handler.Uploads{Q: q, Worker: enq},
+		Uploads: &handler.Uploads{Q: q, Worker: enq, BulkUploads: &handler.BulkUploads{Q: q}},
 		// Tests still author via X-User-Id, so enable the dev-bypass path in
 		// the auth middleware. No session signer needed here — the bypass
 		// branch reads the header directly.

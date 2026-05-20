@@ -286,6 +286,18 @@ type Annotation struct {
 	CreatedAt      pgtype.Timestamptz
 }
 
+type BulkUploadFingerprint struct {
+	ID           pgtype.UUID
+	TournamentID pgtype.UUID
+	HeadHash     []byte
+	SizeBytes    int64
+	Filename     string
+	MediaKind    string
+	VideoID      pgtype.UUID
+	RobotImageID pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+}
+
 type Device struct {
 	ID                   pgtype.UUID
 	Name                 string

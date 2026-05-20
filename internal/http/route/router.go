@@ -24,6 +24,7 @@ type Deps struct {
 	Runs           *handler.Runs
 	Markers        *handler.Markers
 	Tournaments    *handler.Tournaments
+	BulkUploads    *handler.BulkUploads
 	Matches        *handler.Matches
 	Annotations    *handler.Annotations
 	ScoutingNotes  *handler.ScoutingNotes
@@ -198,6 +199,10 @@ func mountAuthedRoutes(r chi.Router, d Deps) {
 		r.Put("/{tournamentId}/teams", d.Tournaments.ReplaceTeams)
 		r.Get("/{tournamentId}/robots", d.Tournaments.ListRobots)
 		r.Put("/{tournamentId}/robots", d.Tournaments.ReplaceRobots)
+		if d.BulkUploads != nil {
+			r.Post("/{tournamentId}/bulk-uploads/check", d.BulkUploads.Check)
+			r.Delete("/{tournamentId}/bulk-uploads/fingerprints", d.BulkUploads.ClearFingerprints)
+		}
 	})
 
 	r.Route("/matches", func(r chi.Router) {

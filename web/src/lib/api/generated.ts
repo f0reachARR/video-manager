@@ -1069,6 +1069,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tournaments/{tournamentId}/bulk-uploads/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 既知ファイルかどうかを大会単位で問い合わせ
+         * @description ディレクトリで列挙したファイルそれぞれの head ハッシュ + size を渡し、
+         *     既知/未知の判定と既知の場合の参照先 (video_id / robot_image_id) を得る。
+         *     並び順は入力と同じ。
+         */
+        post: operations["checkBulkUploads"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tournaments/{tournamentId}/bulk-uploads/fingerprints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 大会単位の重複判定キャッシュを一括クリア */
+        delete: operations["clearBulkUploadFingerprints"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tournaments/{tournamentId}/robots": {
         parameters: {
             query?: never;
@@ -1715,6 +1758,36 @@ export interface components {
         };
         ReplaceTournamentRobotsRequest: {
             robotIds: string[];
+        };
+        /** @enum {string} */
+        BulkUploadMediaKind: "video" | "image";
+        BulkUploadCheckItem: {
+            /** @description SHA-256 of the first 1 MiB of the file, hex-encoded (64 chars). */
+            headHashHex: string;
+            /** Format: int64 */
+            sizeBytes: number;
+            filename: string;
+            mediaKind: components["schemas"]["BulkUploadMediaKind"];
+        };
+        BulkUploadCheckRequest: {
+            items: components["schemas"]["BulkUploadCheckItem"][];
+        };
+        BulkUploadCheckResult: {
+            headHashHex: string;
+            /** Format: int64 */
+            sizeBytes: number;
+            known: boolean;
+            mediaKind?: components["schemas"]["BulkUploadMediaKind"];
+            /** Format: uuid */
+            videoId?: string | null;
+            /** Format: uuid */
+            robotImageId?: string | null;
+            filename?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+        };
+        BulkUploadCheckResponse: {
+            results: components["schemas"]["BulkUploadCheckResult"][];
         };
         Match: {
             /** Format: uuid */
@@ -4219,6 +4292,54 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    checkBulkUploads: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkUploadCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkUploadCheckResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    clearBulkUploadFingerprints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     listTournamentRobots: {

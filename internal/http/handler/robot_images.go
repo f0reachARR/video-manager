@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -31,8 +33,9 @@ const maxRobotImageBytes = 30 << 20
 const maxRobotImageRequestBytes = 120 << 20
 
 type RobotImages struct {
-	Q       *sqlc.Queries
-	Storage *storage.Client
+	Q           *sqlc.Queries
+	Storage     *storage.Client
+	BulkUploads *BulkUploads
 }
 
 type robotImageDTO struct {
@@ -112,6 +115,15 @@ func (h *RobotImages) Upload(w http.ResponseWriter, r *http.Request) {
 
 	uploader := auth.UserIDFromContext(r.Context())
 	captionDefault := ""
+	// Bulk-upload dedup metadata. Optional — when present the per-file
+	// fingerprint is recorded after each successful insert so a re-upload
+	// from a different tab is detected as known.
+	var bulkTournamentID pgtype.UUID
+	type bulkFP struct {
+		HeadHashHex string `json:"headHashHex"`
+		SizeBytes   int64  `json:"sizeBytes"`
+	}
+	bulkFingerprints := map[string]bulkFP{}
 	results := make([]uploadResult, 0, 4)
 	anySuccess := false
 
@@ -135,11 +147,54 @@ func (h *RobotImages) Upload(w http.ResponseWriter, r *http.Request) {
 			captionDefault = string(b)
 			part.Close()
 			continue
+		case "tournamentId":
+			b, _ := io.ReadAll(io.LimitReader(part, 64))
+			if id, perr := parseUUIDParam(strings.TrimSpace(string(b))); perr == nil {
+				bulkTournamentID = id
+			} else {
+				slog.Warn("robot image upload: invalid tournamentId part", "err", perr)
+			}
+			part.Close()
+			continue
+		case "fingerprints":
+			b, _ := io.ReadAll(io.LimitReader(part, 1<<16))
+			var entries []struct {
+				Filename    string `json:"filename"`
+				HeadHashHex string `json:"headHashHex"`
+				SizeBytes   int64  `json:"sizeBytes"`
+			}
+			if perr := json.Unmarshal(b, &entries); perr != nil {
+				slog.Warn("robot image upload: bad fingerprints part", "err", perr)
+			} else {
+				for _, e := range entries {
+					if e.Filename == "" || e.HeadHashHex == "" {
+						continue
+					}
+					bulkFingerprints[e.Filename] = bulkFP{HeadHashHex: e.HeadHashHex, SizeBytes: e.SizeBytes}
+				}
+			}
+			part.Close()
+			continue
 		case "file":
 			res := h.processOne(r.Context(), robotID, uploader, captionDefault, part)
 			results = append(results, res)
 			if res.Image != nil {
 				anySuccess = true
+				if h.BulkUploads != nil && bulkTournamentID.Valid {
+					if fp, ok := bulkFingerprints[res.Filename]; ok && fp.HeadHashHex != "" {
+						headHash, derr := hex.DecodeString(fp.HeadHashHex)
+						if derr == nil {
+							imgID := pgtype.UUID{}
+							if uerr := imgID.Scan(res.Image.ID); uerr == nil {
+								if rerr := h.BulkUploads.RegisterImageFingerprint(r.Context(), bulkTournamentID, imgID, headHash, fp.SizeBytes, res.Filename); rerr != nil {
+									slog.Warn("register image fingerprint failed", "error", rerr, "imageId", res.Image.ID)
+								}
+							}
+						} else {
+							slog.Warn("robot image upload: invalid headHashHex", "err", derr, "filename", res.Filename)
+						}
+					}
+				}
 			}
 			part.Close()
 		default:

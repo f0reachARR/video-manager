@@ -15,6 +15,7 @@ type Querier interface {
 	AddRunVideo(ctx context.Context, arg AddRunVideoParams) (RunVideo, error)
 	AddTournamentRobot(ctx context.Context, arg AddTournamentRobotParams) error
 	AddTournamentTeam(ctx context.Context, arg AddTournamentTeamParams) error
+	ClearBulkUploadFingerprintsForTournament(ctx context.Context, tournamentID pgtype.UUID) (int64, error)
 	// 画像削除時に primary が同じ id を指していたら NULL に戻す。FK の
 	// ON DELETE SET NULL でも同じ結果になるが、明示的に呼べると分かりやすい。
 	ClearRobotPrimaryImageIfMatches(ctx context.Context, arg ClearRobotPrimaryImageIfMatchesParams) error
@@ -84,6 +85,9 @@ type Querier interface {
 	InsertRobotImage(ctx context.Context, arg InsertRobotImageParams) (RobotImage, error)
 	LinkUserOIDC(ctx context.Context, arg LinkUserOIDCParams) (User, error)
 	ListAnnotationsByVideo(ctx context.Context, videoID pgtype.UUID) ([]Annotation, error)
+	// Check API 用バッチ取得。 (head_hash, size_bytes) のペアを 2 つの配列で渡し、
+	// UNNEST で行に展開してジョインする。
+	ListBulkUploadFingerprintsByHashes(ctx context.Context, arg ListBulkUploadFingerprintsByHashesParams) ([]BulkUploadFingerprint, error)
 	ListDevices(ctx context.Context) ([]Device, error)
 	ListDevicesPage(ctx context.Context, arg ListDevicesPageParams) ([]Device, error)
 	// Videos that are mid-encode (hls_status in planning/encoding) or have failed
@@ -133,6 +137,9 @@ type Querier interface {
 	ListUsers(ctx context.Context) ([]User, error)
 	ListUsersPage(ctx context.Context, arg ListUsersPageParams) ([]User, error)
 	ListVideosPage(ctx context.Context, arg ListVideosPageParams) ([]Video, error)
+	// 1 件単位で (tournament, hash, size) を引く。 N+1 を避けるため Check API は
+	// これを並べて発行する代わりに ListBulkUploadFingerprintsByHashes を使う。
+	LookupBulkUploadFingerprint(ctx context.Context, arg LookupBulkUploadFingerprintParams) (BulkUploadFingerprint, error)
 	MarkRenditionEncoding(ctx context.Context, id pgtype.UUID) (int64, error)
 	MarkRenditionFailed(ctx context.Context, arg MarkRenditionFailedParams) (int64, error)
 	MarkRenditionReady(ctx context.Context, arg MarkRenditionReadyParams) (int64, error)
@@ -160,6 +167,9 @@ type Querier interface {
 	UpdateVideoProbe(ctx context.Context, arg UpdateVideoProbeParams) (Video, error)
 	UpdateVideoSource(ctx context.Context, arg UpdateVideoSourceParams) (int64, error)
 	UpdateVideoThumbnail(ctx context.Context, arg UpdateVideoThumbnailParams) (int64, error)
+	// 動画 / 画像 アップロード完了時に呼ぶ。 既存行があればメディア ID を
+	// 上書きする (race で同じ fingerprint が同時に飛んできても 1 行に収束)。
+	UpsertBulkUploadFingerprint(ctx context.Context, arg UpsertBulkUploadFingerprintParams) (BulkUploadFingerprint, error)
 }
 
 var _ Querier = (*Queries)(nil)
