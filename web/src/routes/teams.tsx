@@ -3,6 +3,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  Divider,
   Group,
   Modal,
   Stack,
@@ -16,6 +17,7 @@ import { useState } from "react";
 
 import { ResourcePage } from "../components/layout/ResourcePage";
 import type { Team } from "../lib/api/client";
+import { useCreateRobot } from "../features/robots/api/queries";
 import {
   useCreateTeam,
   useDeleteTeam,
@@ -135,16 +137,31 @@ function TeamEditModal({
 }) {
   const [name, setName] = useState(team?.name ?? "");
   const [isOwn, setIsOwn] = useState(team?.isOwn ?? false);
+  const [robotVersion, setRobotVersion] = useState("");
+  const [robotNames, setRobotNames] = useState<string[]>([""]);
   const create = useCreateTeam();
   const update = useUpdateTeam();
+  const createRobot = useCreateRobot();
 
-  const submit = () => {
+  const isCreate = team === null;
+  const robotsPending = createRobot.isPending;
+
+  const submit = async () => {
     const payload = { name, isOwn };
     if (team) {
       update.mutate({ id: team.id, body: payload }, { onSuccess: onClose });
-    } else {
-      create.mutate(payload, { onSuccess: onClose });
+      return;
     }
+    const created = await create.mutateAsync(payload);
+    const trimmed = robotNames.map((n) => n.trim()).filter((n) => n !== "");
+    for (const n of trimmed) {
+      await createRobot.mutateAsync({
+        teamId: created.id,
+        name: n,
+        version: robotVersion,
+      });
+    }
+    onClose();
   };
 
   return (
@@ -165,13 +182,60 @@ function TeamEditModal({
           checked={isOwn}
           onChange={(e) => setIsOwn(e.currentTarget?.checked ?? false)}
         />
+        {isCreate && (
+          <>
+            <Divider label="ロボット一括登録 (任意)" labelPosition="left" />
+            <TextInput
+              label="バージョン"
+              description="登録するロボット全員に同じバージョン文字列を付与します。空でも可。"
+              value={robotVersion}
+              onChange={(e) => setRobotVersion(e.currentTarget.value)}
+            />
+            <Stack gap="xs">
+              {robotNames.map((rn, i) => (
+                <Group key={i} gap="xs" wrap="nowrap">
+                  <TextInput
+                    style={{ flex: 1 }}
+                    placeholder={`ロボット名 ${i + 1}`}
+                    value={rn}
+                    onChange={(e) =>
+                      setRobotNames((arr) => {
+                        const next = [...arr];
+                        next[i] = e.currentTarget.value;
+                        return next;
+                      })
+                    }
+                  />
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    aria-label="削除"
+                    disabled={robotNames.length <= 1}
+                    onClick={() =>
+                      setRobotNames((arr) => arr.filter((_, j) => j !== i))
+                    }
+                  >
+                    🗑️
+                  </ActionIcon>
+                </Group>
+              ))}
+              <Button
+                variant="subtle"
+                size="xs"
+                onClick={() => setRobotNames((arr) => [...arr, ""])}
+              >
+                ＋ ロボット追加
+              </Button>
+            </Stack>
+          </>
+        )}
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
             キャンセル
           </Button>
           <Button
             onClick={submit}
-            loading={create.isPending || update.isPending}
+            loading={create.isPending || update.isPending || robotsPending}
             disabled={!name.trim()}
           >
             保存

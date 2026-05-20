@@ -239,14 +239,20 @@ function RunCreateModal({ opened, onClose }: { opened: boolean; onClose: () => v
             label="Team"
             data={(teams.data?.data ?? []).map((t) => ({ value: t.id, label: t.name }))}
             value={teamId}
-            onChange={setTeamId}
+            onChange={(v) => {
+              setTeamId(v);
+              setRobotId(null);
+            }}
             required
           />
           <Select
             label="Robot"
-            data={(robots.data?.data ?? []).map((r) => ({ value: r.id, label: r.name }))}
+            data={(robots.data?.data ?? [])
+              .filter((r) => !teamId || r.teamId === teamId)
+              .map((r) => ({ value: r.id, label: r.name }))}
             value={robotId}
             onChange={setRobotId}
+            disabled={!teamId}
             required
           />
         </Group>

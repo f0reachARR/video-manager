@@ -144,10 +144,12 @@ function RunDetailPage() {
       </Title>
       <RunMetadataEditor
         run={r}
-        robotOptions={(robots.data?.data ?? []).map((x) => ({
-          value: x.id,
-          label: x.name,
-        }))}
+        robotOptions={(robots.data?.data ?? [])
+          .filter((x) => x.teamId === r.teamId)
+          .map((x) => ({
+            value: x.id,
+            label: x.name,
+          }))}
         scenarioOptions={(scenarios.data?.data ?? []).map((x) => ({
           value: x.id,
           label: x.name,

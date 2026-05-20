@@ -442,20 +442,26 @@ function NewFromVideosPage() {
                   label: t.name,
                 }))}
                 value={defaultTeam}
-                onChange={setDefaultTeam}
+                onChange={(v) => {
+                  setDefaultTeam(v);
+                  setDefaultRobot(null);
+                }}
                 searchable
                 clearable
               />
               <Select
                 label="Robot"
-                data={(robots.data?.data ?? []).map((r) => ({
-                  value: r.id,
-                  label: r.name,
-                }))}
+                data={(robots.data?.data ?? [])
+                  .filter((r) => !defaultTeam || r.teamId === defaultTeam)
+                  .map((r) => ({
+                    value: r.id,
+                    label: r.name,
+                  }))}
                 value={defaultRobot}
                 onChange={setDefaultRobot}
                 searchable
                 clearable
+                disabled={!defaultTeam}
               />
               <Select
                 label="Scenario"
@@ -584,7 +590,10 @@ function NewFromVideosPage() {
                               }))}
                               value={r.teamId}
                               onChange={(v) =>
-                                updateRegion(r.id, { teamId: v })
+                                updateRegion(r.id, {
+                                  teamId: v,
+                                  robotId: null,
+                                })
                               }
                               searchable
                             />
@@ -592,15 +601,21 @@ function NewFromVideosPage() {
                           <Table.Td>
                             <Select
                               size="xs"
-                              data={(robots.data?.data ?? []).map((rb) => ({
-                                value: rb.id,
-                                label: rb.name,
-                              }))}
+                              data={(robots.data?.data ?? [])
+                                .filter(
+                                  (rb) =>
+                                    !r.teamId || rb.teamId === r.teamId,
+                                )
+                                .map((rb) => ({
+                                  value: rb.id,
+                                  label: rb.name,
+                                }))}
                               value={r.robotId}
                               onChange={(v) =>
                                 updateRegion(r.id, { robotId: v })
                               }
                               searchable
+                              disabled={!r.teamId}
                             />
                           </Table.Td>
                           <Table.Td>
