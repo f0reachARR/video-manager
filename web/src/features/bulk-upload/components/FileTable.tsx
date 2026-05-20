@@ -1,6 +1,7 @@
 import { Badge, Checkbox, Group, Loader, Progress, Table, Text } from "@mantine/core";
 
 import type { ScannedFile } from "../hooks/useDirectoryScan";
+import type { BulkImageUploadItem } from "../hooks/useImageBulkUpload";
 import type { BulkVideoUploadItem } from "../hooks/useVideoBulkUpload";
 
 type Props = {
@@ -15,6 +16,7 @@ type Props = {
     onToggleAll: () => void;
   } | null;
   uploads?: Map<string, BulkVideoUploadItem>;
+  imageUploads?: Record<string, BulkImageUploadItem>;
 };
 
 const KIND_LABEL: Record<ScannedFile["mediaKind"], string> = {
@@ -39,15 +41,27 @@ function formatSize(bytes: number): string {
 // A file is selectable when (1) we know what it is, (2) the hash is
 // done, and (3) the server-side dedup says it's new. Known/uploading
 // rows expose informational badges but are skipped.
-export function isSelectable(f: ScannedFile, uploadState?: BulkVideoUploadItem): boolean {
+export function isSelectable(
+  f: ScannedFile,
+  uploadState?: BulkVideoUploadItem,
+  imageUploadState?: BulkImageUploadItem,
+): boolean {
   if (f.hashState !== "done") return false;
   if (f.mediaKind === "unknown") return false;
   if (f.checkState === "known") return false;
   if (uploadState && uploadState.state === "uploading") return false;
+  if (imageUploadState && imageUploadState.state === "uploading") return false;
   return true;
 }
 
-export function FileTable({ files, hashing, checking, selection, uploads }: Props) {
+export function FileTable({
+  files,
+  hashing,
+  checking,
+  selection,
+  uploads,
+  imageUploads,
+}: Props) {
   if (files.length === 0) {
     return (
       <Text c="dimmed" size="sm" py="md" ta="center">
@@ -56,7 +70,7 @@ export function FileTable({ files, hashing, checking, selection, uploads }: Prop
     );
   }
   const selectableKeys = files
-    .filter((f) => isSelectable(f, uploads?.get(f.key)))
+    .filter((f) => isSelectable(f, uploads?.get(f.key), imageUploads?.[f.key]))
     .map((f) => f.key);
   const allSelected =
     selection != null &&
@@ -88,7 +102,8 @@ export function FileTable({ files, hashing, checking, selection, uploads }: Prop
       <Table.Tbody>
         {files.map((f) => {
           const up = uploads?.get(f.key);
-          const selectable = isSelectable(f, up);
+          const imgUp = imageUploads?.[f.key];
+          const selectable = isSelectable(f, up, imgUp);
           return (
             <Table.Tr key={f.key}>
               {selection && (
@@ -118,6 +133,11 @@ export function FileTable({ files, hashing, checking, selection, uploads }: Prop
                     → image {f.knownResult.robotImageId}
                   </Text>
                 )}
+                {imgUp?.imageId && (
+                  <Text size="xs" c="dimmed" ff="monospace">
+                    → image {imgUp.imageId}
+                  </Text>
+                )}
               </Table.Td>
               <Table.Td>
                 <Text size="sm" c="dimmed">
@@ -130,6 +150,7 @@ export function FileTable({ files, hashing, checking, selection, uploads }: Prop
                   hashing={hashing}
                   checking={checking}
                   upload={up}
+                  imageUpload={imgUp}
                 />
               </Table.Td>
             </Table.Tr>
@@ -145,12 +166,40 @@ function StatusCell({
   hashing,
   checking,
   upload,
+  imageUpload,
 }: {
   file: ScannedFile;
   hashing: boolean;
   checking: boolean;
   upload?: BulkVideoUploadItem;
+  imageUpload?: BulkImageUploadItem;
 }) {
+  if (imageUpload) {
+    if (imageUpload.state === "uploading") {
+      return (
+        <Group gap={4}>
+          <Loader size="xs" />
+          <Text size="xs" c="dimmed">
+            送信中
+          </Text>
+        </Group>
+      );
+    }
+    if (imageUpload.state === "done") {
+      return (
+        <Badge color="green" variant="filled">
+          完了
+        </Badge>
+      );
+    }
+    if (imageUpload.state === "error") {
+      return (
+        <Badge color="red" variant="light" title={imageUpload.error}>
+          失敗
+        </Badge>
+      );
+    }
+  }
   // Upload state outranks everything else: once an upload starts the
   // dedup outcome becomes "this file is already going up".
   if (upload) {

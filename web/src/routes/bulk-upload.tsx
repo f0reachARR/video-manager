@@ -20,7 +20,9 @@ import {
   isSelectable,
 } from "../features/bulk-upload/components/FileTable";
 import { TournamentSelector } from "../features/bulk-upload/components/TournamentSelector";
+import { TeamRobotSelector } from "../features/bulk-upload/components/TeamRobotSelector";
 import { useDirectoryScan } from "../features/bulk-upload/hooks/useDirectoryScan";
+import { useImageBulkUpload } from "../features/bulk-upload/hooks/useImageBulkUpload";
 import { useVideoBulkUpload } from "../features/bulk-upload/hooks/useVideoBulkUpload";
 import { pickDirectory } from "../features/bulk-upload/lib/fsAccess";
 import { useSessions } from "../features/sessions/api/queries";
@@ -28,6 +30,8 @@ import { useCurrentUserId } from "../stores/currentUser";
 
 const LS_TOURNAMENT_KEY = "video-manager.bulk-upload.tournamentId";
 const LS_SESSION_KEY = "video-manager.bulk-upload.sessionId";
+const LS_TEAM_KEY = "video-manager.bulk-upload.teamId";
+const LS_ROBOT_KEY = "video-manager.bulk-upload.robotId";
 
 export const Route = createFileRoute("/bulk-upload")({
   component: BulkUploadPage,
@@ -63,6 +67,28 @@ function BulkUploadPage() {
   );
   const [clearing, setClearing] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [teamId, setTeamIdState] = useState<string | null>(() =>
+    typeof window !== "undefined"
+      ? window.localStorage.getItem(LS_TEAM_KEY)
+      : null,
+  );
+  const setTeamId = (v: string | null) => {
+    setTeamIdState(v);
+    if (typeof window === "undefined") return;
+    if (v) window.localStorage.setItem(LS_TEAM_KEY, v);
+    else window.localStorage.removeItem(LS_TEAM_KEY);
+  };
+  const [robotId, setRobotIdState] = useState<string | null>(() =>
+    typeof window !== "undefined"
+      ? window.localStorage.getItem(LS_ROBOT_KEY)
+      : null,
+  );
+  const setRobotId = (v: string | null) => {
+    setRobotIdState(v);
+    if (typeof window === "undefined") return;
+    if (v) window.localStorage.setItem(LS_ROBOT_KEY, v);
+    else window.localStorage.removeItem(LS_ROBOT_KEY);
+  };
 
   const scan = useDirectoryScan({ directory, tournamentId });
   const sessions = useSessions(
@@ -74,6 +100,7 @@ function BulkUploadPage() {
       ? { tournamentId, sessionId, uploaderId: currentUserId }
       : null,
   );
+  const imageUpload = useImageBulkUpload();
   const uploadsMap = useMemo(() => {
     const m = new Map<string, (typeof videoUpload.items)[number]>();
     for (const it of videoUpload.items) m.set(it.key, it);
@@ -126,7 +153,9 @@ function BulkUploadPage() {
   const makeToggleAll = (subset: typeof scan.files) => () =>
     setSelectedKeys((prev) => {
       const next = new Set(prev);
-      const eligible = subset.filter((f) => isSelectable(f, uploadsMap.get(f.key)));
+      const eligible = subset.filter((f) =>
+        isSelectable(f, uploadsMap.get(f.key), imageUpload.items[f.key]),
+      );
       const allOn = eligible.every((f) => next.has(f.key));
       if (allOn) for (const f of eligible) next.delete(f.key);
       else for (const f of eligible) next.add(f.key);
@@ -172,6 +201,10 @@ function BulkUploadPage() {
     () => videoFiles.filter((f) => selectedKeys.has(f.key)),
     [videoFiles, selectedKeys],
   );
+  const selectedImageFiles = useMemo(
+    () => imageFiles.filter((f) => selectedKeys.has(f.key)),
+    [imageFiles, selectedKeys],
+  );
 
   const startVideoUpload = () => {
     if (!sessionId || !tournamentId || selectedVideoFiles.length === 0) return;
@@ -179,6 +212,23 @@ function BulkUploadPage() {
     // Clear selection so the same file isn't accidentally queued twice.
     setSelectedKeys(
       (prev) => new Set([...prev].filter((k) => !selectedVideoFiles.some((f) => f.key === k))),
+    );
+  };
+
+  const startImageUpload = () => {
+    if (!tournamentId || !robotId || selectedImageFiles.length === 0) return;
+    void imageUpload.startBatch({
+      tournamentId,
+      robotId,
+      files: selectedImageFiles,
+    });
+    setSelectedKeys(
+      (prev) =>
+        new Set(
+          [...prev].filter(
+            (k) => !selectedImageFiles.some((f) => f.key === k),
+          ),
+        ),
     );
   };
 
@@ -286,14 +336,60 @@ function BulkUploadPage() {
               </Stack>
             </Tabs.Panel>
             <Tabs.Panel value="image" p="md">
-              <FileTable
-                files={imageFiles}
-                hashing={scan.hashing}
-                checking={scan.checking}
-              />
-              <Text size="xs" c="dimmed" mt="xs">
-                P5 でチーム/ロボット選択 → アップロード機能を追加予定。
-              </Text>
+              <Stack gap="sm">
+                <Group align="flex-end" wrap="wrap">
+                  <TeamRobotSelector
+                    tournamentId={tournamentId}
+                    teamId={teamId}
+                    robotId={robotId}
+                    onTeamChange={setTeamId}
+                    onRobotChange={setRobotId}
+                  />
+                  <Group gap="xs">
+                    <Badge variant="light">
+                      選択 {selectedImageFiles.length} 件
+                    </Badge>
+                    <Button
+                      size="sm"
+                      onClick={startImageUpload}
+                      disabled={
+                        !robotId ||
+                        !tournamentId ||
+                        selectedImageFiles.length === 0
+                      }
+                    >
+                      選択した画像をアップロード
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="subtle"
+                      onClick={imageUpload.clearFinished}
+                      disabled={
+                        !Object.values(imageUpload.items).some(
+                          (u) => u.state === "done",
+                        )
+                      }
+                    >
+                      完了行を片付ける
+                    </Button>
+                  </Group>
+                </Group>
+                <FileTable
+                  files={imageFiles}
+                  hashing={scan.hashing}
+                  checking={scan.checking}
+                  imageUploads={imageUpload.items}
+                  selection={{
+                    selected: selectedKeys,
+                    onToggle: toggle,
+                    onToggleAll: makeToggleAll(imageFiles),
+                  }}
+                />
+                <Text size="xs" c="dimmed">
+                  選択したロボットの写真として記録します。HEIC は JPEG
+                  に自動変換されます。
+                </Text>
+              </Stack>
             </Tabs.Panel>
             <Tabs.Panel value="unknown" p="md">
               <FileTable

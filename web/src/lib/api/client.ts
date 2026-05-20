@@ -279,6 +279,32 @@ export const robotImagesApi = {
       body: fd,
     });
   },
+  // Bulk-upload variant: tournamentId + per-file fingerprints are attached so
+  // the server records dedup memory in one round-trip with the upload.
+  uploadBulk: (
+    robotId: string,
+    items: { file: File; headHashHex: string; sizeBytes: number }[],
+    opts: { tournamentId: string; caption?: string },
+  ) => {
+    const fd = new FormData();
+    if (opts.caption) fd.append("caption", opts.caption);
+    fd.append("tournamentId", opts.tournamentId);
+    fd.append(
+      "fingerprints",
+      JSON.stringify(
+        items.map((it) => ({
+          filename: it.file.name,
+          headHashHex: it.headHashHex,
+          sizeBytes: it.sizeBytes,
+        })),
+      ),
+    );
+    for (const it of items) fd.append("file", it.file, it.file.name);
+    return request<RobotImageUploadResponse>(`/robots/${robotId}/images`, {
+      method: "POST",
+      body: fd,
+    });
+  },
   update: (imageId: string, body: UpdateRobotImageRequest) =>
     request<RobotImage>(`/robot-images/${imageId}`, { method: "PATCH", json: body }),
   remove: (imageId: string) =>
