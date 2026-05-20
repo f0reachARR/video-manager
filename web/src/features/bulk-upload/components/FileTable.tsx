@@ -1,8 +1,9 @@
-import { Badge, Button, Checkbox, Group, Loader, Progress, Table, Text } from "@mantine/core";
+import { Badge, Checkbox, Group, Loader, Progress, Table, Text } from "@mantine/core";
 
 import type { ScannedFile } from "../hooks/useDirectoryScan";
 import type { BulkImageUploadItem } from "../hooks/useImageBulkUpload";
 import type { BulkVideoUploadItem } from "../hooks/useVideoBulkUpload";
+import { UploadedVideoThumb } from "./UploadedVideoThumb";
 
 type Props = {
   files: ScannedFile[];
@@ -17,10 +18,10 @@ type Props = {
   } | null;
   uploads?: Map<string, BulkVideoUploadItem>;
   imageUploads?: Record<string, BulkImageUploadItem>;
-  // P6: clicking 「Run作成」 invokes this with the resolved video id.
-  // Only rendered on video rows whose status has yielded a video id
-  // (either freshly uploaded or already-known via the dedup check).
-  onCreateRun?: (videoId: string) => void;
+  // Render the small thumbnail + "▶" preview affordance on video rows
+  // that resolved to a video id. Click invokes this callback so the
+  // parent can open the preview modal.
+  onPreviewVideo?: (videoId: string) => void;
 };
 
 const KIND_LABEL: Record<ScannedFile["mediaKind"], string> = {
@@ -42,9 +43,31 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-// A file is selectable when (1) we know what it is, (2) the hash is
-// done, and (3) the server-side dedup says it's new. Known/uploading
-// rows expose informational badges but are skipped.
+// Resolve a row's video id. Either it was uploaded in this session (the
+// tus post-finish header surfaced it) or the server-side dedup check
+// recognized the fingerprint and returned the existing video id.
+export function rowVideoId(
+  f: ScannedFile,
+  uploadState?: BulkVideoUploadItem,
+): string | undefined {
+  return uploadState?.videoId ?? f.knownResult?.videoId ?? undefined;
+}
+
+// A row is "in flight" while either uploader has an active request for
+// it. Selection and the action buttons treat these rows as off-limits.
+function isInFlight(
+  uploadState?: BulkVideoUploadItem,
+  imageUploadState?: BulkImageUploadItem,
+): boolean {
+  if (uploadState && uploadState.state === "uploading") return true;
+  if (imageUploadState && imageUploadState.state === "uploading") return true;
+  return false;
+}
+
+// Selectable = enabled checkbox. We want both the "upload this" and
+// "create a Run from this" actions to share one selection model, so the
+// rule is intentionally loose: anything hashed, classified, and not
+// currently mid-upload.
 export function isSelectable(
   f: ScannedFile,
   uploadState?: BulkVideoUploadItem,
@@ -52,10 +75,29 @@ export function isSelectable(
 ): boolean {
   if (f.hashState !== "done") return false;
   if (f.mediaKind === "unknown") return false;
+  return !isInFlight(uploadState, imageUploadState);
+}
+
+// Per-row capability hints. The action bar reads these to count what's
+// actionable in the current selection.
+export function canUpload(
+  f: ScannedFile,
+  uploadState?: BulkVideoUploadItem,
+  imageUploadState?: BulkImageUploadItem,
+): boolean {
+  if (!isSelectable(f, uploadState, imageUploadState)) return false;
   if (f.checkState === "known") return false;
-  if (uploadState && uploadState.state === "uploading") return false;
-  if (imageUploadState && imageUploadState.state === "uploading") return false;
+  // A done video upload shouldn't be re-uploaded from this session.
+  if (uploadState && uploadState.state === "done") return false;
   return true;
+}
+
+export function canCreateRun(
+  f: ScannedFile,
+  uploadState?: BulkVideoUploadItem,
+): boolean {
+  if (f.mediaKind !== "video") return false;
+  return rowVideoId(f, uploadState) != null;
 }
 
 export function FileTable({
@@ -65,7 +107,7 @@ export function FileTable({
   selection,
   uploads,
   imageUploads,
-  onCreateRun,
+  onPreviewVideo,
 }: Props) {
   if (files.length === 0) {
     return (
@@ -98,6 +140,7 @@ export function FileTable({
               />
             </Table.Th>
           )}
+          <Table.Th style={{ width: 110 }}>プレビュー</Table.Th>
           <Table.Th style={{ width: 70 }}>種別</Table.Th>
           <Table.Th>ファイル名</Table.Th>
           <Table.Th style={{ width: 100 }}>サイズ</Table.Th>
@@ -109,6 +152,7 @@ export function FileTable({
           const up = uploads?.get(f.key);
           const imgUp = imageUploads?.[f.key];
           const selectable = isSelectable(f, up, imgUp);
+          const vid = rowVideoId(f, up);
           return (
             <Table.Tr key={f.key}>
               {selection && (
@@ -122,27 +166,31 @@ export function FileTable({
                 </Table.Td>
               )}
               <Table.Td>
+                {f.mediaKind === "video" && vid ? (
+                  <UploadedVideoThumb
+                    videoId={vid}
+                    onClick={
+                      onPreviewVideo ? () => onPreviewVideo(vid) : undefined
+                    }
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 96,
+                      height: 54,
+                      background: "var(--mantine-color-gray-1)",
+                      borderRadius: 4,
+                    }}
+                  />
+                )}
+              </Table.Td>
+              <Table.Td>
                 <Badge color={KIND_COLOR[f.mediaKind]} variant="light">
                   {KIND_LABEL[f.mediaKind]}
                 </Badge>
               </Table.Td>
               <Table.Td>
-                <Group gap="xs" wrap="nowrap" justify="space-between">
-                  <Text>{f.file.name}</Text>
-                  {(() => {
-                    const vid = up?.videoId ?? f.knownResult?.videoId;
-                    if (!onCreateRun || !vid || f.mediaKind !== "video") return null;
-                    return (
-                      <Button
-                        size="xs"
-                        variant="light"
-                        onClick={() => onCreateRun(vid)}
-                      >
-                        + Run
-                      </Button>
-                    );
-                  })()}
-                </Group>
+                <Text>{f.file.name}</Text>
                 {f.knownResult?.videoId && (
                   <Text size="xs" c="dimmed" ff="monospace">
                     → video {f.knownResult.videoId}
@@ -225,8 +273,6 @@ function StatusCell({
       );
     }
   }
-  // Upload state outranks everything else: once an upload starts the
-  // dedup outcome becomes "this file is already going up".
   if (upload) {
     if (upload.state === "uploading") {
       return (

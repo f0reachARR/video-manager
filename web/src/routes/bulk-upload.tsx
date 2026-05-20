@@ -10,18 +10,21 @@ import {
   Text,
 } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ResourcePage } from "../components/layout/ResourcePage";
 import { tournamentsApi } from "../lib/api/client";
 import { DirectoryControls } from "../features/bulk-upload/components/DirectoryControls";
 import {
   FileTable,
+  canCreateRun,
+  canUpload,
   isSelectable,
+  rowVideoId,
 } from "../features/bulk-upload/components/FileTable";
 import { TournamentSelector } from "../features/bulk-upload/components/TournamentSelector";
-import { CreateRunFromVideoModal } from "../features/bulk-upload/components/CreateRunFromVideoModal";
 import { TeamRobotSelector } from "../features/bulk-upload/components/TeamRobotSelector";
+import { VideoPreviewModal } from "../features/bulk-upload/components/VideoPreviewModal";
 import { useDirectoryScan } from "../features/bulk-upload/hooks/useDirectoryScan";
 import { useImageBulkUpload } from "../features/bulk-upload/hooks/useImageBulkUpload";
 import { useVideoBulkUpload } from "../features/bulk-upload/hooks/useVideoBulkUpload";
@@ -71,8 +74,6 @@ function BulkUploadPage() {
   const [directory, setDirectoryState] = useState<FileSystemDirectoryHandle | null>(
     null,
   );
-  // Restore last-picked directory handle on mount. Permission re-prompt
-  // happens lazily in useDirectoryScan when it tries to read.
   useEffect(() => {
     let cancelled = false;
     void loadDirectoryHandle().then((h) => {
@@ -89,7 +90,7 @@ function BulkUploadPage() {
   };
   const [clearing, setClearing] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  const [runForVideoId, setRunForVideoId] = useState<string | null>(null);
+  const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const [teamId, setTeamIdState] = useState<string | null>(() =>
     typeof window !== "undefined"
       ? window.localStorage.getItem(LS_TEAM_KEY)
@@ -130,8 +131,32 @@ function BulkUploadPage() {
     return m;
   }, [videoUpload.items]);
 
-  // If the selected session no longer belongs to the chosen tournament,
-  // clear the selection so the user is forced to pick a fresh one.
+  // Auto-rescan after the last in-flight upload settles. The transition
+  // detector compares the "anything uploading right now?" boolean against
+  // the previous tick — going true→false triggers a fresh scan so newly
+  // created videos pick up their server-side check result (and known/new
+  // badges reflect the new state without manual intervention). We don't
+  // re-fire while still busy, and we don't fire on initial mount when
+  // there's never been anything in flight.
+  const wasUploadingRef = useRef(false);
+  useEffect(() => {
+    const videoActive = videoUpload.items.some((u) => u.state === "uploading");
+    const imageActive = Object.values(imageUpload.items).some(
+      (u) => u.state === "uploading",
+    );
+    const active = videoActive || imageActive;
+    if (wasUploadingRef.current && !active) {
+      // Defer one tick so the tus hook has a chance to finish writing
+      // the fingerprint row before /check is re-issued.
+      const t = window.setTimeout(() => {
+        void scan.rescan();
+      }, 300);
+      wasUploadingRef.current = false;
+      return () => window.clearTimeout(t);
+    }
+    wasUploadingRef.current = active;
+  }, [videoUpload.items, imageUpload.items, scan]);
+
   useEffect(() => {
     if (!sessionId || !sessions.data) return;
     if (!sessions.data.data.some((s) => s.id === sessionId)) setSessionId(null);
@@ -171,8 +196,6 @@ function BulkUploadPage() {
     [],
   );
 
-  // "Toggle all" applies per-tab, so we accept the relevant files via a
-  // factory rather than hard-coding videoFiles.
   const makeToggleAll = (subset: typeof scan.files) => () =>
     setSelectedKeys((prev) => {
       const next = new Set(prev);
@@ -220,22 +243,66 @@ function BulkUploadPage() {
     [sessions.data],
   );
 
-  const selectedVideoFiles = useMemo(
-    () => videoFiles.filter((f) => selectedKeys.has(f.key)),
-    [videoFiles, selectedKeys],
+  // Selected-video buckets: rows the user could upload vs. rows the user
+  // could turn into a Run. They overlap freely — a freshly-uploaded video
+  // is upload-able no longer but Run-able now; a "known" video is the
+  // mirror image.
+  const selectedVideoUploadFiles = useMemo(
+    () =>
+      videoFiles.filter(
+        (f) =>
+          selectedKeys.has(f.key) && canUpload(f, uploadsMap.get(f.key)),
+      ),
+    [videoFiles, selectedKeys, uploadsMap],
   );
+  const selectedVideoRunIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const f of videoFiles) {
+      if (!selectedKeys.has(f.key)) continue;
+      const up = uploadsMap.get(f.key);
+      if (!canCreateRun(f, up)) continue;
+      const vid = rowVideoId(f, up);
+      if (vid) ids.push(vid);
+    }
+    return ids;
+  }, [videoFiles, selectedKeys, uploadsMap]);
   const selectedImageFiles = useMemo(
-    () => imageFiles.filter((f) => selectedKeys.has(f.key)),
-    [imageFiles, selectedKeys],
+    () =>
+      imageFiles.filter(
+        (f) =>
+          selectedKeys.has(f.key) &&
+          canUpload(f, undefined, imageUpload.items[f.key]),
+      ),
+    [imageFiles, selectedKeys, imageUpload.items],
   );
 
   const startVideoUpload = () => {
-    if (!sessionId || !tournamentId || selectedVideoFiles.length === 0) return;
-    videoUpload.startMany(selectedVideoFiles);
-    // Clear selection so the same file isn't accidentally queued twice.
+    if (
+      !sessionId ||
+      !tournamentId ||
+      selectedVideoUploadFiles.length === 0
+    )
+      return;
+    videoUpload.startMany(selectedVideoUploadFiles);
     setSelectedKeys(
-      (prev) => new Set([...prev].filter((k) => !selectedVideoFiles.some((f) => f.key === k))),
+      (prev) =>
+        new Set(
+          [...prev].filter(
+            (k) => !selectedVideoUploadFiles.some((f) => f.key === k),
+          ),
+        ),
     );
+  };
+
+  const openRunBulkCreate = () => {
+    if (selectedVideoRunIds.length === 0) return;
+    const params = new URLSearchParams({
+      videoIds: selectedVideoRunIds.join(","),
+    });
+    if (sessionId) params.set("sessionId", sessionId);
+    // Open in a new tab so the operator can continue uploading on this
+    // tab while the Run-creation page handles classification.
+    window.open(`/runs/new-from-videos?${params.toString()}`, "_blank", "noopener");
   };
 
   const startImageUpload = () => {
@@ -317,7 +384,8 @@ function BulkUploadPage() {
                   />
                   <Group gap="xs">
                     <Badge variant="light">
-                      選択 {selectedVideoFiles.length} 件
+                      アップロード可 {selectedVideoUploadFiles.length} /
+                      Run化可 {selectedVideoRunIds.length}
                     </Badge>
                     <Button
                       size="sm"
@@ -325,10 +393,25 @@ function BulkUploadPage() {
                       disabled={
                         !sessionId ||
                         !tournamentId ||
-                        selectedVideoFiles.length === 0
+                        selectedVideoUploadFiles.length === 0
                       }
                     >
                       選択した動画をアップロード
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="light"
+                      onClick={openRunBulkCreate}
+                      disabled={
+                        selectedVideoRunIds.length === 0 || !sessionId
+                      }
+                      title={
+                        !sessionId
+                          ? "Run 一括作成画面は Session 指定が必須です"
+                          : undefined
+                      }
+                    >
+                      選択動画から Run を作成 (別タブ)
                     </Button>
                     <Button
                       size="sm"
@@ -352,10 +435,10 @@ function BulkUploadPage() {
                     onToggle: toggle,
                     onToggleAll: makeToggleAll(videoFiles),
                   }}
-                  onCreateRun={(vid) => setRunForVideoId(vid)}
+                  onPreviewVideo={setPreviewVideoId}
                 />
                 <Text size="xs" c="dimmed">
-                  ハッシュ済 + 新規 + 未アップロードの動画だけが選択できます。アップロード完了行や既にアップ済の行は「+ Run」から即 Run を作成できます。
+                  ハッシュ済の動画は選択できます。新規ファイルはアップロード対象に、アップロード済 / 既にアップ済の行は Run 作成対象になります。アップロード完了後は自動で再スキャンします。
                 </Text>
               </Stack>
             </Tabs.Panel>
@@ -428,13 +511,9 @@ function BulkUploadPage() {
           </Tabs>
         </Card>
       </Stack>
-      <CreateRunFromVideoModal
-        videoId={runForVideoId}
-        tournamentId={tournamentId}
-        defaultSessionId={sessionId}
-        defaultTeamId={teamId}
-        defaultRobotId={robotId}
-        onClose={() => setRunForVideoId(null)}
+      <VideoPreviewModal
+        videoId={previewVideoId}
+        onClose={() => setPreviewVideoId(null)}
       />
     </ResourcePage>
   );
