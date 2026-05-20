@@ -26,6 +26,11 @@ import { useDirectoryScan } from "../features/bulk-upload/hooks/useDirectoryScan
 import { useImageBulkUpload } from "../features/bulk-upload/hooks/useImageBulkUpload";
 import { useVideoBulkUpload } from "../features/bulk-upload/hooks/useVideoBulkUpload";
 import { pickDirectory } from "../features/bulk-upload/lib/fsAccess";
+import {
+  clearDirectoryHandle,
+  loadDirectoryHandle,
+  saveDirectoryHandle,
+} from "../features/bulk-upload/lib/handleStore";
 import { useSessions } from "../features/sessions/api/queries";
 import { useCurrentUserId } from "../stores/currentUser";
 
@@ -63,9 +68,25 @@ function BulkUploadPage() {
     else window.localStorage.removeItem(LS_SESSION_KEY);
   };
 
-  const [directory, setDirectory] = useState<FileSystemDirectoryHandle | null>(
+  const [directory, setDirectoryState] = useState<FileSystemDirectoryHandle | null>(
     null,
   );
+  // Restore last-picked directory handle on mount. Permission re-prompt
+  // happens lazily in useDirectoryScan when it tries to read.
+  useEffect(() => {
+    let cancelled = false;
+    void loadDirectoryHandle().then((h) => {
+      if (!cancelled && h) setDirectoryState(h);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const setDirectory = (h: FileSystemDirectoryHandle | null) => {
+    setDirectoryState(h);
+    if (h) void saveDirectoryHandle(h);
+    else void clearDirectoryHandle();
+  };
   const [clearing, setClearing] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [runForVideoId, setRunForVideoId] = useState<string | null>(null);

@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Button } from "@mantine/core";
+import { Link, createFileRoute } from "@tanstack/react-router";
 
 import { ResourcePage } from "../components/layout/ResourcePage";
 import { useMatches } from "../features/matches/api/queries";
@@ -20,6 +21,16 @@ function PreMatchPage() {
       isLoading={matches.isLoading || tournaments.isLoading}
       error={matches.error}
       onRetry={() => matches.refetch()}
+      actions={
+        <Button
+          component={Link}
+          to="/bulk-upload"
+          variant="light"
+          size="sm"
+        >
+          現場一括アップロードを開く →
+        </Button>
+      }
     >
       <UpcomingMatchesList />
     </ResourcePage>
