@@ -1840,6 +1840,88 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /tournaments/{tournamentId}/teams:
+    parameters:
+      - $ref: "#/components/parameters/TournamentId"
+    get:
+      tags: [tournaments]
+      operationId: listTournamentTeams
+      summary: Tournament の参加チーム一覧
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentTeamList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [tournaments]
+      operationId: replaceTournamentTeams
+      summary: Tournament の参加チームを置換
+      description: |
+        渡された teamIds の集合に置換する（存在しないものは削除、追加分は追加）。
+        参加チームから外れたチーム配下の tournament_robots も同じトランザクションで削除する。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceTournamentTeamsRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentTeamList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /tournaments/{tournamentId}/robots:
+    parameters:
+      - $ref: "#/components/parameters/TournamentId"
+    get:
+      tags: [tournaments]
+      operationId: listTournamentRobots
+      summary: Tournament の持ち込みロボット一覧
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentRobotList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [tournaments]
+      operationId: replaceTournamentRobots
+      summary: Tournament の持ち込みロボットを置換
+      description: |
+        渡された robotIds の集合に置換する。各 robot の team_id が
+        tournament_teams に居ない場合は 422 を返す。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceTournamentRobotsRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentRobotList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
   # ---------- Matches (Phase 2) ----------
   /matches:
     get:
@@ -3137,6 +3219,44 @@ components:
             $ref: "#/components/schemas/Tournament"
         pagination:
           $ref: "#/components/schemas/Pagination"
+
+    TournamentTeamList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Team"
+    ReplaceTournamentTeamsRequest:
+      type: object
+      required: [teamIds]
+      properties:
+        teamIds:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+
+    TournamentRobotList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Robot"
+    ReplaceTournamentRobotsRequest:
+      type: object
+      required: [robotIds]
+      properties:
+        robotIds:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
 
     # ---------- Match (Phase 2) ----------
     Match:

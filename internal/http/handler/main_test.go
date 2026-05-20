@@ -55,7 +55,7 @@ func setupEnv(t *testing.T) *testEnv {
 		Sessions:  &handler.Sessions{Q: q},
 		Runs:      &handler.Runs{Q: q},
 		Markers:     &handler.Markers{Q: q},
-		Tournaments: &handler.Tournaments{Q: q},
+		Tournaments: &handler.Tournaments{Q: q, Pool: pool},
 		Matches:     &handler.Matches{Q: q},
 		Annotations:   &handler.Annotations{Q: q},
 		ScoutingNotes: &handler.ScoutingNotes{Q: q},

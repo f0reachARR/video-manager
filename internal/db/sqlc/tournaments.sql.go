@@ -11,6 +11,56 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addTournamentRobot = `-- name: AddTournamentRobot :exec
+INSERT INTO tournament_robots (tournament_id, robot_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type AddTournamentRobotParams struct {
+	TournamentID pgtype.UUID
+	RobotID      pgtype.UUID
+}
+
+func (q *Queries) AddTournamentRobot(ctx context.Context, arg AddTournamentRobotParams) error {
+	_, err := q.db.Exec(ctx, addTournamentRobot, arg.TournamentID, arg.RobotID)
+	return err
+}
+
+const addTournamentTeam = `-- name: AddTournamentTeam :exec
+INSERT INTO tournament_teams (tournament_id, team_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type AddTournamentTeamParams struct {
+	TournamentID pgtype.UUID
+	TeamID       pgtype.UUID
+}
+
+func (q *Queries) AddTournamentTeam(ctx context.Context, arg AddTournamentTeamParams) error {
+	_, err := q.db.Exec(ctx, addTournamentTeam, arg.TournamentID, arg.TeamID)
+	return err
+}
+
+const clearTournamentRobots = `-- name: ClearTournamentRobots :exec
+DELETE FROM tournament_robots WHERE tournament_id = $1
+`
+
+func (q *Queries) ClearTournamentRobots(ctx context.Context, tournamentID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearTournamentRobots, tournamentID)
+	return err
+}
+
+const clearTournamentTeams = `-- name: ClearTournamentTeams :exec
+DELETE FROM tournament_teams WHERE tournament_id = $1
+`
+
+func (q *Queries) ClearTournamentTeams(ctx context.Context, tournamentID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearTournamentTeams, tournamentID)
+	return err
+}
+
 const createTournament = `-- name: CreateTournament :one
 INSERT INTO tournaments (name, start_date, end_date)
 VALUES ($1, $2, $3)
@@ -65,6 +115,109 @@ func (q *Queries) GetTournament(ctx context.Context, id pgtype.UUID) (Tournament
 	return i, err
 }
 
+const listRobotsByTournament = `-- name: ListRobotsByTournament :many
+SELECT r.id, r.team_id, r.name, r.version, r.created_at, r.primary_image_id
+FROM tournament_robots tr
+JOIN robots r ON r.id = tr.robot_id
+WHERE tr.tournament_id = $1
+ORDER BY r.name ASC, r.version ASC
+`
+
+func (q *Queries) ListRobotsByTournament(ctx context.Context, tournamentID pgtype.UUID) ([]Robot, error) {
+	rows, err := q.db.Query(ctx, listRobotsByTournament, tournamentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Robot
+	for rows.Next() {
+		var i Robot
+		if err := rows.Scan(
+			&i.ID,
+			&i.TeamID,
+			&i.Name,
+			&i.Version,
+			&i.CreatedAt,
+			&i.PrimaryImageID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTeamsByTournament = `-- name: ListTeamsByTournament :many
+
+SELECT t.id, t.name, t.is_own, t.created_at
+FROM tournament_teams tt
+JOIN teams t ON t.id = tt.team_id
+WHERE tt.tournament_id = $1
+ORDER BY t.is_own DESC, t.name ASC
+`
+
+// ---------- Tournament <-> Team / Robot links (P0) ----------
+func (q *Queries) ListTeamsByTournament(ctx context.Context, tournamentID pgtype.UUID) ([]Team, error) {
+	rows, err := q.db.Query(ctx, listTeamsByTournament, tournamentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Team
+	for rows.Next() {
+		var i Team
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.IsOwn,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTournamentRobotsTeamIDs = `-- name: ListTournamentRobotsTeamIDs :many
+SELECT id, team_id
+FROM robots
+WHERE id = ANY($1::uuid[])
+`
+
+type ListTournamentRobotsTeamIDsRow struct {
+	ID     pgtype.UUID
+	TeamID pgtype.UUID
+}
+
+// 整合性チェック用: PUT /tournaments/{id}/robots で渡された各 robot の team_id が
+// 大会の参加チームに含まれているかを検証するために、対象 robot_ids の team_id を一括取得する。
+func (q *Queries) ListTournamentRobotsTeamIDs(ctx context.Context, robotIds []pgtype.UUID) ([]ListTournamentRobotsTeamIDsRow, error) {
+	rows, err := q.db.Query(ctx, listTournamentRobotsTeamIDs, robotIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTournamentRobotsTeamIDsRow
+	for rows.Next() {
+		var i ListTournamentRobotsTeamIDsRow
+		if err := rows.Scan(&i.ID, &i.TeamID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTournamentsPage = `-- name: ListTournamentsPage :many
 SELECT id, name, start_date, end_date, created_at
 FROM tournaments
@@ -104,6 +257,42 @@ func (q *Queries) ListTournamentsPage(ctx context.Context, arg ListTournamentsPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeTournamentRobot = `-- name: RemoveTournamentRobot :execrows
+DELETE FROM tournament_robots
+WHERE tournament_id = $1 AND robot_id = $2
+`
+
+type RemoveTournamentRobotParams struct {
+	TournamentID pgtype.UUID
+	RobotID      pgtype.UUID
+}
+
+func (q *Queries) RemoveTournamentRobot(ctx context.Context, arg RemoveTournamentRobotParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeTournamentRobot, arg.TournamentID, arg.RobotID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const removeTournamentTeam = `-- name: RemoveTournamentTeam :execrows
+DELETE FROM tournament_teams
+WHERE tournament_id = $1 AND team_id = $2
+`
+
+type RemoveTournamentTeamParams struct {
+	TournamentID pgtype.UUID
+	TeamID       pgtype.UUID
+}
+
+func (q *Queries) RemoveTournamentTeam(ctx context.Context, arg RemoveTournamentTeamParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeTournamentTeam, arg.TournamentID, arg.TeamID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateTournament = `-- name: UpdateTournament :one

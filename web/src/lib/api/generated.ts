@@ -1045,6 +1045,54 @@ export interface paths {
         patch: operations["updateTournament"];
         trace?: never;
     };
+    "/tournaments/{tournamentId}/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        /** Tournament の参加チーム一覧 */
+        get: operations["listTournamentTeams"];
+        /**
+         * Tournament の参加チームを置換
+         * @description 渡された teamIds の集合に置換する（存在しないものは削除、追加分は追加）。
+         *     参加チームから外れたチーム配下の tournament_robots も同じトランザクションで削除する。
+         */
+        put: operations["replaceTournamentTeams"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tournaments/{tournamentId}/robots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        /** Tournament の持ち込みロボット一覧 */
+        get: operations["listTournamentRobots"];
+        /**
+         * Tournament の持ち込みロボットを置換
+         * @description 渡された robotIds の集合に置換する。各 robot の team_id が
+         *     tournament_teams に居ない場合は 422 を返す。
+         */
+        put: operations["replaceTournamentRobots"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/matches": {
         parameters: {
             query?: never;
@@ -1655,6 +1703,18 @@ export interface components {
         TournamentList: {
             data: components["schemas"]["Tournament"][];
             pagination: components["schemas"]["Pagination"];
+        };
+        TournamentTeamList: {
+            data: components["schemas"]["Team"][];
+        };
+        ReplaceTournamentTeamsRequest: {
+            teamIds: string[];
+        };
+        TournamentRobotList: {
+            data: components["schemas"]["Robot"][];
+        };
+        ReplaceTournamentRobotsRequest: {
+            robotIds: string[];
         };
         Match: {
             /** Format: uuid */
@@ -4108,6 +4168,108 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    listTournamentTeams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TournamentTeamList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    replaceTournamentTeams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceTournamentTeamsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TournamentTeamList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    listTournamentRobots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TournamentRobotList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    replaceTournamentRobots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceTournamentRobotsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TournamentRobotList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     listMatches: {

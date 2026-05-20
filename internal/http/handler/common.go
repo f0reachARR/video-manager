@@ -14,8 +14,22 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+// errMissingPool is returned when a handler that needs a transaction is
+// constructed without a pgxpool.Pool. Programmer error, surfaced as 500.
+var errMissingPool = errors.New("handler is missing pgxpool.Pool")
+
+// isFKViolation reports whether err is a Postgres foreign-key violation.
+func isFKViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23503"
+	}
+	return false
+}
 
 // Optional represents a JSON-PATCH style field that distinguishes between
 // "not present" (Set=false) and "present, possibly null" (Set=true, Value/Null).

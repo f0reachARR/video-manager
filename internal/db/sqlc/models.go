@@ -420,6 +420,18 @@ type Tournament struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type TournamentRobot struct {
+	TournamentID pgtype.UUID
+	RobotID      pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+}
+
+type TournamentTeam struct {
+	TournamentID pgtype.UUID
+	TeamID       pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+}
+
 type User struct {
 	ID        pgtype.UUID
 	Name      string

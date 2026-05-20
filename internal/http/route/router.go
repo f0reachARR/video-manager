@@ -194,6 +194,10 @@ func mountAuthedRoutes(r chi.Router, d Deps) {
 		r.Get("/{tournamentId}", d.Tournaments.Get)
 		r.Patch("/{tournamentId}", d.Tournaments.Update)
 		r.Delete("/{tournamentId}", d.Tournaments.Delete)
+		r.Get("/{tournamentId}/teams", d.Tournaments.ListTeams)
+		r.Put("/{tournamentId}/teams", d.Tournaments.ReplaceTeams)
+		r.Get("/{tournamentId}/robots", d.Tournaments.ListRobots)
+		r.Put("/{tournamentId}/robots", d.Tournaments.ReplaceRobots)
 	})
 
 	r.Route("/matches", func(r chi.Router) {
