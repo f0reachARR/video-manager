@@ -27,6 +27,7 @@ import {
 } from "../../features/runs/components/RunVideosTable";
 import { RecommendedVideos } from "../../features/runs/components/RecommendedVideos";
 import { RunMetadataEditor } from "../../features/runs/components/RunMetadataEditor";
+import { RunRobotImagesStrip } from "../../features/robot-images/components/RunRobotImagesStrip";
 
 export const Route = createFileRoute("/runs/$runId")({
   component: RunDetailPage,
@@ -138,6 +139,8 @@ function RunDetailPage() {
       <RunVideosTable run={r} />
 
       <RecommendedVideos run={r} />
+
+      <RunRobotImagesStrip runId={r.id} />
 
       <Title order={4} mt="lg">
         メタデータ

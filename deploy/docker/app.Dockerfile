@@ -17,7 +17,9 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/app ./cmd/app
 # images symmetric and lets the API also handle small jobs in dev.
 FROM alpine:3.20
 
-RUN apk add --no-cache ffmpeg ca-certificates tzdata
+# libheif-tools provides heif-convert, used by the robot-image upload path
+# to transcode HEIC photos from iOS into browser-renderable JPEG.
+RUN apk add --no-cache ffmpeg libheif-tools ca-certificates tzdata
 
 WORKDIR /app
 COPY --from=build /out/app /app/app

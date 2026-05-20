@@ -13,6 +13,9 @@ import (
 type Querier interface {
 	AddRunTag(ctx context.Context, arg AddRunTagParams) error
 	AddRunVideo(ctx context.Context, arg AddRunVideoParams) (RunVideo, error)
+	// 画像削除時に primary が同じ id を指していたら NULL に戻す。FK の
+	// ON DELETE SET NULL でも同じ結果になるが、明示的に呼べると分かりやすい。
+	ClearRobotPrimaryImageIfMatches(ctx context.Context, arg ClearRobotPrimaryImageIfMatchesParams) error
 	ClearRunTags(ctx context.Context, runID pgtype.UUID) error
 	CountMarkersByTeamAndCategory(ctx context.Context, teamID pgtype.UUID) ([]CountMarkersByTeamAndCategoryRow, error)
 	CountRenditionsByStatus(ctx context.Context, videoID pgtype.UUID) (CountRenditionsByStatusRow, error)
@@ -38,6 +41,7 @@ type Querier interface {
 	DeleteMarker(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteMatch(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteRobot(ctx context.Context, id pgtype.UUID) (int64, error)
+	DeleteRobotImage(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteRun(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteRunVideo(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteRunVideoByRunAndVideo(ctx context.Context, arg DeleteRunVideoByRunAndVideoParams) (int64, error)
@@ -56,6 +60,7 @@ type Querier interface {
 	GetOwnTeam(ctx context.Context) (Team, error)
 	GetRendition(ctx context.Context, id pgtype.UUID) (VideoRendition, error)
 	GetRobot(ctx context.Context, id pgtype.UUID) (Robot, error)
+	GetRobotImage(ctx context.Context, id pgtype.UUID) (RobotImage, error)
 	GetRun(ctx context.Context, id pgtype.UUID) (Run, error)
 	GetRunVideo(ctx context.Context, id pgtype.UUID) (RunVideo, error)
 	GetScenario(ctx context.Context, id pgtype.UUID) (Scenario, error)
@@ -72,6 +77,7 @@ type Querier interface {
 	GetVideoByStorageKey(ctx context.Context, storageKey string) (Video, error)
 	IncrementRenditionSegments(ctx context.Context, id pgtype.UUID) (int64, error)
 	InsertRendition(ctx context.Context, arg InsertRenditionParams) (VideoRendition, error)
+	InsertRobotImage(ctx context.Context, arg InsertRobotImageParams) (RobotImage, error)
 	LinkUserOIDC(ctx context.Context, arg LinkUserOIDCParams) (User, error)
 	ListAnnotationsByVideo(ctx context.Context, videoID pgtype.UUID) ([]Annotation, error)
 	ListDevices(ctx context.Context) ([]Device, error)
@@ -87,6 +93,9 @@ type Querier interface {
 	ListRecommendedVideosForRun(ctx context.Context, id pgtype.UUID) ([]Video, error)
 	ListRenditionsByVideo(ctx context.Context, videoID pgtype.UUID) ([]VideoRendition, error)
 	ListRenditionsByVideos(ctx context.Context, videoIds []pgtype.UUID) ([]VideoRendition, error)
+	// 任意で captured_at 範囲を絞れる。range が NULL の側は無制限。
+	// sort 方向は caller が `order` で 'asc' / 'desc' を渡す (空なら asc)。
+	ListRobotImagesByRobot(ctx context.Context, arg ListRobotImagesByRobotParams) ([]RobotImage, error)
 	ListRobotsByTeam(ctx context.Context, teamID pgtype.UUID) ([]Robot, error)
 	ListRobotsPage(ctx context.Context, arg ListRobotsPageParams) ([]Robot, error)
 	ListRunTagsByRun(ctx context.Context, runID pgtype.UUID) ([]pgtype.UUID, error)
@@ -118,11 +127,13 @@ type Querier interface {
 	MarkRenditionFailed(ctx context.Context, arg MarkRenditionFailedParams) (int64, error)
 	MarkRenditionReady(ctx context.Context, arg MarkRenditionReadyParams) (int64, error)
 	SearchRuns(ctx context.Context, arg SearchRunsParams) ([]Run, error)
+	SetRobotPrimaryImage(ctx context.Context, arg SetRobotPrimaryImageParams) error
 	UpdateAnnotation(ctx context.Context, arg UpdateAnnotationParams) (Annotation, error)
 	UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error)
 	UpdateMarker(ctx context.Context, arg UpdateMarkerParams) (Marker, error)
 	UpdateMatch(ctx context.Context, arg UpdateMatchParams) (Match, error)
 	UpdateRobot(ctx context.Context, arg UpdateRobotParams) (Robot, error)
+	UpdateRobotImage(ctx context.Context, arg UpdateRobotImageParams) (RobotImage, error)
 	UpdateRun(ctx context.Context, arg UpdateRunParams) (Run, error)
 	UpdateRunVideo(ctx context.Context, arg UpdateRunVideoParams) (RunVideo, error)
 	UpdateScenario(ctx context.Context, arg UpdateScenarioParams) (Scenario, error)

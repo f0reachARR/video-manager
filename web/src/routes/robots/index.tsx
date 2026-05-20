@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Avatar,
   Button,
   Group,
   Modal,
@@ -10,26 +11,27 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { ResourcePage } from "../components/layout/ResourcePage";
-import type { Robot } from "../lib/api/client";
+import { ResourcePage } from "../../components/layout/ResourcePage";
+import { type Robot, robotImagesApi } from "../../lib/api/client";
 import {
   useCreateRobot,
   useDeleteRobot,
   useRobots,
   useTeams,
   useUpdateRobot,
-} from "../lib/queries";
+} from "../../lib/queries";
 
-export const Route = createFileRoute("/robots")({
+export const Route = createFileRoute("/robots/")({
   component: RobotsPage,
 });
 
 function RobotsPage() {
   const robots = useRobots();
   const teams = useTeams();
+  const navigate = useNavigate();
   const [opened, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<Robot | null>(null);
   const list = robots.data?.data ?? [];
@@ -66,16 +68,24 @@ function RobotsPage() {
       <Table striped highlightOnHover withRowBorders={false}>
         <Table.Thead>
           <Table.Tr>
+            <Table.Th style={{ width: 56 }}></Table.Th>
             <Table.Th>名前</Table.Th>
             <Table.Th>バージョン</Table.Th>
             <Table.Th>チーム</Table.Th>
             <Table.Th>作成日時</Table.Th>
-            <Table.Th style={{ width: 120 }}>操作</Table.Th>
+            <Table.Th style={{ width: 160 }}>操作</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
           {list.map((r) => (
             <Table.Tr key={r.id}>
+              <Table.Td>
+                <Avatar
+                  src={r.primaryImageId ? robotImagesApi.thumbUrl(r.primaryImageId) : undefined}
+                  size={40}
+                  radius="sm"
+                />
+              </Table.Td>
               <Table.Td>{r.name}</Table.Td>
               <Table.Td>{r.version || "—"}</Table.Td>
               <Table.Td>{teamNameById.get(r.teamId) ?? r.teamId}</Table.Td>
@@ -87,13 +97,19 @@ function RobotsPage() {
                     setEditing(r);
                     open();
                   }}
+                  onManageImages={() =>
+                    navigate({
+                      to: "/robots/$robotId/images",
+                      params: { robotId: r.id },
+                    })
+                  }
                 />
               </Table.Td>
             </Table.Tr>
           ))}
           {list.length === 0 && (
             <Table.Tr>
-              <Table.Td colSpan={5}>
+              <Table.Td colSpan={6}>
                 <Text c="dimmed" ta="center" py="md">
                   まだロボットがいません
                 </Text>
@@ -113,12 +129,23 @@ function RobotsPage() {
   );
 }
 
-function RobotActions({ robot, onEdit }: { robot: Robot; onEdit: () => void }) {
+function RobotActions({
+  robot,
+  onEdit,
+  onManageImages,
+}: {
+  robot: Robot;
+  onEdit: () => void;
+  onManageImages: () => void;
+}) {
   const del = useDeleteRobot();
   return (
     <Group gap={4}>
       <ActionIcon variant="subtle" onClick={onEdit} aria-label="編集">
         ✏️
+      </ActionIcon>
+      <ActionIcon variant="subtle" onClick={onManageImages} aria-label="画像">
+        🖼️
       </ActionIcon>
       <ActionIcon
         variant="subtle"

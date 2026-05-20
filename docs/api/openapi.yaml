@@ -560,6 +560,181 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  # ---------- Robot Images ----------
+  /robots/{robotId}/images:
+    parameters:
+      - name: robotId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [robot-images]
+      operationId: listRobotImages
+      summary: ロボット画像一覧 (時系列順)
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [asc, desc], default: asc }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RobotImageList" }
+    post:
+      tags: [robot-images]
+      operationId: uploadRobotImages
+      summary: 画像アップロード (複数可)
+      description: |
+        multipart/form-data。`file` パートを複数並べると一度に登録できる。
+        各ファイルは独立に処理され、一部失敗時でもレスポンスの per-file
+        `error` で結果が分かる。HEIC は JPEG に変換されて display として
+        保存される。EXIF DateTimeOriginal がある場合は `capturedAt` に
+        セットされる。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                caption:
+                  type: string
+                  description: アップロードするすべての画像に同じキャプションを付与
+      responses:
+        "201":
+          description: 少なくとも 1 件が成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RobotImageUploadResponse" }
+        "400":
+          description: 全ファイルが失敗、もしくはファイル無し
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RobotImageUploadResponse" }
+        "413":
+          description: リクエストサイズ超過
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /robots/{robotId}/primary-image:
+    parameters:
+      - name: robotId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      tags: [robot-images]
+      operationId: setRobotPrimaryImage
+      summary: primary 画像を切り替え
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                imageId:
+                  type: [string, "null"]
+                  format: uuid
+      responses:
+        "204": { description: OK }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /robot-images/{imageId}:
+    parameters:
+      - name: imageId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [robot-images]
+      operationId: updateRobotImage
+      summary: キャプション / 撮影日時の更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRobotImageRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RobotImage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [robot-images]
+      operationId: deleteRobotImage
+      summary: 画像削除
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /robot-images/{imageId}/raw:
+    parameters:
+      - name: imageId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [robot-images]
+      operationId: getRobotImageRaw
+      summary: 画像本体 (HEIC など browser 非対応の場合は JPEG 変換版)
+      responses:
+        "200":
+          description: image bytes
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png:  { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /robot-images/{imageId}/thumb:
+    parameters:
+      - name: imageId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [robot-images]
+      operationId: getRobotImageThumb
+      summary: サムネ JPEG (長辺 320px)
+      responses:
+        "200":
+          description: thumb jpeg
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /runs/{runId}/robot-images:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [robot-images]
+      operationId: listRunRobotImages
+      summary: Run の時間帯に撮影された同じロボットの画像
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RobotImageList" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   # ---------- Scenarios ----------
   /scenarios:
     get:
@@ -2115,7 +2290,7 @@ components:
     # ---------- Robot ----------
     Robot:
       type: object
-      required: [id, teamId, name, version, createdAt]
+      required: [id, teamId, name, version, primaryImageId, createdAt]
       properties:
         id:
           type: string
@@ -2128,6 +2303,10 @@ components:
         version:
           type: string
           description: バージョン文字列。空文字列も可
+        primaryImageId:
+          type: [string, "null"]
+          format: uuid
+          description: 一覧サムネに使う画像 ID。未設定なら null
         createdAt:
           type: string
           format: date-time
@@ -2162,6 +2341,69 @@ components:
             $ref: "#/components/schemas/Robot"
         pagination:
           $ref: "#/components/schemas/Pagination"
+
+    # ---------- Robot Image ----------
+    RobotImage:
+      type: object
+      required:
+        - id
+        - robotId
+        - contentType
+        - sizeBytes
+        - caption
+        - capturedAt
+        - createdAt
+      properties:
+        id: { type: string, format: uuid }
+        robotId: { type: string, format: uuid }
+        contentType:
+          type: string
+          description: 原本の MIME。HEIC のときも原本のまま入る
+        width:
+          type: [integer, "null"]
+        height:
+          type: [integer, "null"]
+        sizeBytes: { type: integer, format: int64 }
+        caption: { type: string }
+        capturedAt:
+          type: [string, "null"]
+          format: date-time
+          description: EXIF DateTimeOriginal。無い場合は null (UI 上は created_at にフォールバック)
+        uploaderId:
+          type: [string, "null"]
+          format: uuid
+        createdAt: { type: string, format: date-time }
+    RobotImageList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/RobotImage" }
+    UpdateRobotImageRequest:
+      type: object
+      properties:
+        caption: { type: string }
+        capturedAt:
+          type: [string, "null"]
+          format: date-time
+    RobotImageUploadResult:
+      type: object
+      required: [filename]
+      properties:
+        filename: { type: string }
+        image:
+          $ref: "#/components/schemas/RobotImage"
+        error:
+          type: string
+          description: そのファイルが失敗したとき、その理由
+    RobotImageUploadResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/RobotImageUploadResult" }
 
     # ---------- Scenario ----------
     Scenario:

@@ -143,6 +143,7 @@ func run() error {
 		ScoutingNotes:  &handler.ScoutingNotes{Q: q},
 		WS:             &handler.WS{Hub: hub, AllowedOrigins: cfg.AllowedOrigins},
 		Uploads:        &handler.Uploads{Q: q, Worker: workers},
+		RobotImages:    &handler.RobotImages{Q: q, Storage: store},
 		Auth:           authHandler,
 		AuthMiddleware: appmid.AuthDeps{Q: q, Signer: signer, DevBypass: cfg.AuthDevBypass},
 		AllowedOrigins: cfg.AllowedOrigins,

@@ -30,6 +30,7 @@ type Deps struct {
 	WS             *handler.WS
 	Uploads        *handler.Uploads
 	Auth           *handler.Auth
+	RobotImages    *handler.RobotImages
 	AuthMiddleware appmid.AuthDeps
 	AllowedOrigins []string
 }
@@ -112,7 +113,21 @@ func mountAuthedRoutes(r chi.Router, d Deps) {
 		r.Get("/{robotId}", d.Robots.Get)
 		r.Patch("/{robotId}", d.Robots.Update)
 		r.Delete("/{robotId}", d.Robots.Delete)
+		if d.RobotImages != nil {
+			r.Get("/{robotId}/images", d.RobotImages.List)
+			r.Post("/{robotId}/images", d.RobotImages.Upload)
+			r.Put("/{robotId}/primary-image", d.RobotImages.SetPrimary)
+		}
 	})
+
+	if d.RobotImages != nil {
+		r.Route("/robot-images", func(r chi.Router) {
+			r.Patch("/{imageId}", d.RobotImages.Update)
+			r.Delete("/{imageId}", d.RobotImages.Delete)
+			r.Get("/{imageId}/raw", d.RobotImages.Raw)
+			r.Get("/{imageId}/thumb", d.RobotImages.Thumb)
+		})
+	}
 
 	r.Route("/scenarios", func(r chi.Router) {
 		r.Get("/", d.Scenarios.List)
@@ -166,6 +181,9 @@ func mountAuthedRoutes(r chi.Router, d Deps) {
 		r.Get("/{runId}/recommended-videos", d.Runs.RecommendedVideos)
 		r.Get("/{runId}/markers", d.Markers.List)
 		r.Post("/{runId}/markers", d.Markers.Create)
+		if d.RobotImages != nil {
+			r.Get("/{runId}/robot-images", d.RobotImages.ListForRun)
+		}
 	})
 
 	r.Get("/search/runs", d.Runs.Search)

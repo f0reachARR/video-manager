@@ -25,6 +25,11 @@ export type CreateRobotRequest = components["schemas"]["CreateRobotRequest"];
 export type UpdateRobotRequest = components["schemas"]["UpdateRobotRequest"];
 export type RobotList = components["schemas"]["RobotList"];
 
+export type RobotImage = components["schemas"]["RobotImage"];
+export type RobotImageList = components["schemas"]["RobotImageList"];
+export type RobotImageUploadResponse = components["schemas"]["RobotImageUploadResponse"];
+export type UpdateRobotImageRequest = components["schemas"]["UpdateRobotImageRequest"];
+
 export type Scenario = components["schemas"]["Scenario"];
 export type CreateScenarioRequest = components["schemas"]["CreateScenarioRequest"];
 export type UpdateScenarioRequest = components["schemas"]["UpdateScenarioRequest"];
@@ -241,6 +246,37 @@ export const robotsApi = {
     request<Robot>(`/robots/${id}`, { method: "PATCH", json: body }),
   remove: (id: string) =>
     request<void>(`/robots/${id}`, { method: "DELETE" }),
+};
+
+// ---- Robot images ----
+export type RobotImageListParams = { from?: string; to?: string; sort?: "asc" | "desc" };
+export const robotImagesApi = {
+  list: (robotId: string, p: RobotImageListParams = {}) =>
+    request<RobotImageList>(
+      `/robots/${robotId}/images${qs({ from: p.from, to: p.to, sort: p.sort })}`,
+    ),
+  upload: (robotId: string, files: File[], caption?: string) => {
+    const fd = new FormData();
+    if (caption) fd.append("caption", caption);
+    for (const f of files) fd.append("file", f, f.name);
+    return request<RobotImageUploadResponse>(`/robots/${robotId}/images`, {
+      method: "POST",
+      body: fd,
+    });
+  },
+  update: (imageId: string, body: UpdateRobotImageRequest) =>
+    request<RobotImage>(`/robot-images/${imageId}`, { method: "PATCH", json: body }),
+  remove: (imageId: string) =>
+    request<void>(`/robot-images/${imageId}`, { method: "DELETE" }),
+  setPrimary: (robotId: string, imageId: string | null) =>
+    request<void>(`/robots/${robotId}/primary-image`, {
+      method: "PUT",
+      json: { imageId },
+    }),
+  listForRun: (runId: string) =>
+    request<RobotImageList>(`/runs/${runId}/robot-images`),
+  rawUrl: (imageId: string) => `${BASE_URL}/robot-images/${imageId}/raw`,
+  thumbUrl: (imageId: string) => `${BASE_URL}/robot-images/${imageId}/thumb`,
 };
 
 // ---- Scenarios ----

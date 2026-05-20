@@ -326,6 +326,129 @@ export interface paths {
         patch: operations["updateRobot"];
         trace?: never;
     };
+    "/robots/{robotId}/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robotId: string;
+            };
+            cookie?: never;
+        };
+        /** ロボット画像一覧 (時系列順) */
+        get: operations["listRobotImages"];
+        put?: never;
+        /**
+         * 画像アップロード (複数可)
+         * @description multipart/form-data。`file` パートを複数並べると一度に登録できる。
+         *     各ファイルは独立に処理され、一部失敗時でもレスポンスの per-file
+         *     `error` で結果が分かる。HEIC は JPEG に変換されて display として
+         *     保存される。EXIF DateTimeOriginal がある場合は `capturedAt` に
+         *     セットされる。
+         */
+        post: operations["uploadRobotImages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/robots/{robotId}/primary-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robotId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** primary 画像を切り替え */
+        put: operations["setRobotPrimaryImage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/robot-images/{imageId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                imageId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 画像削除 */
+        delete: operations["deleteRobotImage"];
+        options?: never;
+        head?: never;
+        /** キャプション / 撮影日時の更新 */
+        patch: operations["updateRobotImage"];
+        trace?: never;
+    };
+    "/robot-images/{imageId}/raw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                imageId: string;
+            };
+            cookie?: never;
+        };
+        /** 画像本体 (HEIC など browser 非対応の場合は JPEG 変換版) */
+        get: operations["getRobotImageRaw"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/robot-images/{imageId}/thumb": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                imageId: string;
+            };
+            cookie?: never;
+        };
+        /** サムネ JPEG (長辺 320px) */
+        get: operations["getRobotImageThumb"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{runId}/robot-images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        /** Run の時間帯に撮影された同じロボットの画像 */
+        get: operations["listRunRobotImages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scenarios": {
         parameters: {
             query?: never;
@@ -1071,6 +1194,11 @@ export interface components {
             name: string;
             /** @description バージョン文字列。空文字列も可 */
             version: string;
+            /**
+             * Format: uuid
+             * @description 一覧サムネに使う画像 ID。未設定なら null
+             */
+            primaryImageId: string | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -1088,6 +1216,45 @@ export interface components {
         RobotList: {
             data: components["schemas"]["Robot"][];
             pagination: components["schemas"]["Pagination"];
+        };
+        RobotImage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            robotId: string;
+            /** @description 原本の MIME。HEIC のときも原本のまま入る */
+            contentType: string;
+            width?: number | null;
+            height?: number | null;
+            /** Format: int64 */
+            sizeBytes: number;
+            caption: string;
+            /**
+             * Format: date-time
+             * @description EXIF DateTimeOriginal。無い場合は null (UI 上は created_at にフォールバック)
+             */
+            capturedAt: string | null;
+            /** Format: uuid */
+            uploaderId?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        RobotImageList: {
+            data: components["schemas"]["RobotImage"][];
+        };
+        UpdateRobotImageRequest: {
+            caption?: string;
+            /** Format: date-time */
+            capturedAt?: string | null;
+        };
+        RobotImageUploadResult: {
+            filename: string;
+            image?: components["schemas"]["RobotImage"];
+            /** @description そのファイルが失敗したとき、その理由 */
+            error?: string;
+        };
+        RobotImageUploadResponse: {
+            data: components["schemas"]["RobotImageUploadResult"][];
         };
         Scenario: {
             /** Format: uuid */
@@ -2351,6 +2518,227 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listRobotImages: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                sort?: "asc" | "desc";
+            };
+            header?: never;
+            path: {
+                robotId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotImageList"];
+                };
+            };
+        };
+    };
+    uploadRobotImages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robotId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    file: string[];
+                    /** @description アップロードするすべての画像に同じキャプションを付与 */
+                    caption?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 少なくとも 1 件が成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotImageUploadResponse"];
+                };
+            };
+            /** @description 全ファイルが失敗、もしくはファイル無し */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotImageUploadResponse"];
+                };
+            };
+            /** @description リクエストサイズ超過 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    setRobotPrimaryImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robotId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    imageId?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteRobotImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                imageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateRobotImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                imageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRobotImageRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotImage"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRobotImageRaw: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                imageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description image bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRobotImageThumb: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                imageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description thumb jpeg */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listRunRobotImages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotImageList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     listScenarios: {

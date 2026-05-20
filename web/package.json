@@ -15,6 +15,7 @@
     "@hocuspocus/provider-react": "^4.0.0",
     "@mantine/core": "^9.2.1",
     "@mantine/dates": "^9.2.1",
+    "@mantine/dropzone": "^9.2.1",
     "@mantine/hooks": "^9.2.1",
     "@tanstack/react-query": "^5.100.10",
     "@tanstack/react-router": "^1.169.2",

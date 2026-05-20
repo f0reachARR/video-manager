@@ -313,11 +313,31 @@ type Match struct {
 }
 
 type Robot struct {
-	ID        pgtype.UUID
-	TeamID    pgtype.UUID
-	Name      string
-	Version   string
-	CreatedAt pgtype.Timestamptz
+	ID             pgtype.UUID
+	TeamID         pgtype.UUID
+	Name           string
+	Version        string
+	CreatedAt      pgtype.Timestamptz
+	PrimaryImageID pgtype.UUID
+}
+
+type RobotImage struct {
+	ID                 pgtype.UUID
+	RobotID            pgtype.UUID
+	StorageKey         string
+	ContentType        string
+	DisplayKey         *string
+	DisplayContentType *string
+	ThumbnailKey       string
+	SizeBytes          int64
+	Width              *int32
+	Height             *int32
+	CapturedAt         pgtype.Timestamptz
+	ExifOrientation    *int16
+	Caption            string
+	UploaderID         pgtype.UUID
+	CreatedAt          pgtype.Timestamptz
+	SortAt             pgtype.Timestamptz
 }
 
 type Run struct {

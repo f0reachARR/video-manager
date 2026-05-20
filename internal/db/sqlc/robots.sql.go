@@ -14,7 +14,7 @@ import (
 const createRobot = `-- name: CreateRobot :one
 INSERT INTO robots (team_id, name, version)
 VALUES ($1, $2, $3)
-RETURNING id, team_id, name, version, created_at
+RETURNING id, team_id, name, version, created_at, primary_image_id
 `
 
 type CreateRobotParams struct {
@@ -32,6 +32,7 @@ func (q *Queries) CreateRobot(ctx context.Context, arg CreateRobotParams) (Robot
 		&i.Name,
 		&i.Version,
 		&i.CreatedAt,
+		&i.PrimaryImageID,
 	)
 	return i, err
 }
@@ -49,7 +50,7 @@ func (q *Queries) DeleteRobot(ctx context.Context, id pgtype.UUID) (int64, error
 }
 
 const getRobot = `-- name: GetRobot :one
-SELECT id, team_id, name, version, created_at FROM robots WHERE id = $1
+SELECT id, team_id, name, version, created_at, primary_image_id FROM robots WHERE id = $1
 `
 
 func (q *Queries) GetRobot(ctx context.Context, id pgtype.UUID) (Robot, error) {
@@ -61,12 +62,13 @@ func (q *Queries) GetRobot(ctx context.Context, id pgtype.UUID) (Robot, error) {
 		&i.Name,
 		&i.Version,
 		&i.CreatedAt,
+		&i.PrimaryImageID,
 	)
 	return i, err
 }
 
 const listRobotsByTeam = `-- name: ListRobotsByTeam :many
-SELECT id, team_id, name, version, created_at FROM robots WHERE team_id = $1 ORDER BY name, version
+SELECT id, team_id, name, version, created_at, primary_image_id FROM robots WHERE team_id = $1 ORDER BY name, version
 `
 
 func (q *Queries) ListRobotsByTeam(ctx context.Context, teamID pgtype.UUID) ([]Robot, error) {
@@ -84,6 +86,7 @@ func (q *Queries) ListRobotsByTeam(ctx context.Context, teamID pgtype.UUID) ([]R
 			&i.Name,
 			&i.Version,
 			&i.CreatedAt,
+			&i.PrimaryImageID,
 		); err != nil {
 			return nil, err
 		}
@@ -96,7 +99,7 @@ func (q *Queries) ListRobotsByTeam(ctx context.Context, teamID pgtype.UUID) ([]R
 }
 
 const listRobotsPage = `-- name: ListRobotsPage :many
-SELECT id, team_id, name, version, created_at
+SELECT id, team_id, name, version, created_at, primary_image_id
 FROM robots
 WHERE
   ($2::uuid IS NULL OR team_id = $2::uuid)
@@ -132,6 +135,7 @@ func (q *Queries) ListRobotsPage(ctx context.Context, arg ListRobotsPageParams) 
 			&i.Name,
 			&i.Version,
 			&i.CreatedAt,
+			&i.PrimaryImageID,
 		); err != nil {
 			return nil, err
 		}
@@ -149,7 +153,7 @@ SET
   name = COALESCE($1, name),
   version = COALESCE($2, version)
 WHERE id = $3
-RETURNING id, team_id, name, version, created_at
+RETURNING id, team_id, name, version, created_at, primary_image_id
 `
 
 type UpdateRobotParams struct {
@@ -167,6 +171,7 @@ func (q *Queries) UpdateRobot(ctx context.Context, arg UpdateRobotParams) (Robot
 		&i.Name,
 		&i.Version,
 		&i.CreatedAt,
+		&i.PrimaryImageID,
 	)
 	return i, err
 }

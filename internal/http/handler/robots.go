@@ -14,21 +14,27 @@ type Robots struct {
 }
 
 type robotDTO struct {
-	ID        string    `json:"id"`
-	TeamID    string    `json:"teamId"`
-	Name      string    `json:"name"`
-	Version   string    `json:"version"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID             string    `json:"id"`
+	TeamID         string    `json:"teamId"`
+	Name           string    `json:"name"`
+	Version        string    `json:"version"`
+	PrimaryImageID *string   `json:"primaryImageId"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 func toRobotDTO(r sqlc.Robot) robotDTO {
-	return robotDTO{
+	out := robotDTO{
 		ID:        uuidString(r.ID),
 		TeamID:    uuidString(r.TeamID),
 		Name:      r.Name,
 		Version:   r.Version,
 		CreatedAt: r.CreatedAt.Time,
 	}
+	if r.PrimaryImageID.Valid {
+		s := uuidString(r.PrimaryImageID)
+		out.PrimaryImageID = &s
+	}
+	return out
 }
 
 type createRobotRequest struct {

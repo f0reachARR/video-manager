@@ -21,4 +21,6 @@ export const queryKeys = {
   run: (id: string) => ["runs", "detail", id] as const,
   markers: (runId: string, params: MarkerListParams = {}) =>
     ["markers", runId, params] as const,
+  robotImages: (robotId: string) => ["robot-images", "by-robot", robotId] as const,
+  runRobotImages: (runId: string) => ["robot-images", "by-run", runId] as const,
 };

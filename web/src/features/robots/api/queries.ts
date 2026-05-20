@@ -14,6 +14,13 @@ export const useRobots = (params: RobotListParams = {}) =>
     queryFn: () => robotsApi.list({ limit: 200, ...params }),
   });
 
+export const useRobot = (id: string | null | undefined) =>
+  useQuery({
+    queryKey: ["robots", "detail", id ?? ""] as const,
+    queryFn: () => robotsApi.get(id as string),
+    enabled: !!id,
+  });
+
 export const useCreateRobot = () => {
   const qc = useQueryClient();
   return useMutation({
