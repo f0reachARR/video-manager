@@ -3,6 +3,7 @@ import { Badge, Checkbox, Group, Loader, Progress, Table, Text } from "@mantine/
 import type { ScannedFile } from "../hooks/useDirectoryScan";
 import type { BulkImageUploadItem } from "../hooks/useImageBulkUpload";
 import type { BulkVideoUploadItem } from "../hooks/useVideoBulkUpload";
+import { UploadedVideoActions } from "./UploadedVideoActions";
 import { UploadedVideoThumb } from "./UploadedVideoThumb";
 
 type Props = {
@@ -22,6 +23,12 @@ type Props = {
   // that resolved to a video id. Click invokes this callback so the
   // parent can open the preview modal.
   onPreviewVideo?: (videoId: string) => void;
+  // When true, render an "操作" column that mounts the /videos page's
+  // VideoActions (playback / HLS status / metadata edit / session
+  // assign / delete) for each row with a resolved video id. Used in
+  // the アップロード済 section so the operator gets the same per-row
+  // controls as the standalone video list.
+  showVideoActions?: boolean;
 };
 
 const KIND_LABEL: Record<ScannedFile["mediaKind"], string> = {
@@ -77,6 +84,7 @@ export function FileTable({
   uploads,
   imageUploads,
   onPreviewVideo,
+  showVideoActions,
 }: Props) {
   if (files.length === 0) {
     return (
@@ -114,6 +122,7 @@ export function FileTable({
           <Table.Th>ファイル名</Table.Th>
           <Table.Th style={{ width: 100 }}>サイズ</Table.Th>
           <Table.Th style={{ width: 220 }}>状態</Table.Th>
+          {showVideoActions && <Table.Th style={{ width: 220 }}>操作</Table.Th>}
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
@@ -195,6 +204,17 @@ export function FileTable({
                   imageUpload={imgUp}
                 />
               </Table.Td>
+              {showVideoActions && (
+                <Table.Td>
+                  {vid ? (
+                    <UploadedVideoActions videoId={vid} />
+                  ) : (
+                    <Text size="xs" c="dimmed">
+                      —
+                    </Text>
+                  )}
+                </Table.Td>
+              )}
             </Table.Tr>
           );
         })}

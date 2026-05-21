@@ -531,6 +531,7 @@ function BulkUploadPage() {
                       ),
                     }}
                     onPreviewVideo={setPreviewVideoId}
+                    showVideoActions
                   />
                 </Stack>
 
