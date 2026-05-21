@@ -41,12 +41,19 @@ type Config struct {
 	// Worker queue configuration. The app process polls "default" by default;
 	// dedicated worker nodes can set WORKER_QUEUES="default,encode" (or just
 	// "encode") to pull the heavy HLS encode jobs.
-	WorkerQueues             []string `env:"WORKER_QUEUES" envDefault:"default" envSeparator:","`
+	WorkerQueues             []string `env:"WORKER_QUEUES" envDefault:"default,encode" envSeparator:","`
 	WorkerDefaultConcurrency int      `env:"WORKER_CONCURRENCY_DEFAULT" envDefault:"4"`
-	WorkerEncodeConcurrency  int      `env:"WORKER_CONCURRENCY_ENCODE" envDefault:"1"`
+	WorkerEncodeConcurrency  int      `env:"WORKER_CONCURRENCY_ENCODE" envDefault:"4"`
 
-	// HTTP API URL (used by worker nodes if they need to call back; reserved).
+	// API base URL — used by the external hls-worker process when calling
+	// the /internal/worker/jobs/* endpoints. Unused by the API itself.
 	APIBaseURL string `env:"API_BASE_URL" envDefault:""`
+
+	// WorkerAuthToken is the shared secret used by the external hls-worker
+	// to authenticate against /internal/worker/jobs/*. When empty, those
+	// endpoints respond 503 (no worker configured); only set this once an
+	// external worker is actually running.
+	WorkerAuthToken string `env:"WORKER_AUTH_TOKEN" envDefault:""`
 
 	// OIDC / authentication. When OIDCIssuerURL is empty, OIDC is disabled
 	// entirely and only the dev-bypass path (X-User-Id header) works.

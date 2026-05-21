@@ -1,0 +1,318 @@
+openapi: 3.1.0
+info:
+  title: Video Manager Internal Worker API
+  version: 0.1.0
+  description: |
+    Internal HTTP API exposed by the video-manager app for the external
+    `hls-worker` process. Mounted under `/internal/worker/`.
+
+    These endpoints are NOT for end users or the SPA. They are guarded by a
+    shared bearer token (`WORKER_AUTH_TOKEN`) and intentionally excluded from
+    the SPA's generated TypeScript client. The protocol is documented here
+    only so worker implementations can be authored against a stable contract.
+
+    Lifecycle:
+
+    1. Worker long-polls `POST /jobs/claim` with the queues it can service.
+    2. On 200 the worker runs ffmpeg/ffprobe and uploads results to S3
+       directly.
+    3. While the job runs the worker calls `POST /jobs/{id}/heartbeat` at
+       least every 30s to keep its lease alive.
+    4. For encode jobs the worker can post batched
+       `POST /jobs/{id}/progress` to advance the rendition's segments_done.
+    5. Worker terminates the job via either `POST /jobs/{id}/complete`
+       (success) or `POST /jobs/{id}/fail` (error).
+    6. The API restarts the job via River retry on failure or lease
+       expiration.
+
+servers:
+  - url: /
+
+security:
+  - workerToken: []
+
+tags:
+  - name: worker
+    description: External hls-worker coordination
+
+paths:
+  /internal/worker/jobs/claim:
+    post:
+      tags: [worker]
+      operationId: workerClaim
+      summary: Long-poll for the next pending job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimRequest'
+      responses:
+        '200':
+          description: A job was assigned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+        '204':
+          description: No work available within the long-poll window
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/WorkerDisabled'
+
+  /internal/worker/jobs/{jobId}/heartbeat:
+    post:
+      tags: [worker]
+      operationId: workerHeartbeat
+      summary: Extend the lease on an in-flight job
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaseAuth'
+      responses:
+        '200':
+          description: Lease extended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeartbeatResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/LeaseInvalid'
+        '410':
+          $ref: '#/components/responses/JobGone'
+
+  /internal/worker/jobs/{jobId}/progress:
+    post:
+      tags: [worker]
+      operationId: workerProgress
+      summary: Report incremental progress (encode jobs)
+      description: |
+        Body is one of the type-specific progress payloads (e.g.
+        `EncodeProgress`). The server distinguishes by the job's type.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/EncodeProgress'
+      responses:
+        '204':
+          description: Accepted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/LeaseInvalid'
+        '410':
+          $ref: '#/components/responses/JobGone'
+
+  /internal/worker/jobs/{jobId}/complete:
+    post:
+      tags: [worker]
+      operationId: workerComplete
+      summary: Mark a job successfully complete
+      description: |
+        Body is one of the type-specific completion payloads
+        (`ProbeComplete` for `video.probe`, `EncodeComplete` for
+        `video.hls.encode_variant`).
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ProbeComplete'
+                - $ref: '#/components/schemas/EncodeComplete'
+      responses:
+        '204':
+          description: Recorded
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/LeaseInvalid'
+        '410':
+          $ref: '#/components/responses/JobGone'
+
+  /internal/worker/jobs/{jobId}/fail:
+    post:
+      tags: [worker]
+      operationId: workerFail
+      summary: Mark a job failed; the API will retry it via River
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FailRequest'
+      responses:
+        '204':
+          description: Recorded
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/LeaseInvalid'
+        '410':
+          $ref: '#/components/responses/JobGone'
+
+components:
+  securitySchemes:
+    workerToken:
+      type: http
+      scheme: bearer
+      description: Shared secret matching the API's WORKER_AUTH_TOKEN env
+
+  parameters:
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid worker bearer token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    LeaseInvalid:
+      description: Lease token does not match the claimed job
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    JobGone:
+      description: Job is no longer tracked (canceled, expired, or app restarted)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    WorkerDisabled:
+      description: WORKER_AUTH_TOKEN is not configured on the API
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+
+    ClaimRequest:
+      type: object
+      required: [workerId, queues]
+      properties:
+        workerId: { type: string }
+        queues:
+          type: array
+          items:
+            type: string
+            enum: [probe, encode]
+        waitMs:
+          type: integer
+          minimum: 0
+          description: Preferred long-poll wait in milliseconds; server clamps.
+
+    ClaimResponse:
+      type: object
+      required: [jobId, type, leaseToken, leaseExpiresAt, payload]
+      properties:
+        jobId: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [video.probe, video.hls.encode_variant]
+        leaseToken: { type: string }
+        leaseExpiresAt: { type: string, format: date-time }
+        payload:
+          description: One of ProbeClaim or EncodeClaim, depending on `type`.
+          oneOf:
+            - $ref: '#/components/schemas/ProbeClaim'
+            - $ref: '#/components/schemas/EncodeClaim'
+
+    LeaseAuth:
+      type: object
+      required: [leaseToken]
+      properties:
+        leaseToken: { type: string }
+
+    HeartbeatResponse:
+      type: object
+      required: [leaseExpiresAt]
+      properties:
+        leaseExpiresAt: { type: string, format: date-time }
+
+    FailRequest:
+      allOf:
+        - $ref: '#/components/schemas/LeaseAuth'
+        - type: object
+          required: [error]
+          properties:
+            error: { type: string }
+
+    ProbeClaim:
+      type: object
+      required: [videoId, sourceUrl, thumbnailKey, deviceTimeOffsetSec]
+      properties:
+        videoId: { type: string, format: uuid }
+        sourceUrl: { type: string, format: uri, description: Presigned GET URL }
+        thumbnailKey: { type: string, description: S3 key the worker writes the thumbnail to }
+        deviceTimeOffsetSec: { type: integer, format: int32 }
+
+    ProbeComplete:
+      allOf:
+        - $ref: '#/components/schemas/LeaseAuth'
+        - type: object
+          required: [passthroughOk]
+          properties:
+            recordedAt: { type: string, format: date-time, nullable: true }
+            durationSec: { type: integer, format: int32, nullable: true }
+            videoCodec: { type: string }
+            audioCodec: { type: string }
+            width: { type: integer, format: int32, nullable: true }
+            height: { type: integer, format: int32, nullable: true }
+            passthroughOk: { type: boolean }
+            thumbnailKey:
+              type: string
+              description: Echoes back the key the worker actually wrote, or empty on failure.
+
+    EncodeClaim:
+      type: object
+      required: [videoId, renditionId, sourceUrl, hlsPrefix, passthrough, segmentSec]
+      properties:
+        videoId: { type: string, format: uuid }
+        renditionId: { type: string, format: uuid }
+        sourceUrl: { type: string, format: uri }
+        hlsPrefix: { type: string, description: "S3 prefix for segments/playlist (e.g. hls/<videoId>/<kind>/)" }
+        passthrough: { type: boolean }
+        width: { type: integer, format: int32 }
+        height: { type: integer, format: int32 }
+        videoBitrate: { type: string }
+        audioBitrate: { type: string }
+        segmentSec: { type: integer }
+
+    EncodeProgress:
+      allOf:
+        - $ref: '#/components/schemas/LeaseAuth'
+        - type: object
+          required: [segmentsDone]
+          properties:
+            segmentsDone:
+              type: integer
+              format: int32
+              description: Absolute (not delta) count for idempotency on retries.
+
+    EncodeComplete:
+      $ref: '#/components/schemas/LeaseAuth'

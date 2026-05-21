@@ -2,12 +2,10 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,8 +13,9 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
+	"github.com/f0reachARR/video-manager/internal/hlswire"
 	"github.com/f0reachARR/video-manager/internal/storage"
-	"github.com/f0reachARR/video-manager/internal/worker/ffmpeg"
+	"github.com/f0reachARR/video-manager/internal/worker/dispatch"
 )
 
 // EncodeVariantArgs is the payload for a single video.hls.encode_variant job.
@@ -40,21 +39,27 @@ func (EncodeVariantArgs) InsertOpts() river.InsertOpts {
 	}
 }
 
-// EncodeVariantWorker encodes (or remuxes) one rendition of a video, uploading
-// each finalized HLS segment and the updated playlist to S3 as ffmpeg writes
-// them. After ffmpeg exits successfully it enqueues a finalize job; on failure
-// the rendition row is marked failed and River retries via its default backoff.
+// EncodeVariantWorker hands an encode_variant job off to the external
+// hls-worker. It prepares (presigns source, clears prior S3 prefix, flips
+// rendition status), submits the job to the dispatcher, applies progress
+// updates as the worker reports them, and marks the rendition ready/failed
+// based on the outcome.
 type EncodeVariantWorker struct {
 	river.WorkerDefaults[EncodeVariantArgs]
-	Q       *sqlc.Queries
-	Storage *storage.Client
-	Manager *Manager
+	Q          *sqlc.Queries
+	Storage    *storage.Client
+	Manager    *Manager
+	Dispatcher *dispatch.Dispatcher
 }
 
 func (w *EncodeVariantWorker) Timeout(_ *river.Job[EncodeVariantArgs]) time.Duration {
 	// long encodes are expected; cap at 6h to bound runaway jobs.
 	return 6 * time.Hour
 }
+
+// presignEncodeTTL matches the worker Timeout so a single presigned URL is
+// good for the entire encode without re-issuing.
+const presignEncodeTTL = 6 * time.Hour
 
 func (w *EncodeVariantWorker) Work(ctx context.Context, job *river.Job[EncodeVariantArgs]) (workErr error) {
 	renditionID, err := uuid.Parse(job.Args.RenditionID)
@@ -80,10 +85,6 @@ func (w *EncodeVariantWorker) Work(ctx context.Context, job *river.Job[EncodeVar
 	v, err := w.Q.GetVideo(ctx, videoPgID)
 	if err != nil {
 		return fmt.Errorf("get video: %w", err)
-	}
-
-	if !ffmpeg.FFmpegAvailable() || !ffmpeg.IsAvailable() {
-		return errors.New("ffmpeg/ffprobe not available on this worker")
 	}
 
 	// Mark encoding *before* clearing S3 so failure between the two leaves the
@@ -125,67 +126,61 @@ func (w *EncodeVariantWorker) Work(ctx context.Context, job *river.Job[EncodeVar
 		return fmt.Errorf("clear hls prefix: %w", err)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "vm-hls-"+rend.ID.String()+"-")
-	if err != nil {
-		return fmt.Errorf("mkdtemp: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	// Long-lived presigned URL for ffmpeg input. 6h matches our worker timeout.
-	srcURL, _, err := w.Storage.PresignGetWithTTL(ctx, v.StorageKey, 6*time.Hour)
+	srcURL, _, err := w.Storage.PresignGetWithTTL(ctx, v.StorageKey, presignEncodeTTL)
 	if err != nil {
 		return fmt.Errorf("presign source: %w", err)
 	}
 
-	opt := ffmpeg.HLSOptions{
-		Input:       srcURL,
-		OutDir:      tmpDir,
+	claim := hlswire.EncodeClaim{
+		VideoID:     v.ID.String(),
+		RenditionID: rend.ID.String(),
+		SourceURL:   srcURL,
+		HLSPrefix:   hlsPrefix,
 		Passthrough: rend.Passthrough,
 		SegmentSec:  6,
 	}
 	if !rend.Passthrough {
-		opt.Width = int(rend.Width)
-		opt.Height = int(rend.Height)
-		opt.VideoBitrate = videoBitrateFor(rend.Kind)
-		opt.AudioBitrate = audioBitrateFor(rend.Kind)
+		claim.Width = rend.Width
+		claim.Height = rend.Height
+		claim.VideoBitrate = videoBitrateFor(rend.Kind)
+		claim.AudioBitrate = audioBitrateFor(rend.Kind)
+	}
+	payload, err := json.Marshal(claim)
+	if err != nil {
+		return fmt.Errorf("marshal encode claim: %w", err)
 	}
 
-	// Uploader fires per segment. We serialize uploads (a single goroutine via
-	// a mutex) so playlist.m3u8 is always uploaded after the segments it lists.
-	var mu sync.Mutex
-	upload := func(name string) {
-		mu.Lock()
-		defer mu.Unlock()
-		segKey := hlsPrefix + name
-		segPath := filepath.Join(tmpDir, name)
-		if err := w.Storage.PutFile(ctx, segKey, "video/mp2t", segPath); err != nil {
-			slog.Warn("upload segment failed", "renditionId", rend.ID.String(), "segment", name, "error", err)
-			return
+	// Progress callback applies SegmentsDone monotonically. We compare against
+	// the last value we observed so retransmits (worker retrying a /progress
+	// after a transient API error) don't cause regressions in the DB.
+	var lastSegments int32
+	onProgress := func(ctx context.Context, body json.RawMessage) error {
+		var p hlswire.EncodeProgress
+		if err := json.Unmarshal(body, &p); err != nil {
+			return fmt.Errorf("decode progress: %w", err)
 		}
-		playlistPath := filepath.Join(tmpDir, ffmpeg.PlaylistName)
-		if _, err := os.Stat(playlistPath); err == nil {
-			if err := w.Storage.PutFile(ctx, hlsPrefix+ffmpeg.PlaylistName, "application/vnd.apple.mpegurl", playlistPath); err != nil {
-				slog.Warn("upload playlist failed", "renditionId", rend.ID.String(), "error", err)
+		if p.SegmentsDone <= lastSegments {
+			return nil
+		}
+		delta := p.SegmentsDone - lastSegments
+		lastSegments = p.SegmentsDone
+		for i := int32(0); i < delta; i++ {
+			if _, err := w.Q.IncrementRenditionSegments(ctx, rendPgID); err != nil {
+				slog.Warn("increment segments_done failed", "renditionId", rend.ID.String(), "error", err)
 			}
 		}
-		if _, err := w.Q.IncrementRenditionSegments(ctx, rendPgID); err != nil {
-			slog.Warn("increment segments_done failed", "renditionId", rend.ID.String(), "error", err)
-		}
+		return nil
 	}
 
-	if err := ffmpeg.RunHLS(ctx, opt, upload); err != nil {
-		return fmt.Errorf("run hls: %w", err)
+	res := w.Dispatcher.Submit(ctx, &dispatch.Job{
+		Type:       hlswire.TypeEncodeVariant,
+		Queue:      hlswire.QueueEncode,
+		Payload:    payload,
+		OnProgress: onProgress,
+	})
+	if res.Err != nil {
+		return fmt.Errorf("encode via worker: %w", res.Err)
 	}
-
-	// Final playlist upload — ffmpeg writes #EXT-X-ENDLIST on success, and the
-	// last segment notification may have raced with the rewrite.
-	mu.Lock()
-	finalPlaylist := filepath.Join(tmpDir, ffmpeg.PlaylistName)
-	if err := w.Storage.PutFile(ctx, hlsPrefix+ffmpeg.PlaylistName, "application/vnd.apple.mpegurl", finalPlaylist); err != nil {
-		mu.Unlock()
-		return fmt.Errorf("upload final playlist: %w", err)
-	}
-	mu.Unlock()
 
 	bw := rend.BandwidthBps
 	if _, err := w.Q.MarkRenditionReady(ctx, sqlc.MarkRenditionReadyParams{

@@ -32,6 +32,8 @@ type Deps struct {
 	Uploads        *handler.Uploads
 	Auth           *handler.Auth
 	RobotImages    *handler.RobotImages
+	WorkerInternal *handler.WorkerInternal
+	WorkerToken    string
 	AuthMiddleware appmid.AuthDeps
 	AllowedOrigins []string
 }
@@ -73,6 +75,17 @@ func New(d Deps) http.Handler {
 	}
 
 	r.Post("/uploads/tus-hook", d.Uploads.TusHook)
+
+	if d.WorkerInternal != nil {
+		r.Route("/internal/worker", func(r chi.Router) {
+			r.Use(appmid.WorkerAuth(d.WorkerToken))
+			r.Post("/jobs/claim", d.WorkerInternal.Claim)
+			r.Post("/jobs/{jobId}/heartbeat", d.WorkerInternal.Heartbeat)
+			r.Post("/jobs/{jobId}/progress", d.WorkerInternal.Progress)
+			r.Post("/jobs/{jobId}/complete", d.WorkerInternal.Complete)
+			r.Post("/jobs/{jobId}/fail", d.WorkerInternal.Fail)
+		})
+	}
 
 	r.Group(func(r chi.Router) {
 		r.Use(appmid.RequireAuth())

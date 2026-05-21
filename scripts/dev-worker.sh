@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
-# Run a standalone encode worker against the dev Postgres + MinIO.
+# Run a standalone hls-worker against the dev API.
 #
 # Usage:
-#   scripts/dev-worker.sh                # default: polls "encode" queue
-#   DEV_WORKER_QUEUES=default,encode \
-#     scripts/dev-worker.sh              # poll both queues
-#   DEV_WORKER_HTTP_ADDR=:8082 \
-#     scripts/dev-worker.sh              # use a different port (avoids clash
-#                                        # with `scripts/dev.sh`'s worker on :8081)
+#   scripts/dev-worker.sh                       # default: probe + encode
+#   DEV_WORKER_QUEUES=encode scripts/dev-worker.sh
+#   DEV_WORKER_CONCURRENCY=2 scripts/dev-worker.sh
 #
-# River pulls jobs from PostgreSQL, so multiple instances pointed at the same
-# DB automatically share the queue. Useful when you want to test scale-out
-# locally (run scripts/dev.sh in one terminal and scripts/dev-worker.sh in
-# another with a non-conflicting DEV_WORKER_HTTP_ADDR).
+# The hls-worker connects only to the API (via HTTP) and to S3 (MinIO). It
+# does NOT need DB credentials. Multiple workers pointed at the same API
+# share the in-memory dispatcher there, so you can run several copies for
+# scale-out testing.
 
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 load_env
 
+if [[ -z "${WORKER_AUTH_TOKEN:-}" ]]; then
+  echo "WORKER_AUTH_TOKEN is required (set it in .env or the shell)." >&2
+  exit 1
+fi
+
 exec env \
-  HTTP_ADDR="${DEV_WORKER_HTTP_ADDR:-:8081}" \
-  WORKER_QUEUES="${DEV_WORKER_QUEUES:-encode}" \
-  WORKER_CONCURRENCY_DEFAULT="${DEV_WORKER_CONCURRENCY_DEFAULT:-4}" \
-  WORKER_CONCURRENCY_ENCODE="${DEV_WORKER_CONCURRENCY_ENCODE:-1}" \
-  go run ./cmd/app
+  WORKER_QUEUES="${DEV_WORKER_QUEUES:-probe,encode}" \
+  WORKER_CONCURRENCY="${DEV_WORKER_CONCURRENCY:-1}" \
+  go run ./cmd/hls-worker

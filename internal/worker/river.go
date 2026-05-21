@@ -12,6 +12,7 @@ import (
 
 	"github.com/f0reachARR/video-manager/internal/db/sqlc"
 	"github.com/f0reachARR/video-manager/internal/storage"
+	"github.com/f0reachARR/video-manager/internal/worker/dispatch"
 )
 
 // Config controls which queues this process polls and at what concurrency.
@@ -32,9 +33,12 @@ const (
 )
 
 // Manager wraps the river client and exposes Insert helpers used by the API
-// and by other workers.
+// and by other workers. The Dispatcher field is also exposed so the HTTP
+// /internal/worker/jobs/* handlers can hand it work claimed by external
+// hls-worker processes.
 type Manager struct {
-	Client *river.Client[pgx.Tx]
+	Client     *river.Client[pgx.Tx]
+	Dispatcher *dispatch.Dispatcher
 }
 
 // Setup runs River's schema migrations and constructs a Client with all
@@ -61,11 +65,13 @@ func Setup(ctx context.Context, pool *pgxpool.Pool, q *sqlc.Queries, store *stor
 		cfg.Queues = []string{QueueDefault}
 	}
 
-	mgr := &Manager{}
+	disp := dispatch.New()
+	disp.Start(ctx)
+	mgr := &Manager{Dispatcher: disp}
 	workers := river.NewWorkers()
-	river.AddWorker(workers, &ProbeVideoWorker{Q: q, Storage: store, Manager: mgr})
+	river.AddWorker(workers, &ProbeVideoWorker{Q: q, Storage: store, Manager: mgr, Dispatcher: disp})
 	river.AddWorker(workers, &PlanHLSWorker{Q: q, Manager: mgr})
-	river.AddWorker(workers, &EncodeVariantWorker{Q: q, Storage: store, Manager: mgr})
+	river.AddWorker(workers, &EncodeVariantWorker{Q: q, Storage: store, Manager: mgr, Dispatcher: disp})
 	river.AddWorker(workers, &FinalizeHLSWorker{Q: q, Storage: store, Manager: mgr})
 
 	queues := map[string]river.QueueConfig{}

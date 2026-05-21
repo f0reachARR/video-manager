@@ -147,6 +147,8 @@ func run() error {
 		Uploads:        &handler.Uploads{Q: q, Worker: workers, BulkUploads: &handler.BulkUploads{Q: q}},
 		RobotImages:    &handler.RobotImages{Q: q, Storage: store, BulkUploads: &handler.BulkUploads{Q: q}},
 		Auth:           authHandler,
+		WorkerInternal: &handler.WorkerInternal{Dispatcher: workers.Dispatcher},
+		WorkerToken:    cfg.WorkerAuthToken,
 		AuthMiddleware: appmid.AuthDeps{Q: q, Signer: signer, DevBypass: cfg.AuthDevBypass},
 		AllowedOrigins: cfg.AllowedOrigins,
 	})

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Start infrastructure containers and run app + worker + web in foreground.
-# Stops child processes (web dev server, worker) on Ctrl-C.
+# Start infrastructure containers and run app + hls-worker + web in foreground.
+# Stops child processes on Ctrl-C.
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 load_env
 
@@ -19,15 +19,17 @@ trap cleanup EXIT INT TERM
 pnpm --filter web dev &
 pids+=("$!")
 
-# Dedicated HLS encode worker. Same binary as the API but polls only the
-# "encode" queue, so a long-running ffmpeg run can't starve the probe / plan
-# / finalize jobs the API node owns. The DEV_WORKER_* vars from .env are
-# remapped to the worker process here so they never leak into the API.
-HTTP_ADDR="${DEV_WORKER_HTTP_ADDR:-:8081}" \
-WORKER_QUEUES="${DEV_WORKER_QUEUES:-encode}" \
-WORKER_CONCURRENCY_DEFAULT="${DEV_WORKER_CONCURRENCY_DEFAULT:-4}" \
-WORKER_CONCURRENCY_ENCODE="${DEV_WORKER_CONCURRENCY_ENCODE:-1}" \
-  go run ./cmd/app &
-pids+=("$!")
+# External HLS worker. Connects to the API over HTTP — no DB access. It needs
+# its own S3 creds and a shared bearer token (WORKER_AUTH_TOKEN). The worker
+# auto-generates a unique WORKER_ID when unset.
+if [[ -n "${WORKER_AUTH_TOKEN:-}" ]]; then
+  WORKER_QUEUES="${DEV_WORKER_QUEUES:-probe,encode}" \
+  WORKER_CONCURRENCY="${DEV_WORKER_CONCURRENCY:-1}" \
+    go run ./cmd/hls-worker &
+  pids+=("$!")
+else
+  echo "[dev.sh] WORKER_AUTH_TOKEN is not set — skipping cmd/hls-worker."
+  echo "[dev.sh] Encode/probe jobs will queue but never run. Set the token in .env to enable."
+fi
 
 exec go run ./cmd/app
