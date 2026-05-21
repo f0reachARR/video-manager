@@ -3,11 +3,13 @@ import {
   Badge,
   Button,
   Card,
+  Divider,
   Group,
   Select,
   Stack,
   Tabs,
   Text,
+  Title,
 } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,16 +19,17 @@ import { tournamentsApi } from "../lib/api/client";
 import { DirectoryControls } from "../features/bulk-upload/components/DirectoryControls";
 import {
   FileTable,
-  canCreateRun,
-  canUpload,
   isSelectable,
   rowVideoId,
 } from "../features/bulk-upload/components/FileTable";
 import { TournamentSelector } from "../features/bulk-upload/components/TournamentSelector";
 import { TeamRobotSelector } from "../features/bulk-upload/components/TeamRobotSelector";
 import { VideoPreviewModal } from "../features/bulk-upload/components/VideoPreviewModal";
+import type { ScannedFile } from "../features/bulk-upload/hooks/useDirectoryScan";
 import { useDirectoryScan } from "../features/bulk-upload/hooks/useDirectoryScan";
+import type { BulkImageUploadItem } from "../features/bulk-upload/hooks/useImageBulkUpload";
 import { useImageBulkUpload } from "../features/bulk-upload/hooks/useImageBulkUpload";
+import type { BulkVideoUploadItem } from "../features/bulk-upload/hooks/useVideoBulkUpload";
 import { useVideoBulkUpload } from "../features/bulk-upload/hooks/useVideoBulkUpload";
 import { pickDirectory } from "../features/bulk-upload/lib/fsAccess";
 import {
@@ -45,6 +48,19 @@ const LS_ROBOT_KEY = "video-manager.bulk-upload.robotId";
 export const Route = createFileRoute("/bulk-upload")({
   component: BulkUploadPage,
 });
+
+// Each row falls in exactly one bucket per tab: 未アップロード (no
+// server-side artifact yet) or アップロード済 (the server has a row for
+// it). Selecting one bucket can't pollute the other — that's the whole
+// point of splitting.
+function videoBucket(f: ScannedFile, up?: BulkVideoUploadItem) {
+  return rowVideoId(f, up) ? "uploaded" : "unuploaded";
+}
+function imageBucket(f: ScannedFile, imgUp?: BulkImageUploadItem) {
+  if (imgUp?.imageId) return "uploaded";
+  if (f.knownResult?.robotImageId) return "uploaded";
+  return "unuploaded";
+}
 
 function BulkUploadPage() {
   const [tournamentId, setTournamentIdState] = useState<string | null>(() =>
@@ -89,7 +105,13 @@ function BulkUploadPage() {
     else void clearDirectoryHandle();
   };
   const [clearing, setClearing] = useState(false);
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  // Four independent selection sets, one per (tab × bucket). This is the
+  // structural guarantee that 未アップロード and アップロード済 selections
+  // never mix even if the user keyboards through them quickly.
+  const [selUnupVideo, setSelUnupVideo] = useState<Set<string>>(new Set());
+  const [selUpVideo, setSelUpVideo] = useState<Set<string>>(new Set());
+  const [selUnupImage, setSelUnupImage] = useState<Set<string>>(new Set());
+  const [selUpImage, setSelUpImage] = useState<Set<string>>(new Set());
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const [teamId, setTeamIdState] = useState<string | null>(() =>
     typeof window !== "undefined"
@@ -126,18 +148,12 @@ function BulkUploadPage() {
   );
   const imageUpload = useImageBulkUpload();
   const uploadsMap = useMemo(() => {
-    const m = new Map<string, (typeof videoUpload.items)[number]>();
+    const m = new Map<string, BulkVideoUploadItem>();
     for (const it of videoUpload.items) m.set(it.key, it);
     return m;
   }, [videoUpload.items]);
 
-  // Auto-rescan after the last in-flight upload settles. The transition
-  // detector compares the "anything uploading right now?" boolean against
-  // the previous tick — going true→false triggers a fresh scan so newly
-  // created videos pick up their server-side check result (and known/new
-  // badges reflect the new state without manual intervention). We don't
-  // re-fire while still busy, and we don't fire on initial mount when
-  // there's never been anything in flight.
+  // Auto-rescan after the last in-flight upload settles.
   const wasUploadingRef = useRef(false);
   useEffect(() => {
     const videoActive = videoUpload.items.some((u) => u.state === "uploading");
@@ -146,8 +162,6 @@ function BulkUploadPage() {
     );
     const active = videoActive || imageActive;
     if (wasUploadingRef.current && !active) {
-      // Defer one tick so the tus hook has a chance to finish writing
-      // the fingerprint row before /check is re-issued.
       const t = window.setTimeout(() => {
         void scan.rescan();
       }, 300);
@@ -162,16 +176,9 @@ function BulkUploadPage() {
     if (!sessions.data.data.some((s) => s.id === sessionId)) setSessionId(null);
   }, [sessionId, sessions.data]);
 
-  const stats = useMemo(() => {
-    let known = 0;
-    let neu = 0;
-    for (const f of scan.files) {
-      if (f.checkState === "known") known++;
-      else if (f.checkState === "new") neu++;
-    }
-    return { known, neu };
-  }, [scan.files]);
-
+  // Bucket rows. Rebuild on every scan / upload state change — when a
+  // file flips buckets (e.g. an upload completes) we also prune its
+  // selection from the now-stale set so the action bars don't claim it.
   const videoFiles = useMemo(
     () => scan.files.filter((f) => f.mediaKind === "video"),
     [scan.files],
@@ -185,9 +192,88 @@ function BulkUploadPage() {
     [scan.files],
   );
 
-  const toggle = useCallback(
-    (key: string) =>
-      setSelectedKeys((prev) => {
+  const videoUnup = useMemo(
+    () => videoFiles.filter((f) => videoBucket(f, uploadsMap.get(f.key)) === "unuploaded"),
+    [videoFiles, uploadsMap],
+  );
+  const videoUp = useMemo(
+    () => videoFiles.filter((f) => videoBucket(f, uploadsMap.get(f.key)) === "uploaded"),
+    [videoFiles, uploadsMap],
+  );
+  const imageUnup = useMemo(
+    () => imageFiles.filter((f) => imageBucket(f, imageUpload.items[f.key]) === "unuploaded"),
+    [imageFiles, imageUpload.items],
+  );
+  const imageUp = useMemo(
+    () => imageFiles.filter((f) => imageBucket(f, imageUpload.items[f.key]) === "uploaded"),
+    [imageFiles, imageUpload.items],
+  );
+
+  // When a row migrates from "unuploaded" to "uploaded" we drop its key
+  // from selUnupVideo (and vice-versa) so the action bars don't keep a
+  // stale count.
+  useEffect(() => {
+    const upKeys = new Set(videoUp.map((f) => f.key));
+    setSelUnupVideo((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const k of prev) {
+        if (upKeys.has(k)) {
+          changed = true;
+          continue;
+        }
+        next.add(k);
+      }
+      return changed ? next : prev;
+    });
+    const unupKeys = new Set(videoUnup.map((f) => f.key));
+    setSelUpVideo((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const k of prev) {
+        if (unupKeys.has(k)) {
+          changed = true;
+          continue;
+        }
+        next.add(k);
+      }
+      return changed ? next : prev;
+    });
+  }, [videoUnup, videoUp]);
+  useEffect(() => {
+    const upKeys = new Set(imageUp.map((f) => f.key));
+    setSelUnupImage((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const k of prev) {
+        if (upKeys.has(k)) {
+          changed = true;
+          continue;
+        }
+        next.add(k);
+      }
+      return changed ? next : prev;
+    });
+    const unupKeys = new Set(imageUnup.map((f) => f.key));
+    setSelUpImage((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const k of prev) {
+        if (unupKeys.has(k)) {
+          changed = true;
+          continue;
+        }
+        next.add(k);
+      }
+      return changed ? next : prev;
+    });
+  }, [imageUnup, imageUp]);
+
+  // Selection helpers factor out the toggle / toggle-all logic per bucket.
+  type Setter = (updater: (prev: Set<string>) => Set<string>) => void;
+  const makeToggle = useCallback(
+    (setter: Setter) => (key: string) =>
+      setter((prev) => {
         const next = new Set(prev);
         if (next.has(key)) next.delete(key);
         else next.add(key);
@@ -195,18 +281,23 @@ function BulkUploadPage() {
       }),
     [],
   );
-
-  const makeToggleAll = (subset: typeof scan.files) => () =>
-    setSelectedKeys((prev) => {
-      const next = new Set(prev);
-      const eligible = subset.filter((f) =>
-        isSelectable(f, uploadsMap.get(f.key), imageUpload.items[f.key]),
-      );
-      const allOn = eligible.every((f) => next.has(f.key));
-      if (allOn) for (const f of eligible) next.delete(f.key);
-      else for (const f of eligible) next.add(f.key);
-      return next;
-    });
+  const makeToggleAll = useCallback(
+    (
+      setter: Setter,
+      subset: ScannedFile[],
+      eligible: (f: ScannedFile) => boolean,
+    ) =>
+      () =>
+        setter((prev) => {
+          const next = new Set(prev);
+          const elig = subset.filter(eligible);
+          const allOn = elig.every((f) => next.has(f.key));
+          if (allOn) for (const f of elig) next.delete(f.key);
+          else for (const f of elig) next.add(f.key);
+          return next;
+        }),
+    [],
+  );
 
   const pick = async () => {
     const handle = await pickDirectory();
@@ -243,83 +334,60 @@ function BulkUploadPage() {
     [sessions.data],
   );
 
-  // Selected-video buckets: rows the user could upload vs. rows the user
-  // could turn into a Run. They overlap freely — a freshly-uploaded video
-  // is upload-able no longer but Run-able now; a "known" video is the
-  // mirror image.
-  const selectedVideoUploadFiles = useMemo(
-    () =>
-      videoFiles.filter(
-        (f) =>
-          selectedKeys.has(f.key) && canUpload(f, uploadsMap.get(f.key)),
-      ),
-    [videoFiles, selectedKeys, uploadsMap],
+  const stats = useMemo(() => {
+    let known = 0;
+    let neu = 0;
+    for (const f of scan.files) {
+      if (f.checkState === "known") known++;
+      else if (f.checkState === "new") neu++;
+    }
+    return { known, neu };
+  }, [scan.files]);
+
+  // Action computations per section.
+  const videoUnupSelectedFiles = useMemo(
+    () => videoUnup.filter((f) => selUnupVideo.has(f.key)),
+    [videoUnup, selUnupVideo],
   );
-  const selectedVideoRunIds = useMemo(() => {
+  const videoUpSelectedIds = useMemo(() => {
     const ids: string[] = [];
-    for (const f of videoFiles) {
-      if (!selectedKeys.has(f.key)) continue;
-      const up = uploadsMap.get(f.key);
-      if (!canCreateRun(f, up)) continue;
-      const vid = rowVideoId(f, up);
+    for (const f of videoUp) {
+      if (!selUpVideo.has(f.key)) continue;
+      const vid = rowVideoId(f, uploadsMap.get(f.key));
       if (vid) ids.push(vid);
     }
     return ids;
-  }, [videoFiles, selectedKeys, uploadsMap]);
-  const selectedImageFiles = useMemo(
-    () =>
-      imageFiles.filter(
-        (f) =>
-          selectedKeys.has(f.key) &&
-          canUpload(f, undefined, imageUpload.items[f.key]),
-      ),
-    [imageFiles, selectedKeys, imageUpload.items],
+  }, [videoUp, selUpVideo, uploadsMap]);
+  const imageUnupSelectedFiles = useMemo(
+    () => imageUnup.filter((f) => selUnupImage.has(f.key)),
+    [imageUnup, selUnupImage],
   );
 
   const startVideoUpload = () => {
-    if (
-      !sessionId ||
-      !tournamentId ||
-      selectedVideoUploadFiles.length === 0
-    )
-      return;
-    videoUpload.startMany(selectedVideoUploadFiles);
-    setSelectedKeys(
-      (prev) =>
-        new Set(
-          [...prev].filter(
-            (k) => !selectedVideoUploadFiles.some((f) => f.key === k),
-          ),
-        ),
-    );
+    if (!sessionId || !tournamentId || videoUnupSelectedFiles.length === 0) return;
+    videoUpload.startMany(videoUnupSelectedFiles);
+    // The trailing-edge effect drops the keys when their bucket flips,
+    // but clear now so the action bar count zeros immediately.
+    setSelUnupVideo(new Set());
   };
 
   const openRunBulkCreate = () => {
-    if (selectedVideoRunIds.length === 0) return;
+    if (videoUpSelectedIds.length === 0) return;
     const params = new URLSearchParams({
-      videoIds: selectedVideoRunIds.join(","),
+      videoIds: videoUpSelectedIds.join(","),
     });
     if (sessionId) params.set("sessionId", sessionId);
-    // Open in a new tab so the operator can continue uploading on this
-    // tab while the Run-creation page handles classification.
     window.open(`/runs/new-from-videos?${params.toString()}`, "_blank", "noopener");
   };
 
   const startImageUpload = () => {
-    if (!tournamentId || !robotId || selectedImageFiles.length === 0) return;
+    if (!tournamentId || !robotId || imageUnupSelectedFiles.length === 0) return;
     void imageUpload.startBatch({
       tournamentId,
       robotId,
-      files: selectedImageFiles,
+      files: imageUnupSelectedFiles,
     });
-    setSelectedKeys(
-      (prev) =>
-        new Set(
-          [...prev].filter(
-            (k) => !selectedImageFiles.some((f) => f.key === k),
-          ),
-        ),
-    );
+    setSelUnupImage(new Set());
   };
 
   const busy = scan.scanning || scan.hashing || scan.checking;
@@ -365,136 +433,193 @@ function BulkUploadPage() {
               <Tabs.Tab value="unknown">未分類 ({unknownFiles.length})</Tabs.Tab>
             </Tabs.List>
             <Tabs.Panel value="video" p="md">
-              <Stack gap="sm">
-                <Group align="flex-end" wrap="wrap">
-                  <Select
-                    label="アップロード先セッション"
-                    placeholder={
-                      tournamentId
-                        ? "この大会のセッションを選ぶ"
-                        : "先に大会を選択"
-                    }
-                    data={sessionOptions}
-                    value={sessionId}
-                    onChange={setSessionId}
-                    disabled={!tournamentId}
-                    searchable
-                    clearable
-                    w={360}
-                  />
-                  <Group gap="xs">
-                    <Badge variant="light">
-                      アップロード可 {selectedVideoUploadFiles.length} /
-                      Run化可 {selectedVideoRunIds.length}
-                    </Badge>
-                    <Button
-                      size="sm"
-                      onClick={startVideoUpload}
-                      disabled={
-                        !sessionId ||
-                        !tournamentId ||
-                        selectedVideoUploadFiles.length === 0
-                      }
-                    >
-                      選択した動画をアップロード
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="light"
-                      onClick={openRunBulkCreate}
-                      disabled={
-                        selectedVideoRunIds.length === 0 || !sessionId
-                      }
-                      title={
-                        !sessionId
-                          ? "Run 一括作成画面は Session 指定が必須です"
-                          : undefined
-                      }
-                    >
-                      選択動画から Run を作成 (別タブ)
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="subtle"
-                      onClick={videoUpload.clearFinished}
-                      disabled={
-                        !videoUpload.items.some((u) => u.state === "done")
-                      }
-                    >
-                      完了行を片付ける
-                    </Button>
+              <Stack gap="lg">
+                <Stack gap="sm">
+                  <Group justify="space-between" align="flex-end" wrap="wrap">
+                    <Title order={5}>未アップロード ({videoUnup.length})</Title>
+                    <Group align="flex-end" wrap="wrap" gap="xs">
+                      <Select
+                        label="アップロード先セッション"
+                        placeholder={
+                          tournamentId ? "この大会のセッションを選ぶ" : "先に大会を選択"
+                        }
+                        data={sessionOptions}
+                        value={sessionId}
+                        onChange={setSessionId}
+                        disabled={!tournamentId}
+                        searchable
+                        clearable
+                        w={320}
+                      />
+                      <Badge variant="light">
+                        選択 {videoUnupSelectedFiles.length} 件
+                      </Badge>
+                      <Button
+                        size="sm"
+                        onClick={startVideoUpload}
+                        disabled={
+                          !sessionId ||
+                          !tournamentId ||
+                          videoUnupSelectedFiles.length === 0
+                        }
+                      >
+                        選択した動画をアップロード
+                      </Button>
+                    </Group>
                   </Group>
-                </Group>
-                <FileTable
-                  files={videoFiles}
-                  hashing={scan.hashing}
-                  checking={scan.checking}
-                  uploads={uploadsMap}
-                  selection={{
-                    selected: selectedKeys,
-                    onToggle: toggle,
-                    onToggleAll: makeToggleAll(videoFiles),
-                  }}
-                  onPreviewVideo={setPreviewVideoId}
-                />
+                  <FileTable
+                    files={videoUnup}
+                    hashing={scan.hashing}
+                    checking={scan.checking}
+                    uploads={uploadsMap}
+                    selection={{
+                      selected: selUnupVideo,
+                      onToggle: makeToggle(setSelUnupVideo),
+                      onToggleAll: makeToggleAll(setSelUnupVideo, videoUnup, (f) =>
+                        isSelectable(f, uploadsMap.get(f.key)),
+                      ),
+                    }}
+                  />
+                </Stack>
+
+                <Divider />
+
+                <Stack gap="sm">
+                  <Group justify="space-between" align="flex-end" wrap="wrap">
+                    <Title order={5}>アップロード済 ({videoUp.length})</Title>
+                    <Group align="flex-end" wrap="wrap" gap="xs">
+                      <Badge variant="light">
+                        選択 {videoUpSelectedIds.length} 件
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="light"
+                        onClick={openRunBulkCreate}
+                        disabled={
+                          videoUpSelectedIds.length === 0 || !sessionId
+                        }
+                        title={
+                          !sessionId
+                            ? "Run 一括作成画面は Session 指定が必須です"
+                            : undefined
+                        }
+                      >
+                        選択動画から Run を作成 (別タブ)
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="subtle"
+                        onClick={videoUpload.clearFinished}
+                        disabled={
+                          !videoUpload.items.some((u) => u.state === "done")
+                        }
+                      >
+                        完了行を片付ける
+                      </Button>
+                    </Group>
+                  </Group>
+                  <FileTable
+                    files={videoUp}
+                    hashing={scan.hashing}
+                    checking={scan.checking}
+                    uploads={uploadsMap}
+                    selection={{
+                      selected: selUpVideo,
+                      onToggle: makeToggle(setSelUpVideo),
+                      onToggleAll: makeToggleAll(setSelUpVideo, videoUp, (f) =>
+                        isSelectable(f, uploadsMap.get(f.key)),
+                      ),
+                    }}
+                    onPreviewVideo={setPreviewVideoId}
+                  />
+                </Stack>
+
                 <Text size="xs" c="dimmed">
-                  ハッシュ済の動画は選択できます。新規ファイルはアップロード対象に、アップロード済 / 既にアップ済の行は Run 作成対象になります。アップロード完了後は自動で再スキャンします。
+                  アップロード完了後は自動で再スキャンが走り、行はアップロード済セクションに移ります。
                 </Text>
               </Stack>
             </Tabs.Panel>
             <Tabs.Panel value="image" p="md">
-              <Stack gap="sm">
-                <Group align="flex-end" wrap="wrap">
-                  <TeamRobotSelector
-                    tournamentId={tournamentId}
-                    teamId={teamId}
-                    robotId={robotId}
-                    onTeamChange={setTeamId}
-                    onRobotChange={setRobotId}
-                  />
-                  <Group gap="xs">
-                    <Badge variant="light">
-                      選択 {selectedImageFiles.length} 件
-                    </Badge>
-                    <Button
-                      size="sm"
-                      onClick={startImageUpload}
-                      disabled={
-                        !robotId ||
-                        !tournamentId ||
-                        selectedImageFiles.length === 0
-                      }
-                    >
-                      選択した画像をアップロード
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="subtle"
-                      onClick={imageUpload.clearFinished}
-                      disabled={
-                        !Object.values(imageUpload.items).some(
-                          (u) => u.state === "done",
-                        )
-                      }
-                    >
-                      完了行を片付ける
-                    </Button>
+              <Stack gap="lg">
+                <Stack gap="sm">
+                  <Group justify="space-between" align="flex-end" wrap="wrap">
+                    <Title order={5}>未アップロード ({imageUnup.length})</Title>
+                    <Group align="flex-end" wrap="wrap" gap="xs">
+                      <TeamRobotSelector
+                        tournamentId={tournamentId}
+                        teamId={teamId}
+                        robotId={robotId}
+                        onTeamChange={setTeamId}
+                        onRobotChange={setRobotId}
+                      />
+                      <Badge variant="light">
+                        選択 {imageUnupSelectedFiles.length} 件
+                      </Badge>
+                      <Button
+                        size="sm"
+                        onClick={startImageUpload}
+                        disabled={
+                          !robotId ||
+                          !tournamentId ||
+                          imageUnupSelectedFiles.length === 0
+                        }
+                      >
+                        選択した画像をアップロード
+                      </Button>
+                    </Group>
                   </Group>
-                </Group>
-                <FileTable
-                  files={imageFiles}
-                  hashing={scan.hashing}
-                  checking={scan.checking}
-                  imageUploads={imageUpload.items}
-                  selection={{
-                    selected: selectedKeys,
-                    onToggle: toggle,
-                    onToggleAll: makeToggleAll(imageFiles),
-                  }}
-                />
+                  <FileTable
+                    files={imageUnup}
+                    hashing={scan.hashing}
+                    checking={scan.checking}
+                    imageUploads={imageUpload.items}
+                    selection={{
+                      selected: selUnupImage,
+                      onToggle: makeToggle(setSelUnupImage),
+                      onToggleAll: makeToggleAll(setSelUnupImage, imageUnup, (f) =>
+                        isSelectable(f, undefined, imageUpload.items[f.key]),
+                      ),
+                    }}
+                  />
+                </Stack>
+
+                <Divider />
+
+                <Stack gap="sm">
+                  <Group justify="space-between" align="flex-end" wrap="wrap">
+                    <Title order={5}>アップロード済 ({imageUp.length})</Title>
+                    <Group gap="xs">
+                      <Button
+                        size="sm"
+                        variant="subtle"
+                        onClick={imageUpload.clearFinished}
+                        disabled={
+                          !Object.values(imageUpload.items).some(
+                            (u) => u.state === "done",
+                          )
+                        }
+                      >
+                        完了行を片付ける
+                      </Button>
+                    </Group>
+                  </Group>
+                  <FileTable
+                    files={imageUp}
+                    hashing={scan.hashing}
+                    checking={scan.checking}
+                    imageUploads={imageUpload.items}
+                    selection={{
+                      selected: selUpImage,
+                      onToggle: makeToggle(setSelUpImage),
+                      onToggleAll: makeToggleAll(setSelUpImage, imageUp, (f) =>
+                        isSelectable(f, undefined, imageUpload.items[f.key]),
+                      ),
+                    }}
+                  />
+                </Stack>
+
                 <Text size="xs" c="dimmed">
-                  選択したロボットの写真として記録します。HEIC は JPEG
-                  に自動変換されます。
+                  HEIC は JPEG に自動変換されます。アップロード完了後は自動で再スキャンします。
                 </Text>
               </Stack>
             </Tabs.Panel>

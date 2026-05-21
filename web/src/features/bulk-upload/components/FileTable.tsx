@@ -53,21 +53,10 @@ export function rowVideoId(
   return uploadState?.videoId ?? f.knownResult?.videoId ?? undefined;
 }
 
-// A row is "in flight" while either uploader has an active request for
-// it. Selection and the action buttons treat these rows as off-limits.
-function isInFlight(
-  uploadState?: BulkVideoUploadItem,
-  imageUploadState?: BulkImageUploadItem,
-): boolean {
-  if (uploadState && uploadState.state === "uploading") return true;
-  if (imageUploadState && imageUploadState.state === "uploading") return true;
-  return false;
-}
-
-// Selectable = enabled checkbox. We want both the "upload this" and
-// "create a Run from this" actions to share one selection model, so the
-// rule is intentionally loose: anything hashed, classified, and not
-// currently mid-upload.
+// Selectable = enabled checkbox. The route splits rows into 未アップロード
+// and アップロード済 sections, each with its own selection set, so this
+// rule only screens out rows we can't act on at all: pre-hash, unknown
+// kind, or currently being uploaded.
 export function isSelectable(
   f: ScannedFile,
   uploadState?: BulkVideoUploadItem,
@@ -75,29 +64,9 @@ export function isSelectable(
 ): boolean {
   if (f.hashState !== "done") return false;
   if (f.mediaKind === "unknown") return false;
-  return !isInFlight(uploadState, imageUploadState);
-}
-
-// Per-row capability hints. The action bar reads these to count what's
-// actionable in the current selection.
-export function canUpload(
-  f: ScannedFile,
-  uploadState?: BulkVideoUploadItem,
-  imageUploadState?: BulkImageUploadItem,
-): boolean {
-  if (!isSelectable(f, uploadState, imageUploadState)) return false;
-  if (f.checkState === "known") return false;
-  // A done video upload shouldn't be re-uploaded from this session.
-  if (uploadState && uploadState.state === "done") return false;
+  if (uploadState && uploadState.state === "uploading") return false;
+  if (imageUploadState && imageUploadState.state === "uploading") return false;
   return true;
-}
-
-export function canCreateRun(
-  f: ScannedFile,
-  uploadState?: BulkVideoUploadItem,
-): boolean {
-  if (f.mediaKind !== "video") return false;
-  return rowVideoId(f, uploadState) != null;
 }
 
 export function FileTable({
