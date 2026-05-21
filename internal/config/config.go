@@ -23,6 +23,14 @@ type Config struct {
 	S3UsePathStyle bool          `env:"S3_USE_PATH_STYLE" envDefault:"true"`
 	S3PresignTTL   time.Duration `env:"S3_PRESIGN_TTL" envDefault:"10m"`
 
+	// S3PresignEndpoint, when non-empty, overrides the BaseEndpoint of the
+	// presign client only. Server-side operations (Put/Get/Delete/List) keep
+	// going to S3Endpoint. Set this when S3Endpoint is a compose-internal
+	// hostname (e.g. http://minio:9000) that the browser can't resolve, but
+	// MinIO is reachable from the browser at a different URL (e.g.
+	// http://localhost:9000 in dev, https://s3.example.com in prod).
+	S3PresignEndpoint string `env:"S3_PRESIGN_ENDPOINT" envDefault:""`
+
 	// HLSBaseURL overrides the base URL used when handing out HLS proxy
 	// playback URLs. When empty, the URL is derived from the inbound request
 	// (scheme + Host). Set this when the public-facing origin differs from

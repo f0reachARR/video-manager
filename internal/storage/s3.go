@@ -25,6 +25,10 @@ type Config struct {
 	SecretKey    string
 	UsePathStyle bool
 	PresignTTL   time.Duration
+	// PresignEndpoint, when non-empty, is used as BaseEndpoint of the
+	// presign client only — handy when Endpoint is a compose-internal
+	// hostname the browser can't resolve.
+	PresignEndpoint string
 }
 
 type Client struct {
@@ -50,13 +54,24 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		o.BaseEndpoint = aws.String(cfg.Endpoint)
 		o.UsePathStyle = cfg.UsePathStyle
 	})
+	// Separate client for presigning so we can hand the browser URLs
+	// against a public hostname even when the operational endpoint is
+	// compose-internal. Falls back to the same client when not configured.
+	presignClient := s3.NewPresignClient(cli)
+	if cfg.PresignEndpoint != "" && cfg.PresignEndpoint != cfg.Endpoint {
+		pcli := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(cfg.PresignEndpoint)
+			o.UsePathStyle = cfg.UsePathStyle
+		})
+		presignClient = s3.NewPresignClient(pcli)
+	}
 	ttl := cfg.PresignTTL
 	if ttl == 0 {
 		ttl = 10 * time.Minute
 	}
 	return &Client{
 		s3:      cli,
-		presign: s3.NewPresignClient(cli),
+		presign: presignClient,
 		bucket:  cfg.Bucket,
 		ttl:     ttl,
 	}, nil

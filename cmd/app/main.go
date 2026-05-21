@@ -50,13 +50,14 @@ func run() error {
 	q := sqlc.New(database.Pool)
 
 	store, err := storage.New(ctx, storage.Config{
-		Endpoint:     cfg.S3Endpoint,
-		Region:       cfg.S3Region,
-		Bucket:       cfg.S3Bucket,
-		AccessKey:    cfg.S3AccessKey,
-		SecretKey:    cfg.S3SecretKey,
-		UsePathStyle: cfg.S3UsePathStyle,
-		PresignTTL:   cfg.S3PresignTTL,
+		Endpoint:        cfg.S3Endpoint,
+		Region:          cfg.S3Region,
+		Bucket:          cfg.S3Bucket,
+		AccessKey:       cfg.S3AccessKey,
+		SecretKey:       cfg.S3SecretKey,
+		UsePathStyle:    cfg.S3UsePathStyle,
+		PresignTTL:      cfg.S3PresignTTL,
+		PresignEndpoint: cfg.S3PresignEndpoint,
 	})
 	if err != nil {
 		return err

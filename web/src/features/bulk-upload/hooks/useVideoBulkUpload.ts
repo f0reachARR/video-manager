@@ -4,8 +4,7 @@ import { Upload } from "tus-js-client";
 import type { ScannedFile } from "./useDirectoryScan";
 
 const TUSD_ENDPOINT =
-  (import.meta.env.VITE_TUSD_ENDPOINT as string | undefined) ??
-  "http://localhost:1080/files/";
+  (import.meta.env.VITE_TUSD_ENDPOINT as string | undefined) ?? "/files/";
 
 export type BulkVideoUploadItem = {
   // We re-use the scan key so the UI can correlate row → upload state.

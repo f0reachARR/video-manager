@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Upload } from "tus-js-client";
 
+// Default to a same-origin path so the production nginx deployment "just
+// works" — vite proxies /files/ to tusd in dev (see vite.config.ts).
 const TUSD_ENDPOINT =
-  (import.meta.env.VITE_TUSD_ENDPOINT as string | undefined) ??
-  "http://localhost:1080/files/";
+  (import.meta.env.VITE_TUSD_ENDPOINT as string | undefined) ?? "/files/";
 
 export type UploadItem = {
   id: string;

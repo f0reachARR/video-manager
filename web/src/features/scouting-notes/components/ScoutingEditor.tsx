@@ -18,11 +18,13 @@ import "./ScoutingEditor.css";
 import { useCurrentUserId } from "../../../stores/currentUser";
 import { useUser } from "../../users/api/queries";
 
+// Same-origin WS endpoint behind nginx — vite proxies /hocuspocus to the
+// hocuspocus container in dev (see vite.config.ts).
 const HOCUSPOCUS_URL: string =
   (import.meta.env.VITE_HOCUSPOCUS_URL as string | undefined) ??
   (window.location.protocol === "https:" ? "wss://" : "ws://") +
-    window.location.hostname +
-    ":1234";
+    window.location.host +
+    "/hocuspocus";
 
 export function ScoutingEditor({ noteId }: { noteId: string }) {
   return (

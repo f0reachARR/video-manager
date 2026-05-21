@@ -1,6 +1,11 @@
 services:
+  # --- Optional infra: Postgres ----------------------------------------------
+  # Gated behind the "internal-postgres" profile. Active by default via
+  # COMPOSE_PROFILES in .env. Set DATABASE_URL to an external host and drop
+  # the profile from COMPOSE_PROFILES to use a managed Postgres instead.
   postgres:
     image: postgres:16
+    profiles: ["internal-postgres"]
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-video}
@@ -17,8 +22,13 @@ services:
       timeout: 5s
       retries: 10
 
+  # --- Optional infra: S3 (MinIO) --------------------------------------------
+  # Gated behind the "internal-s3" profile. Drop it from COMPOSE_PROFILES and
+  # point S3_ENDPOINT / S3_BUCKET / S3_ACCESS_KEY / S3_SECRET_KEY at AWS S3
+  # (or another MinIO) to use external object storage.
   minio:
     image: minio/minio:latest
+    profiles: ["internal-s3"]
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -38,6 +48,7 @@ services:
   # One-shot: ensure the video bucket exists. Idempotent.
   minio-init:
     image: minio/mc:latest
+    profiles: ["internal-s3"]
     restart: "no"
     depends_on:
       minio:
@@ -55,22 +66,24 @@ services:
         mc mb --ignore-existing "local/$$MINIO_BUCKET"
         echo "bucket ready: $$MINIO_BUCKET"
 
+  # --- Always-on infra: tusd + hocuspocus ------------------------------------
   tusd:
     image: tusproject/tusd:v2.5
     restart: unless-stopped
     depends_on:
       minio-init:
         condition: service_completed_successfully
+        required: false
     environment:
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER:-minio}}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minio123}}
       AWS_REGION: ${S3_REGION:-us-east-1}
     command:
       - -port=1080
       - -base-path=/files/
-      - -s3-bucket=${MINIO_BUCKET:-videos}
-      - -s3-endpoint=http://minio:9000
-      - -hooks-http=${TUSD_HOOK_URL:-http://host.docker.internal:8080/uploads/tus-hook}
+      - -s3-bucket=${MINIO_BUCKET:-${S3_BUCKET:-videos}}
+      - -s3-endpoint=${S3_ENDPOINT_INTERNAL:-${S3_ENDPOINT:-http://minio:9000}}
+      - -hooks-http=${TUSD_HOOK_URL:-http://api:8080/uploads/tus-hook}
       - -hooks-enabled-events=post-finish
       - -cors-allow-origin=${ALLOWED_ORIGINS:-http://localhost:5173}
       # Expose the API's post-finish header so bulk-upload UIs can read
@@ -89,8 +102,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-video_manager}?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL_INTERNAL:-${DATABASE_URL:-postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-video_manager}?sslmode=disable}}
       HOCUSPOCUS_PORT: "1234"
     ports:
       - "${HOCUSPOCUS_PORT:-1234}:1234"
@@ -109,20 +123,88 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
       minio-init:
         condition: service_completed_successfully
+        required: false
     environment:
       HTTP_ADDR: ":8081"
-      DATABASE_URL: postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-video_manager}?sslmode=disable
-      S3_ENDPOINT: http://minio:9000
+      DATABASE_URL: ${DATABASE_URL_INTERNAL:-${DATABASE_URL:-postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-video_manager}?sslmode=disable}}
+      S3_ENDPOINT: ${S3_ENDPOINT_INTERNAL:-${S3_ENDPOINT:-http://minio:9000}}
       S3_REGION: ${S3_REGION:-us-east-1}
-      S3_BUCKET: ${MINIO_BUCKET:-videos}
-      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      S3_BUCKET: ${S3_BUCKET:-${MINIO_BUCKET:-videos}}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER:-minio}}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minio123}}
       S3_USE_PATH_STYLE: "true"
       WORKER_QUEUES: ${WORKER_QUEUES:-encode}
       WORKER_CONCURRENCY_DEFAULT: ${WORKER_CONCURRENCY_DEFAULT:-2}
       WORKER_CONCURRENCY_ENCODE: ${WORKER_CONCURRENCY_ENCODE:-1}
+
+  # --- App tier (Go API + nginx + SPA) ---------------------------------------
+  # Gated behind the "app" profile so the legacy host-mode dev workflow
+  # (./scripts/dev.sh + vite on 5173) keeps working unchanged. Enable with
+  # COMPOSE_PROFILES=internal-postgres,internal-s3,app for a fully containerized
+  # deployment behind nginx on ${NGINX_PORT:-80}.
+  api:
+    build:
+      context: .
+      dockerfile: deploy/docker/app.Dockerfile
+    profiles: ["app"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+      minio-init:
+        condition: service_completed_successfully
+        required: false
+    environment:
+      HTTP_ADDR: ":8080"
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      DATABASE_URL: ${DATABASE_URL_INTERNAL:-${DATABASE_URL:-postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-video_manager}?sslmode=disable}}
+      S3_ENDPOINT: ${S3_ENDPOINT_INTERNAL:-${S3_ENDPOINT:-http://minio:9000}}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-${MINIO_BUCKET:-videos}}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER:-minio}}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minio123}}
+      S3_USE_PATH_STYLE: ${S3_USE_PATH_STYLE:-true}
+      S3_PRESIGN_TTL: ${S3_PRESIGN_TTL:-10m}
+      # Browser-reachable URL for presigned GETs. Defaults to S3_ENDPOINT
+      # (which is the host-port value in .env.example: http://localhost:9000),
+      # so internal MinIO + dockerized API still hands the browser URLs it
+      # can resolve. With external S3 leave this empty.
+      S3_PRESIGN_ENDPOINT: ${S3_PRESIGN_ENDPOINT:-${S3_ENDPOINT:-}}
+      HLS_BASE_URL: ${HLS_BASE_URL:-}
+      WORKER_QUEUES: ${API_WORKER_QUEUES:-default}
+      WORKER_CONCURRENCY_DEFAULT: ${WORKER_CONCURRENCY_DEFAULT:-2}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid,profile,email}
+      OIDC_POST_LOGOUT_URL: ${OIDC_POST_LOGOUT_URL:-/}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      SESSION_MAX_AGE: ${SESSION_MAX_AGE:-168h}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+      AUTH_DEV_BYPASS: ${AUTH_DEV_BYPASS:-false}
+
+  nginx:
+    build:
+      context: .
+      dockerfile: deploy/docker/nginx.Dockerfile
+    profiles: ["app"]
+    restart: unless-stopped
+    depends_on:
+      - api
+      - tusd
+      - hocuspocus
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./deploy/compose/nginx.conf:/etc/nginx/nginx.conf:ro
 
 volumes:
   postgres-data:

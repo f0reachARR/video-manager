@@ -79,6 +79,19 @@ export default defineConfig({
         ws: true,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },
+      // tusd runs on :1080 in dev (docker compose). The SPA uses the same
+      // /files/ path it sees in production behind nginx.
+      "/files": {
+        target: "http://localhost:1080",
+        changeOrigin: true,
+      },
+      // Hocuspocus collab WS server. Same-origin in production via nginx.
+      "/hocuspocus": {
+        target: "ws://localhost:1234",
+        ws: true,
+        rewriteWsOrigin: true,
+        rewrite: (p) => p.replace(/^\/hocuspocus/, ""),
+      },
     },
   },
 });
