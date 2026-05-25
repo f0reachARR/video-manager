@@ -102,6 +102,7 @@ export function RunMetadataEditor({
                 value={field.state.value}
                 onChange={(v) => field.handleChange(v ? new Date(v) : null)}
                 withSeconds
+                valueFormat="YYYY/MM/DD HH:mm:ss"
               />
             )}
           </form.Field>

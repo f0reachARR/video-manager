@@ -22,6 +22,7 @@ import {
   type Robot,
   type RobotImage,
 } from "../../../lib/api/client";
+import { formatDateTimeShort } from "../../../lib/time";
 import {
   useDeleteRobotImage,
   useRobotImages,
@@ -153,7 +154,7 @@ function ImageCard({
           </Badge>
         )}
         <Text size="xs" c="dimmed" mt={4}>
-          {captured ? captured.toLocaleString() : "撮影日時不明"}
+          {captured ? formatDateTimeShort(captured) : "撮影日時不明"}
         </Text>
         {img.caption && (
           <Text size="xs" lineClamp={1}>
@@ -181,6 +182,7 @@ function ImageCard({
             }
             clearable
             withSeconds
+            valueFormat="YYYY/MM/DD HH:mm:ss"
           />
           <Textarea
             label="キャプション"

@@ -48,6 +48,7 @@ function DateTimeWithQuickAdjust({
         onChange={(v) => onChange(v ? new Date(v) : null)}
         required
         withSeconds
+        valueFormat="YYYY/MM/DD HH:mm:ss"
       />
       <Group gap={4}>
         <Button size="compact-xs" variant="default" onClick={() => onChange(new Date())}>

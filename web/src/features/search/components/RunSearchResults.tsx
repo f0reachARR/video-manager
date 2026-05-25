@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 
 import type { Run } from "../../../lib/api/client";
+import { formatDateTimeShort } from "../../../lib/time";
 import { useRobots } from "../../robots/api/queries";
 import { useScenarios } from "../../scenarios/api/queries";
 import { useTags } from "../../tags/api/queries";
@@ -51,7 +52,7 @@ export function RunSearchResults({
           >
             <Table.Td>
               <Text size="sm" ff="monospace">
-                {new Date(r.startedAt).toLocaleString()}
+                {formatDateTimeShort(r.startedAt)}
               </Text>
             </Table.Td>
             <Table.Td>{robotName(r.robotId)}</Table.Td>
