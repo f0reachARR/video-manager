@@ -37,20 +37,21 @@ func toRunVideoDTO(rv sqlc.RunVideo) runVideoDTO {
 }
 
 type runDTO struct {
-	ID          string        `json:"id"`
-	SessionID   string        `json:"sessionId"`
-	TeamID      string        `json:"teamId"`
-	RobotID     string        `json:"robotId"`
-	ScenarioID  string        `json:"scenarioId"`
-	MatchID     *string       `json:"matchId"`
-	StartedAt   time.Time     `json:"startedAt"`
-	EndedAt     time.Time     `json:"endedAt"`
-	DurationSec int32         `json:"durationSec"`
-	Score       *float64      `json:"score"`
-	Memo        string        `json:"memo"`
-	Videos      []runVideoDTO `json:"videos,omitempty"`
-	TagIDs      []string      `json:"tagIds"`
-	CreatedAt   time.Time     `json:"createdAt"`
+	ID           string        `json:"id"`
+	TournamentID string        `json:"tournamentId"`
+	SessionID    string        `json:"sessionId"`
+	TeamID       string        `json:"teamId"`
+	RobotID      string        `json:"robotId"`
+	ScenarioID   string        `json:"scenarioId"`
+	MatchID      *string       `json:"matchId"`
+	StartedAt    time.Time     `json:"startedAt"`
+	EndedAt      time.Time     `json:"endedAt"`
+	DurationSec  int32         `json:"durationSec"`
+	Score        *float64      `json:"score"`
+	Memo         string        `json:"memo"`
+	Videos       []runVideoDTO `json:"videos,omitempty"`
+	TagIDs       []string      `json:"tagIds"`
+	CreatedAt    time.Time     `json:"createdAt"`
 }
 
 func toRunDTO(r sqlc.Run, videos []sqlc.RunVideo, tagIDs []pgtype.UUID) runDTO {
@@ -60,19 +61,20 @@ func toRunDTO(r sqlc.Run, videos []sqlc.RunVideo, tagIDs []pgtype.UUID) runDTO {
 		matchID = &s
 	}
 	out := runDTO{
-		ID:          uuidString(r.ID),
-		SessionID:   uuidString(r.SessionID),
-		TeamID:      uuidString(r.TeamID),
-		RobotID:     uuidString(r.RobotID),
-		ScenarioID:  uuidString(r.ScenarioID),
-		MatchID:     matchID,
-		StartedAt:   r.StartedAt.Time,
-		EndedAt:     r.StartedAt.Time.Add(time.Duration(r.DurationSec) * time.Second),
-		DurationSec: r.DurationSec,
-		Score:       r.Score,
-		Memo:        r.Memo,
-		TagIDs:      make([]string, 0, len(tagIDs)),
-		CreatedAt:   r.CreatedAt.Time,
+		ID:           uuidString(r.ID),
+		TournamentID: uuidString(r.TournamentID),
+		SessionID:    uuidString(r.SessionID),
+		TeamID:       uuidString(r.TeamID),
+		RobotID:      uuidString(r.RobotID),
+		ScenarioID:   uuidString(r.ScenarioID),
+		MatchID:      matchID,
+		StartedAt:    r.StartedAt.Time,
+		EndedAt:      r.StartedAt.Time.Add(time.Duration(r.DurationSec) * time.Second),
+		DurationSec:  r.DurationSec,
+		Score:        r.Score,
+		Memo:         r.Memo,
+		TagIDs:       make([]string, 0, len(tagIDs)),
+		CreatedAt:    r.CreatedAt.Time,
 	}
 	if videos != nil {
 		out.Videos = make([]runVideoDTO, len(videos))
@@ -129,7 +131,13 @@ func (h *Runs) List(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err.Error())
 		return
 	}
+	tournamentID, err := requiredTournamentID(r)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
 	params := sqlc.ListRunsPageParams{
+		TournamentID:    tournamentID,
 		Limit:           limit + 1,
 		CursorCreatedAt: cursorAt,
 		CursorID:        cursorID,
@@ -189,6 +197,17 @@ func (h *Runs) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "validation", "invalid sessionId", nil)
 		return
 	}
+	// Derive tournament_id from the session. Keeps the two in sync without
+	// trusting the client to supply a matching pair.
+	session, err := h.Q.GetSession(r.Context(), sessionID)
+	if err != nil {
+		if isNoRows(err) {
+			writeError(w, http.StatusUnprocessableEntity, "validation", "session not found", nil)
+			return
+		}
+		internalError(w, err)
+		return
+	}
 	teamID, err := parseUUIDParam(req.TeamID)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "validation", "invalid teamId", nil)
@@ -222,15 +241,16 @@ func (h *Runs) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	run, err := h.Q.CreateRun(r.Context(), sqlc.CreateRunParams{
-		SessionID:   sessionID,
-		TeamID:      teamID,
-		RobotID:     robotID,
-		ScenarioID:  scenarioID,
-		MatchID:     matchID,
-		StartedAt:   pgtypeTimestamptz(req.StartedAt),
-		Score:       req.Score,
-		Memo:        memo,
-		DurationSec: duration,
+		TournamentID: session.TournamentID,
+		SessionID:    sessionID,
+		TeamID:       teamID,
+		RobotID:      robotID,
+		ScenarioID:   scenarioID,
+		MatchID:      matchID,
+		StartedAt:    pgtypeTimestamptz(req.StartedAt),
+		Score:        req.Score,
+		Memo:         memo,
+		DurationSec:  duration,
 	})
 	if err != nil {
 		internalError(w, err)

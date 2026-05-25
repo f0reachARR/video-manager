@@ -7,12 +7,17 @@ import {
   videosApi,
 } from "../../../lib/api/client";
 import { queryKeys } from "../../../lib/api/queryKeys";
+import { useCurrentTournamentId } from "../../../stores/currentTournament";
 
-export const useVideos = (params: VideoListParams = {}) =>
-  useQuery({
-    queryKey: queryKeys.videos(params),
-    queryFn: () => videosApi.list({ limit: 200, ...params }),
+export const useVideos = (params: Omit<VideoListParams, "tournamentId"> = {}) => {
+  const tournamentId = useCurrentTournamentId();
+  return useQuery({
+    queryKey: queryKeys.videos({ ...params, tournamentId: tournamentId ?? "" }),
+    queryFn: () =>
+      videosApi.list({ limit: 200, ...params, tournamentId: tournamentId! }),
+    enabled: !!tournamentId,
   });
+};
 
 export const useVideo = (id: string | null | undefined) =>
   useQuery({

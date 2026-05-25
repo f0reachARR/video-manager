@@ -12,25 +12,27 @@ import (
 )
 
 const createRun = `-- name: CreateRun :one
-INSERT INTO runs (session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, duration_sec)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec
+INSERT INTO runs (tournament_id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, duration_sec)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec, tournament_id
 `
 
 type CreateRunParams struct {
-	SessionID   pgtype.UUID
-	TeamID      pgtype.UUID
-	RobotID     pgtype.UUID
-	ScenarioID  pgtype.UUID
-	MatchID     pgtype.UUID
-	StartedAt   pgtype.Timestamptz
-	Score       *float64
-	Memo        string
-	DurationSec int32
+	TournamentID pgtype.UUID
+	SessionID    pgtype.UUID
+	TeamID       pgtype.UUID
+	RobotID      pgtype.UUID
+	ScenarioID   pgtype.UUID
+	MatchID      pgtype.UUID
+	StartedAt    pgtype.Timestamptz
+	Score        *float64
+	Memo         string
+	DurationSec  int32
 }
 
 func (q *Queries) CreateRun(ctx context.Context, arg CreateRunParams) (Run, error) {
 	row := q.db.QueryRow(ctx, createRun,
+		arg.TournamentID,
 		arg.SessionID,
 		arg.TeamID,
 		arg.RobotID,
@@ -54,6 +56,7 @@ func (q *Queries) CreateRun(ctx context.Context, arg CreateRunParams) (Run, erro
 		&i.Memo,
 		&i.CreatedAt,
 		&i.DurationSec,
+		&i.TournamentID,
 	)
 	return i, err
 }
@@ -71,7 +74,7 @@ func (q *Queries) DeleteRun(ctx context.Context, id pgtype.UUID) (int64, error) 
 }
 
 const getRun = `-- name: GetRun :one
-SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec FROM runs WHERE id = $1
+SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec, tournament_id FROM runs WHERE id = $1
 `
 
 func (q *Queries) GetRun(ctx context.Context, id pgtype.UUID) (Run, error) {
@@ -89,12 +92,13 @@ func (q *Queries) GetRun(ctx context.Context, id pgtype.UUID) (Run, error) {
 		&i.Memo,
 		&i.CreatedAt,
 		&i.DurationSec,
+		&i.TournamentID,
 	)
 	return i, err
 }
 
 const listRecommendedVideosForRun = `-- name: ListRecommendedVideosForRun :many
-SELECT v.id, v.session_id, v.device_id, v.uploader_id, v.storage_key, v.recorded_at, v.duration_sec, v.time_offset_sec, v.created_at, v.thumbnail_key, v.display_name, v.hls_master_key, v.hls_status, v.source_video_codec, v.source_audio_codec, v.source_width, v.source_height, v.passthrough_ok
+SELECT v.id, v.session_id, v.device_id, v.uploader_id, v.storage_key, v.recorded_at, v.duration_sec, v.time_offset_sec, v.created_at, v.thumbnail_key, v.display_name, v.hls_master_key, v.hls_status, v.source_video_codec, v.source_audio_codec, v.source_width, v.source_height, v.passthrough_ok, v.tournament_id
 FROM videos v
 JOIN runs r ON r.id = $1
 WHERE v.session_id = r.session_id
@@ -136,6 +140,7 @@ func (q *Queries) ListRecommendedVideosForRun(ctx context.Context, id pgtype.UUI
 			&i.SourceWidth,
 			&i.SourceHeight,
 			&i.PassthroughOk,
+			&i.TournamentID,
 		); err != nil {
 			return nil, err
 		}
@@ -148,21 +153,23 @@ func (q *Queries) ListRecommendedVideosForRun(ctx context.Context, id pgtype.UUI
 }
 
 const listRunsPage = `-- name: ListRunsPage :many
-SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec
+SELECT id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec, tournament_id
 FROM runs
 WHERE
-  ($2::uuid IS NULL OR session_id = $2::uuid)
-  AND ($3::uuid IS NULL OR team_id = $3::uuid)
-  AND ($4::uuid IS NULL OR robot_id = $4::uuid)
-  AND ($5::uuid IS NULL OR scenario_id = $5::uuid)
-  AND ($6::uuid IS NULL OR match_id = $6::uuid)
-  AND ($7::timestamptz IS NULL OR (created_at, id) > ($7::timestamptz, $8::uuid))
+  tournament_id = $2::uuid
+  AND ($3::uuid IS NULL OR session_id = $3::uuid)
+  AND ($4::uuid IS NULL OR team_id = $4::uuid)
+  AND ($5::uuid IS NULL OR robot_id = $5::uuid)
+  AND ($6::uuid IS NULL OR scenario_id = $6::uuid)
+  AND ($7::uuid IS NULL OR match_id = $7::uuid)
+  AND ($8::timestamptz IS NULL OR (created_at, id) > ($8::timestamptz, $9::uuid))
 ORDER BY created_at ASC, id ASC
 LIMIT $1
 `
 
 type ListRunsPageParams struct {
 	Limit           int32
+	TournamentID    pgtype.UUID
 	SessionID       pgtype.UUID
 	TeamID          pgtype.UUID
 	RobotID         pgtype.UUID
@@ -175,6 +182,7 @@ type ListRunsPageParams struct {
 func (q *Queries) ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]Run, error) {
 	rows, err := q.db.Query(ctx, listRunsPage,
 		arg.Limit,
+		arg.TournamentID,
 		arg.SessionID,
 		arg.TeamID,
 		arg.RobotID,
@@ -202,6 +210,7 @@ func (q *Queries) ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]R
 			&i.Memo,
 			&i.CreatedAt,
 			&i.DurationSec,
+			&i.TournamentID,
 		); err != nil {
 			return nil, err
 		}
@@ -214,33 +223,35 @@ func (q *Queries) ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]R
 }
 
 const searchRuns = `-- name: SearchRuns :many
-SELECT r.id, r.session_id, r.team_id, r.robot_id, r.scenario_id, r.match_id, r.started_at, r.score, r.memo, r.created_at, r.duration_sec
+SELECT r.id, r.session_id, r.team_id, r.robot_id, r.scenario_id, r.match_id, r.started_at, r.score, r.memo, r.created_at, r.duration_sec, r.tournament_id
 FROM runs r
 WHERE
-  ($2::timestamptz IS NULL OR r.started_at >= $2::timestamptz)
-  AND ($3::timestamptz IS NULL OR r.started_at < $3::timestamptz)
-  AND ($4::uuid IS NULL OR r.robot_id = $4::uuid)
-  AND ($5::uuid IS NULL OR r.scenario_id = $5::uuid)
-  AND ($6::text IS NULL OR r.memo ILIKE '%' || $6::text || '%')
-  AND (COALESCE(array_length($7::text[], 1), 0) = 0
+  r.tournament_id = $2::uuid
+  AND ($3::timestamptz IS NULL OR r.started_at >= $3::timestamptz)
+  AND ($4::timestamptz IS NULL OR r.started_at < $4::timestamptz)
+  AND ($5::uuid IS NULL OR r.robot_id = $5::uuid)
+  AND ($6::uuid IS NULL OR r.scenario_id = $6::uuid)
+  AND ($7::text IS NULL OR r.memo ILIKE '%' || $7::text || '%')
+  AND (COALESCE(array_length($8::text[], 1), 0) = 0
        OR EXISTS (
          SELECT 1 FROM markers m
          WHERE m.run_id = r.id
-           AND m.category::text = ANY($7::text[])
+           AND m.category::text = ANY($8::text[])
        ))
-  AND ($8::int = 0 OR (
+  AND ($9::int = 0 OR (
          SELECT count(DISTINCT tag_id) FROM run_tags
          WHERE run_id = r.id
-           AND tag_id = ANY($9::uuid[])
-       ) = $8::int)
-  AND ($10::timestamptz IS NULL
-       OR (r.started_at, r.id) < ($10::timestamptz, $11::uuid))
+           AND tag_id = ANY($10::uuid[])
+       ) = $9::int)
+  AND ($11::timestamptz IS NULL
+       OR (r.started_at, r.id) < ($11::timestamptz, $12::uuid))
 ORDER BY r.started_at DESC, r.id DESC
 LIMIT $1
 `
 
 type SearchRunsParams struct {
 	Limit            int32
+	TournamentID     pgtype.UUID
 	From             pgtype.Timestamptz
 	To               pgtype.Timestamptz
 	RobotID          pgtype.UUID
@@ -256,6 +267,7 @@ type SearchRunsParams struct {
 func (q *Queries) SearchRuns(ctx context.Context, arg SearchRunsParams) ([]Run, error) {
 	rows, err := q.db.Query(ctx, searchRuns,
 		arg.Limit,
+		arg.TournamentID,
 		arg.From,
 		arg.To,
 		arg.RobotID,
@@ -286,6 +298,7 @@ func (q *Queries) SearchRuns(ctx context.Context, arg SearchRunsParams) ([]Run, 
 			&i.Memo,
 			&i.CreatedAt,
 			&i.DurationSec,
+			&i.TournamentID,
 		); err != nil {
 			return nil, err
 		}
@@ -308,7 +321,7 @@ SET
   memo = COALESCE($8, memo),
   duration_sec = COALESCE($9::int, duration_sec)
 WHERE id = $10
-RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec
+RETURNING id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, created_at, duration_sec, tournament_id
 `
 
 type UpdateRunParams struct {
@@ -350,6 +363,7 @@ func (q *Queries) UpdateRun(ctx context.Context, arg UpdateRunParams) (Run, erro
 		&i.Memo,
 		&i.CreatedAt,
 		&i.DurationSec,
+		&i.TournamentID,
 	)
 	return i, err
 }

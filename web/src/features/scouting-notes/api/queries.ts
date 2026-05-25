@@ -1,15 +1,37 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import {
-  type CreateScoutingNoteRequest,
-  scoutingNotesApi,
-} from "../../../lib/api/client";
+import { scoutingNotesApi } from "../../../lib/api/client";
 
-export const useScoutingNotesByMatch = (matchId: string | null | undefined) =>
+export const useScoutingNotesByTournament = (
+  tournamentId: string | null | undefined,
+) =>
   useQuery({
-    queryKey: ["scouting-notes", "by-match", matchId ?? ""] as const,
-    queryFn: () => scoutingNotesApi.listByMatch(matchId as string),
-    enabled: !!matchId,
+    queryKey: [
+      "scouting-notes",
+      "by-tournament",
+      tournamentId ?? "",
+    ] as const,
+    queryFn: () => scoutingNotesApi.listByTournament(tournamentId as string),
+    enabled: !!tournamentId,
+  });
+
+// Idempotent upsert-on-read against the API. Returns the note for (tournament,
+// team) — auto-creating it the first time so the SPA can mount the editor
+// immediately.
+export const useScoutingNoteByTeam = (
+  tournamentId: string | null | undefined,
+  teamId: string | null | undefined,
+) =>
+  useQuery({
+    queryKey: [
+      "scouting-notes",
+      "by-team",
+      tournamentId ?? "",
+      teamId ?? "",
+    ] as const,
+    queryFn: () =>
+      scoutingNotesApi.getByTeam(tournamentId as string, teamId as string),
+    enabled: !!tournamentId && !!teamId,
   });
 
 export const useScoutingNote = (noteId: string | null | undefined) =>
@@ -19,21 +41,13 @@ export const useScoutingNote = (noteId: string | null | undefined) =>
     enabled: !!noteId,
   });
 
-export const useCreateScoutingNote = (matchId: string) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: CreateScoutingNoteRequest) =>
-      scoutingNotesApi.create(matchId, body),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["scouting-notes", "by-match", matchId] }),
-  });
-};
-
-export const useDeleteScoutingNote = (matchId: string) => {
+export const useDeleteScoutingNote = (tournamentId: string) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => scoutingNotesApi.remove(id),
     onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["scouting-notes", "by-match", matchId] }),
+      qc.invalidateQueries({
+        queryKey: ["scouting-notes", "by-tournament", tournamentId],
+      }),
   });
 };

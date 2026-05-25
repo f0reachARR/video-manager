@@ -86,7 +86,6 @@ export type BulkUploadCheckResponse =
   components["schemas"]["BulkUploadCheckResponse"];
 
 export type ScoutingNote = components["schemas"]["ScoutingNote"];
-export type CreateScoutingNoteRequest = components["schemas"]["CreateScoutingNoteRequest"];
 export type ScoutingNoteList = components["schemas"]["ScoutingNoteList"];
 
 export type Annotation = components["schemas"]["Annotation"];
@@ -350,16 +349,18 @@ export const tagsApi = {
 
 // ---- Videos ----
 export type VideoListParams = PageParams & {
+  tournamentId: string;
   sessionId?: string;
   deviceId?: string;
   unassigned?: boolean;
 };
 export const videosApi = {
-  list: (p: VideoListParams = {}) =>
+  list: (p: VideoListParams) =>
     request<VideoList>(
       `/videos${qs({
         cursor: p.cursor,
         limit: p.limit,
+        tournamentId: p.tournamentId,
         sessionId: p.sessionId,
         deviceId: p.deviceId,
         unassigned: p.unassigned === true ? "true" : undefined,
@@ -387,19 +388,19 @@ export const encodingJobsApi = {
 
 // ---- Sessions ----
 export type SessionListParams = PageParams & {
+  tournamentId: string;
   modeHint?: SessionModeHint;
-  tournamentId?: string;
   startedFrom?: string;
   startedTo?: string;
 };
 export const sessionsApi = {
-  list: (p: SessionListParams = {}) =>
+  list: (p: SessionListParams) =>
     request<SessionList>(
       `/sessions${qs({
         cursor: p.cursor,
         limit: p.limit,
-        modeHint: p.modeHint,
         tournamentId: p.tournamentId,
+        modeHint: p.modeHint,
         startedFrom: p.startedFrom,
         startedTo: p.startedTo,
       })}`,
@@ -417,6 +418,7 @@ export const sessionsApi = {
 
 // ---- Runs ----
 export type RunListParams = PageParams & {
+  tournamentId: string;
   sessionId?: string;
   teamId?: string;
   robotId?: string;
@@ -424,11 +426,12 @@ export type RunListParams = PageParams & {
   matchId?: string;
 };
 export const runsApi = {
-  list: (p: RunListParams = {}) =>
+  list: (p: RunListParams) =>
     request<RunList>(
       `/runs${qs({
         cursor: p.cursor,
         limit: p.limit,
+        tournamentId: p.tournamentId,
         sessionId: p.sessionId,
         teamId: p.teamId,
         robotId: p.robotId,
@@ -458,6 +461,7 @@ export const runsApi = {
 
 // ---- Search ----
 export type SearchRunsParams = PageParams & {
+  tournamentId: string;
   from?: string;
   to?: string;
   robotId?: string;
@@ -467,11 +471,12 @@ export type SearchRunsParams = PageParams & {
   q?: string;
 };
 export const searchApi = {
-  runs: (p: SearchRunsParams = {}) =>
+  runs: (p: SearchRunsParams) =>
     request<RunList>(
       `/search/runs${qs({
         cursor: p.cursor,
         limit: p.limit,
+        tournamentId: p.tournamentId,
         from: p.from,
         to: p.to,
         robotId: p.robotId,
@@ -488,13 +493,14 @@ export const searchApi = {
 
 // ---- ScoutingNotes ----
 export const scoutingNotesApi = {
-  listByMatch: (matchId: string) =>
-    request<ScoutingNoteList>(`/matches/${matchId}/scouting-notes`),
-  create: (matchId: string, body: CreateScoutingNoteRequest) =>
-    request<ScoutingNote>(`/matches/${matchId}/scouting-notes`, {
-      method: "POST",
-      json: body,
-    }),
+  // Idempotent upsert-on-read: the API creates the row if it doesn't exist
+  // yet, so the SPA can render the editor without a separate POST step.
+  getByTeam: (tournamentId: string, teamId: string) =>
+    request<ScoutingNote>(
+      `/tournaments/${tournamentId}/teams/${teamId}/scouting-note`,
+    ),
+  listByTournament: (tournamentId: string) =>
+    request<ScoutingNoteList>(`/tournaments/${tournamentId}/scouting-notes`),
   get: (noteId: string) =>
     request<ScoutingNote>(`/scouting-notes/${noteId}`),
   remove: (noteId: string) =>
@@ -556,9 +562,9 @@ export const tournamentsApi = {
 };
 
 // ---- Matches ----
-export type MatchListParams = PageParams & { tournamentId?: string };
+export type MatchListParams = PageParams & { tournamentId: string };
 export const matchesApi = {
-  list: (p: MatchListParams = {}) =>
+  list: (p: MatchListParams) =>
     request<MatchList>(
       `/matches${qs({ cursor: p.cursor, limit: p.limit, tournamentId: p.tournamentId })}`,
     ),

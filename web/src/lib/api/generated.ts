@@ -739,24 +739,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/matches/{matchId}/scouting-notes": {
+    "/tournaments/{tournamentId}/scouting-notes": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                matchId: components["parameters"]["MatchIdPath"];
+                tournamentId: components["parameters"]["TournamentId"];
             };
             cookie?: never;
         };
-        /** Match 配下の ScoutingNote 一覧 */
-        get: operations["listScoutingNotes"];
-        put?: never;
         /**
-         * ScoutingNote を新規作成
-         * @description 本文は Hocuspocus が WS 経由で更新する。同じ (matchId, targetTeamId)
-         *     の組が既に存在する場合は 409 を返す。
+         * 大会配下の ScoutingNote 一覧
+         * @description (tournamentId, teamId) ごとに最大1件。Hocuspocus が ydoc_state を更新する。
          */
-        post: operations["createScoutingNote"];
+        get: operations["listScoutingNotesByTournament"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tournaments/{tournamentId}/teams/{teamId}/scouting-note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tournamentId: components["parameters"]["TournamentId"];
+                teamId: components["parameters"]["TeamId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 大会 × チームの ScoutingNote (なければ作成して返す)
+         * @description SPA が team ページを開くたびに呼ぶ idempotent な upsert-on-read。
+         *     Hocuspocus は返却された note.id を documentName として接続する。
+         */
+        get: operations["getScoutingNoteByTeam"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1399,7 +1421,7 @@ export interface components {
             location?: string | null;
             modeHint: components["schemas"]["SessionModeHint"];
             /** Format: uuid */
-            tournamentId?: string | null;
+            tournamentId: string;
             /** Format: date-time */
             createdAt: string;
         };
@@ -1412,7 +1434,7 @@ export interface components {
             location?: string | null;
             modeHint?: components["schemas"]["SessionModeHint"];
             /** Format: uuid */
-            tournamentId?: string | null;
+            tournamentId: string;
         };
         UpdateSessionRequest: {
             name?: string;
@@ -1423,7 +1445,7 @@ export interface components {
             location?: string | null;
             modeHint?: components["schemas"]["SessionModeHint"];
             /** Format: uuid */
-            tournamentId?: string | null;
+            tournamentId?: string;
         };
         SessionList: {
             data: components["schemas"]["Session"][];
@@ -1445,6 +1467,8 @@ export interface components {
         Video: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            tournamentId: string;
             /** Format: uuid */
             sessionId?: string | null;
             /** Format: uuid */
@@ -1587,6 +1611,8 @@ export interface components {
         Run: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            tournamentId: string;
             /** Format: uuid */
             sessionId: string;
             /** Format: uuid */
@@ -1889,19 +1915,15 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            matchId: string;
+            tournamentId: string;
             /** Format: uuid */
-            targetTeamId: string;
+            teamId: string;
             /** @description Hocuspocus が yjs ドキュメントから派生して書き込む検索用テキスト */
             plainText: string;
             /** Format: date-time */
             updatedAt: string;
             /** Format: date-time */
             createdAt: string;
-        };
-        CreateScoutingNoteRequest: {
-            /** Format: uuid */
-            targetTeamId: string;
         };
         ScoutingNoteList: {
             data: components["schemas"]["ScoutingNote"][];
@@ -3122,10 +3144,10 @@ export interface operations {
     };
     listSessions: {
         parameters: {
-            query?: {
+            query: {
+                tournamentId: string;
                 /** @description モードで絞り込む */
                 modeHint?: components["schemas"]["SessionModeHint"];
-                tournamentId?: string;
                 /** @description 開始時刻の下限（含む） */
                 startedFrom?: string;
                 /** @description 開始時刻の上限（含む） */
@@ -3273,7 +3295,8 @@ export interface operations {
     };
     listVideos: {
         parameters: {
-            query?: {
+            query: {
+                tournamentId: string;
                 sessionId?: string;
                 deviceId?: string;
                 /** @description true なら sessionId が未設定の動画のみ */
@@ -3521,12 +3544,12 @@ export interface operations {
             422: components["responses"]["UnprocessableEntity"];
         };
     };
-    listScoutingNotes: {
+    listScoutingNotesByTournament: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                matchId: components["parameters"]["MatchIdPath"];
+                tournamentId: components["parameters"]["TournamentId"];
             };
             cookie?: never;
         };
@@ -3544,23 +3567,20 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    createScoutingNote: {
+    getScoutingNoteByTeam: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                matchId: components["parameters"]["MatchIdPath"];
+                tournamentId: components["parameters"]["TournamentId"];
+                teamId: components["parameters"]["TeamId"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateScoutingNoteRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Created */
-            201: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3568,16 +3588,7 @@ export interface operations {
                     "application/json": components["schemas"]["ScoutingNote"];
                 };
             };
-            /** @description 既に存在する */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            422: components["responses"]["UnprocessableEntity"];
+            404: components["responses"]["NotFound"];
         };
     };
     getScoutingNote: {
@@ -3730,7 +3741,8 @@ export interface operations {
     };
     listRuns: {
         parameters: {
-            query?: {
+            query: {
+                tournamentId: string;
                 sessionId?: string;
                 teamId?: string;
                 robotId?: string;
@@ -4089,7 +4101,8 @@ export interface operations {
     };
     searchRuns: {
         parameters: {
-            query?: {
+            query: {
+                tournamentId: string;
                 from?: string;
                 to?: string;
                 robotId?: string;
@@ -4395,8 +4408,8 @@ export interface operations {
     };
     listMatches: {
         parameters: {
-            query?: {
-                tournamentId?: string;
+            query: {
+                tournamentId: string;
                 /** @description 前回レスポンスの `pagination.nextCursor` */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 1 レスポンスあたり最大件数（1〜200、既定 50） */

@@ -12,12 +12,13 @@ import (
 )
 
 const createVideo = `-- name: CreateVideo :one
-INSERT INTO videos (session_id, device_id, uploader_id, storage_key, display_name, recorded_at, duration_sec, time_offset_sec)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok
+INSERT INTO videos (tournament_id, session_id, device_id, uploader_id, storage_key, display_name, recorded_at, duration_sec, time_offset_sec)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok, tournament_id
 `
 
 type CreateVideoParams struct {
+	TournamentID  pgtype.UUID
 	SessionID     pgtype.UUID
 	DeviceID      pgtype.UUID
 	UploaderID    pgtype.UUID
@@ -30,6 +31,7 @@ type CreateVideoParams struct {
 
 func (q *Queries) CreateVideo(ctx context.Context, arg CreateVideoParams) (Video, error) {
 	row := q.db.QueryRow(ctx, createVideo,
+		arg.TournamentID,
 		arg.SessionID,
 		arg.DeviceID,
 		arg.UploaderID,
@@ -59,6 +61,7 @@ func (q *Queries) CreateVideo(ctx context.Context, arg CreateVideoParams) (Video
 		&i.SourceWidth,
 		&i.SourceHeight,
 		&i.PassthroughOk,
+		&i.TournamentID,
 	)
 	return i, err
 }
@@ -76,7 +79,7 @@ func (q *Queries) DeleteVideo(ctx context.Context, id pgtype.UUID) (int64, error
 }
 
 const getVideo = `-- name: GetVideo :one
-SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok FROM videos WHERE id = $1
+SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok, tournament_id FROM videos WHERE id = $1
 `
 
 func (q *Queries) GetVideo(ctx context.Context, id pgtype.UUID) (Video, error) {
@@ -101,12 +104,13 @@ func (q *Queries) GetVideo(ctx context.Context, id pgtype.UUID) (Video, error) {
 		&i.SourceWidth,
 		&i.SourceHeight,
 		&i.PassthroughOk,
+		&i.TournamentID,
 	)
 	return i, err
 }
 
 const getVideoByStorageKey = `-- name: GetVideoByStorageKey :one
-SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok FROM videos WHERE storage_key = $1
+SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok, tournament_id FROM videos WHERE storage_key = $1
 `
 
 func (q *Queries) GetVideoByStorageKey(ctx context.Context, storageKey string) (Video, error) {
@@ -131,24 +135,27 @@ func (q *Queries) GetVideoByStorageKey(ctx context.Context, storageKey string) (
 		&i.SourceWidth,
 		&i.SourceHeight,
 		&i.PassthroughOk,
+		&i.TournamentID,
 	)
 	return i, err
 }
 
 const listVideosPage = `-- name: ListVideosPage :many
-SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok
+SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok, tournament_id
 FROM videos
 WHERE
-  ($2::uuid IS NULL OR session_id = $2::uuid)
-  AND ($3::uuid IS NULL OR device_id = $3::uuid)
-  AND ($4::bool IS NULL OR $4::bool = false OR session_id IS NULL)
-  AND ($5::timestamptz IS NULL OR (created_at, id) > ($5::timestamptz, $6::uuid))
+  tournament_id = $2::uuid
+  AND ($3::uuid IS NULL OR session_id = $3::uuid)
+  AND ($4::uuid IS NULL OR device_id = $4::uuid)
+  AND ($5::bool IS NULL OR $5::bool = false OR session_id IS NULL)
+  AND ($6::timestamptz IS NULL OR (created_at, id) > ($6::timestamptz, $7::uuid))
 ORDER BY created_at ASC, id ASC
 LIMIT $1
 `
 
 type ListVideosPageParams struct {
 	Limit           int32
+	TournamentID    pgtype.UUID
 	SessionID       pgtype.UUID
 	DeviceID        pgtype.UUID
 	Unassigned      *bool
@@ -159,6 +166,7 @@ type ListVideosPageParams struct {
 func (q *Queries) ListVideosPage(ctx context.Context, arg ListVideosPageParams) ([]Video, error) {
 	rows, err := q.db.Query(ctx, listVideosPage,
 		arg.Limit,
+		arg.TournamentID,
 		arg.SessionID,
 		arg.DeviceID,
 		arg.Unassigned,
@@ -191,6 +199,7 @@ func (q *Queries) ListVideosPage(ctx context.Context, arg ListVideosPageParams) 
 			&i.SourceWidth,
 			&i.SourceHeight,
 			&i.PassthroughOk,
+			&i.TournamentID,
 		); err != nil {
 			return nil, err
 		}
@@ -206,17 +215,19 @@ const updateVideo = `-- name: UpdateVideo :one
 UPDATE videos
 SET
   session_id = CASE WHEN $1::bool THEN $2::uuid ELSE session_id END,
-  device_id = CASE WHEN $3::bool THEN $4::uuid ELSE device_id END,
-  recorded_at = CASE WHEN $5::bool THEN $6::timestamptz ELSE recorded_at END,
-  time_offset_sec = COALESCE($7, time_offset_sec),
-  display_name = COALESCE($8, display_name)
-WHERE id = $9
-RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok
+  tournament_id = COALESCE($3::uuid, tournament_id),
+  device_id = CASE WHEN $4::bool THEN $5::uuid ELSE device_id END,
+  recorded_at = CASE WHEN $6::bool THEN $7::timestamptz ELSE recorded_at END,
+  time_offset_sec = COALESCE($8, time_offset_sec),
+  display_name = COALESCE($9, display_name)
+WHERE id = $10
+RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok, tournament_id
 `
 
 type UpdateVideoParams struct {
 	SessionIDSet  bool
 	SessionID     pgtype.UUID
+	TournamentID  pgtype.UUID
 	DeviceIDSet   bool
 	DeviceID      pgtype.UUID
 	RecordedAtSet bool
@@ -230,6 +241,7 @@ func (q *Queries) UpdateVideo(ctx context.Context, arg UpdateVideoParams) (Video
 	row := q.db.QueryRow(ctx, updateVideo,
 		arg.SessionIDSet,
 		arg.SessionID,
+		arg.TournamentID,
 		arg.DeviceIDSet,
 		arg.DeviceID,
 		arg.RecordedAtSet,
@@ -258,6 +270,7 @@ func (q *Queries) UpdateVideo(ctx context.Context, arg UpdateVideoParams) (Video
 		&i.SourceWidth,
 		&i.SourceHeight,
 		&i.PassthroughOk,
+		&i.TournamentID,
 	)
 	return i, err
 }
@@ -306,7 +319,7 @@ SET
   recorded_at = CASE WHEN $1::bool THEN $2::timestamptz ELSE recorded_at END,
   duration_sec = CASE WHEN $3::bool THEN $4::int ELSE duration_sec END
 WHERE id = $5
-RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok
+RETURNING id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok, tournament_id
 `
 
 type UpdateVideoProbeParams struct {
@@ -345,6 +358,7 @@ func (q *Queries) UpdateVideoProbe(ctx context.Context, arg UpdateVideoProbePara
 		&i.SourceWidth,
 		&i.SourceHeight,
 		&i.PassthroughOk,
+		&i.TournamentID,
 	)
 	return i, err
 }

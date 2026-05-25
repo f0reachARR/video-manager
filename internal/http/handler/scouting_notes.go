@@ -16,8 +16,8 @@ type ScoutingNotes struct {
 
 type scoutingNoteDTO struct {
 	ID           string    `json:"id"`
-	MatchID      string    `json:"matchId"`
-	TargetTeamID string    `json:"targetTeamId"`
+	TournamentID string    `json:"tournamentId"`
+	TeamID       string    `json:"teamId"`
 	PlainText    string    `json:"plainText"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 	CreatedAt    time.Time `json:"createdAt"`
@@ -26,37 +26,36 @@ type scoutingNoteDTO struct {
 func toScoutingNoteDTO(n sqlc.ScoutingNote) scoutingNoteDTO {
 	return scoutingNoteDTO{
 		ID:           uuidString(n.ID),
-		MatchID:      uuidString(n.MatchID),
-		TargetTeamID: uuidString(n.TargetTeamID),
+		TournamentID: uuidString(n.TournamentID),
+		TeamID:       uuidString(n.TeamID),
 		PlainText:    n.PlainText,
 		UpdatedAt:    n.UpdatedAt.Time,
 		CreatedAt:    n.CreatedAt.Time,
 	}
 }
 
-type createScoutingNoteRequest struct {
-	TargetTeamID string `json:"targetTeamId"`
-}
-
 type scoutingNoteListResponse struct {
 	Data []scoutingNoteDTO `json:"data"`
 }
 
-func (h *ScoutingNotes) ListByMatch(w http.ResponseWriter, r *http.Request) {
-	matchID, err := parseUUIDParam(chi.URLParam(r, "matchId"))
+// ListByTournament returns every scouting note that belongs to a tournament.
+// Notes are uniquely keyed by (tournament_id, team_id) so the consumer can
+// look up a single team's note by teamId on the client side.
+func (h *ScoutingNotes) ListByTournament(w http.ResponseWriter, r *http.Request) {
+	tournamentID, err := parseUUIDParam(chi.URLParam(r, "tournamentId"))
 	if err != nil {
-		badRequest(w, "invalid matchId")
+		badRequest(w, "invalid tournamentId")
 		return
 	}
-	if _, err := h.Q.GetMatch(r.Context(), matchID); err != nil {
+	if _, err := h.Q.GetTournament(r.Context(), tournamentID); err != nil {
 		if isNoRows(err) {
-			notFound(w, "match not found")
+			notFound(w, "tournament not found")
 			return
 		}
 		internalError(w, err)
 		return
 	}
-	rows, err := h.Q.ListScoutingNotesByMatch(r.Context(), matchID)
+	rows, err := h.Q.ListScoutingNotesByTournament(r.Context(), tournamentID)
 	if err != nil {
 		internalError(w, err)
 		return
@@ -68,47 +67,72 @@ func (h *ScoutingNotes) ListByMatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, scoutingNoteListResponse{Data: out})
 }
 
-func (h *ScoutingNotes) Create(w http.ResponseWriter, r *http.Request) {
-	matchID, err := parseUUIDParam(chi.URLParam(r, "matchId"))
+// GetByTeam fetches (or auto-creates) the note for one (tournament, team)
+// pair. Upserting on read keeps the SPA simple: open the team page and the
+// Hocuspocus document is guaranteed to exist.
+func (h *ScoutingNotes) GetByTeam(w http.ResponseWriter, r *http.Request) {
+	tournamentID, err := parseUUIDParam(chi.URLParam(r, "tournamentId"))
 	if err != nil {
-		badRequest(w, "invalid matchId")
+		badRequest(w, "invalid tournamentId")
 		return
 	}
-	if _, err := h.Q.GetMatch(r.Context(), matchID); err != nil {
+	teamID, err := parseUUIDParam(chi.URLParam(r, "teamId"))
+	if err != nil {
+		badRequest(w, "invalid teamId")
+		return
+	}
+	n, err := h.Q.GetScoutingNoteByTournamentAndTeam(r.Context(), sqlc.GetScoutingNoteByTournamentAndTeamParams{
+		TournamentID: tournamentID,
+		TeamID:       teamID,
+	})
+	if err == nil {
+		writeJSON(w, http.StatusOK, toScoutingNoteDTO(n))
+		return
+	}
+	if !isNoRows(err) {
+		internalError(w, err)
+		return
+	}
+	// Validate FKs so we 404 cleanly instead of letting the INSERT 500.
+	if _, err := h.Q.GetTournament(r.Context(), tournamentID); err != nil {
 		if isNoRows(err) {
-			notFound(w, "match not found")
+			notFound(w, "tournament not found")
 			return
 		}
 		internalError(w, err)
 		return
 	}
-	var req createScoutingNoteRequest
-	if err := decodeJSON(r, &req); err != nil {
-		badRequest(w, err.Error())
+	if _, err := h.Q.GetTeam(r.Context(), teamID); err != nil {
+		if isNoRows(err) {
+			notFound(w, "team not found")
+			return
+		}
+		internalError(w, err)
 		return
 	}
-	teamID, err := parseUUIDParam(req.TargetTeamID)
-	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "validation", "invalid targetTeamId", nil)
-		return
-	}
-	n, err := h.Q.CreateScoutingNote(r.Context(), sqlc.CreateScoutingNoteParams{
-		MatchID:      matchID,
-		TargetTeamID: teamID,
+	created, err := h.Q.CreateScoutingNote(r.Context(), sqlc.CreateScoutingNoteParams{
+		TournamentID: tournamentID,
+		TeamID:       teamID,
 	})
 	if err != nil {
-		// unique (match_id, target_team_id) violation surfaces as a pgconn
-		// SQLSTATE 23505. Plain string check keeps the import surface small.
+		// A race could insert before we did; re-read in that case.
 		if strings.Contains(err.Error(), "duplicate key") ||
 			strings.Contains(err.Error(), "23505") {
-			writeError(w, http.StatusConflict, "conflict",
-				"scouting note for this match + team already exists", nil)
+			n, err := h.Q.GetScoutingNoteByTournamentAndTeam(r.Context(), sqlc.GetScoutingNoteByTournamentAndTeamParams{
+				TournamentID: tournamentID,
+				TeamID:       teamID,
+			})
+			if err != nil {
+				internalError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, toScoutingNoteDTO(n))
 			return
 		}
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toScoutingNoteDTO(n))
+	writeJSON(w, http.StatusOK, toScoutingNoteDTO(created))
 }
 
 func (h *ScoutingNotes) Get(w http.ResponseWriter, r *http.Request) {

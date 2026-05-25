@@ -22,7 +22,6 @@ import {
   isSelectable,
   rowVideoId,
 } from "../features/bulk-upload/components/FileTable";
-import { TournamentSelector } from "../features/bulk-upload/components/TournamentSelector";
 import { TeamRobotSelector } from "../features/bulk-upload/components/TeamRobotSelector";
 import { VideoPreviewModal } from "../features/bulk-upload/components/VideoPreviewModal";
 import type { ScannedFile } from "../features/bulk-upload/hooks/useDirectoryScan";
@@ -38,9 +37,9 @@ import {
   saveDirectoryHandle,
 } from "../features/bulk-upload/lib/handleStore";
 import { useSessions } from "../features/sessions/api/queries";
+import { useCurrentTournamentId } from "../stores/currentTournament";
 import { useCurrentUserId } from "../stores/currentUser";
 
-const LS_TOURNAMENT_KEY = "video-manager.bulk-upload.tournamentId";
 const LS_SESSION_KEY = "video-manager.bulk-upload.sessionId";
 const LS_TEAM_KEY = "video-manager.bulk-upload.teamId";
 const LS_ROBOT_KEY = "video-manager.bulk-upload.robotId";
@@ -63,17 +62,9 @@ function imageBucket(f: ScannedFile, imgUp?: BulkImageUploadItem) {
 }
 
 function BulkUploadPage() {
-  const [tournamentId, setTournamentIdState] = useState<string | null>(() =>
-    typeof window !== "undefined"
-      ? window.localStorage.getItem(LS_TOURNAMENT_KEY)
-      : null,
-  );
-  const setTournamentId = (v: string | null) => {
-    setTournamentIdState(v);
-    if (typeof window === "undefined") return;
-    if (v) window.localStorage.setItem(LS_TOURNAMENT_KEY, v);
-    else window.localStorage.removeItem(LS_TOURNAMENT_KEY);
-  };
+  // The header's TournamentSelector owns this — bulk-upload follows the
+  // globally selected tournament so the user only picks it once per session.
+  const tournamentId = useCurrentTournamentId();
 
   const [sessionId, setSessionIdState] = useState<string | null>(() =>
     typeof window !== "undefined"
@@ -137,9 +128,7 @@ function BulkUploadPage() {
   };
 
   const scan = useDirectoryScan({ directory, tournamentId });
-  const sessions = useSessions(
-    tournamentId ? { tournamentId, limit: 200 } : { limit: 200 },
-  );
+  const sessions = useSessions({ limit: 200 });
   const currentUserId = useCurrentUserId();
   const videoUpload = useVideoBulkUpload(
     tournamentId && sessionId
@@ -400,7 +389,6 @@ function BulkUploadPage() {
       <Stack>
         <Card withBorder padding="md">
           <Group align="flex-end" wrap="wrap">
-            <TournamentSelector value={tournamentId} onChange={setTournamentId} />
             <Stack gap={4} flex={1} miw={300}>
               <DirectoryControls
                 directoryName={directory?.name ?? null}

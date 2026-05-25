@@ -10,8 +10,8 @@ SELECT * FROM sessions WHERE id = $1;
 SELECT *
 FROM sessions
 WHERE
-  (sqlc.narg('mode_hint')::session_mode_hint IS NULL OR mode_hint = sqlc.narg('mode_hint')::session_mode_hint)
-  AND (sqlc.narg('tournament_id')::uuid IS NULL OR tournament_id = sqlc.narg('tournament_id')::uuid)
+  tournament_id = sqlc.arg('tournament_id')::uuid
+  AND (sqlc.narg('mode_hint')::session_mode_hint IS NULL OR mode_hint = sqlc.narg('mode_hint')::session_mode_hint)
   AND (sqlc.narg('started_from')::timestamptz IS NULL OR started_at >= sqlc.narg('started_from')::timestamptz)
   AND (sqlc.narg('started_to')::timestamptz IS NULL OR started_at <= sqlc.narg('started_to')::timestamptz)
   AND (sqlc.narg('cursor_created_at')::timestamptz IS NULL OR (created_at, id) > (sqlc.narg('cursor_created_at')::timestamptz, sqlc.narg('cursor_id')::uuid))
@@ -26,7 +26,7 @@ SET
   ended_at = CASE WHEN sqlc.arg('ended_at_set')::bool THEN sqlc.narg('ended_at') ELSE ended_at END,
   location = CASE WHEN sqlc.arg('location_set')::bool THEN sqlc.narg('location') ELSE location END,
   mode_hint = COALESCE(sqlc.narg('mode_hint')::session_mode_hint, mode_hint),
-  tournament_id = CASE WHEN sqlc.arg('tournament_id_set')::bool THEN sqlc.narg('tournament_id')::uuid ELSE tournament_id END
+  tournament_id = COALESCE(sqlc.narg('tournament_id')::uuid, tournament_id)
 WHERE id = sqlc.arg('id')
 RETURNING *;
 
@@ -42,7 +42,8 @@ RETURNING *;
 -- today's upload — that's exactly the post-hoc linking UX we want.
 SELECT *
 FROM sessions
-WHERE started_at IS NOT NULL
+WHERE tournament_id = sqlc.arg('tournament_id')::uuid
+  AND started_at IS NOT NULL
   AND started_at <= sqlc.arg('window_end')::timestamptz
   AND COALESCE(ended_at, 'infinity'::timestamptz)
       >= sqlc.arg('window_start')::timestamptz

@@ -87,7 +87,27 @@ func (h *Uploads) TusHook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	meta := req.Event.Upload.MetaData
-	params := sqlc.CreateVideoParams{StorageKey: storageKey}
+	// tournament_id is now required to materialize a video row. Uploads without
+	// it are rejected so we never end up with a video missing its tournament.
+	tIDStr := meta["tournamentId"]
+	if tIDStr == "" {
+		slog.Warn("tus hook: missing tournamentId metadata", "storageKey", storageKey)
+		writeJSON(w, http.StatusOK, tusHookResponse{
+			RejectUpload: true,
+			HTTPResponse: &tusHTTPResponse{StatusCode: http.StatusBadRequest, Body: "tournamentId metadata is required"},
+		})
+		return
+	}
+	tID, err := parseUUIDParam(tIDStr)
+	if err != nil {
+		slog.Warn("tus hook: invalid tournamentId metadata", "value", tIDStr)
+		writeJSON(w, http.StatusOK, tusHookResponse{
+			RejectUpload: true,
+			HTTPResponse: &tusHTTPResponse{StatusCode: http.StatusBadRequest, Body: "invalid tournamentId metadata"},
+		})
+		return
+	}
+	params := sqlc.CreateVideoParams{StorageKey: storageKey, TournamentID: tID}
 	// Use the original filename as the initial human-readable label.
 	if v := meta["filename"]; v != "" {
 		params.DisplayName = v
@@ -142,30 +162,24 @@ func (h *Uploads) TusHook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if h.BulkUploads != nil {
-		// Bulk-upload dedup: the browser pre-computes a 1 MiB head hash and
-		// pairs it with the tournament. We only record when both are present;
-		// regular (non-bulk) uploads simply skip this branch.
-		if tidStr := meta["tournamentId"]; tidStr != "" {
-			tid, err := parseUUIDParam(tidStr)
+		// Bulk-upload dedup: the browser pre-computes a 1 MiB head hash. Regular
+		// (non-bulk) uploads omit headHashHex and skip this branch.
+		if hh := meta["headHashHex"]; hh != "" {
+			headHash, err := hex.DecodeString(hh)
 			if err != nil {
-				slog.Warn("tus hook: invalid tournamentId metadata", "value", tidStr)
-			} else if hh := meta["headHashHex"]; hh != "" {
-				headHash, err := hex.DecodeString(hh)
+				slog.Warn("tus hook: invalid headHashHex metadata", "value", hh)
+			} else {
+				sizeStr := meta["sizeBytes"]
+				if sizeStr == "" {
+					sizeStr = strconv.FormatInt(req.Event.Upload.Size, 10)
+				}
+				size, err := strconv.ParseInt(sizeStr, 10, 64)
 				if err != nil {
-					slog.Warn("tus hook: invalid headHashHex metadata", "value", hh)
+					slog.Warn("tus hook: invalid sizeBytes metadata", "value", sizeStr)
 				} else {
-					sizeStr := meta["sizeBytes"]
-					if sizeStr == "" {
-						sizeStr = strconv.FormatInt(req.Event.Upload.Size, 10)
-					}
-					size, err := strconv.ParseInt(sizeStr, 10, 64)
-					if err != nil {
-						slog.Warn("tus hook: invalid sizeBytes metadata", "value", sizeStr)
-					} else {
-						filename := meta["filename"]
-						if err := h.BulkUploads.RegisterVideoFingerprint(r.Context(), tid, video.ID, headHash, size, filename); err != nil {
-							slog.Warn("register video fingerprint failed", "error", err, "videoId", id)
-						}
+					filename := meta["filename"]
+					if err := h.BulkUploads.RegisterVideoFingerprint(r.Context(), tID, video.ID, headHash, size, filename); err != nil {
+						slog.Warn("register video fingerprint failed", "error", err, "videoId", id)
 					}
 				}
 			}

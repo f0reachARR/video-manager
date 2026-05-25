@@ -1,6 +1,6 @@
 -- name: CreateRun :one
-INSERT INTO runs (session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, duration_sec)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO runs (tournament_id, session_id, team_id, robot_id, scenario_id, match_id, started_at, score, memo, duration_sec)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: GetRun :one
@@ -10,7 +10,8 @@ SELECT * FROM runs WHERE id = $1;
 SELECT *
 FROM runs
 WHERE
-  (sqlc.narg('session_id')::uuid IS NULL OR session_id = sqlc.narg('session_id')::uuid)
+  tournament_id = sqlc.arg('tournament_id')::uuid
+  AND (sqlc.narg('session_id')::uuid IS NULL OR session_id = sqlc.narg('session_id')::uuid)
   AND (sqlc.narg('team_id')::uuid IS NULL OR team_id = sqlc.narg('team_id')::uuid)
   AND (sqlc.narg('robot_id')::uuid IS NULL OR robot_id = sqlc.narg('robot_id')::uuid)
   AND (sqlc.narg('scenario_id')::uuid IS NULL OR scenario_id = sqlc.narg('scenario_id')::uuid)
@@ -53,7 +54,8 @@ LIMIT 50;
 SELECT r.*
 FROM runs r
 WHERE
-  (sqlc.narg('from')::timestamptz IS NULL OR r.started_at >= sqlc.narg('from')::timestamptz)
+  r.tournament_id = sqlc.arg('tournament_id')::uuid
+  AND (sqlc.narg('from')::timestamptz IS NULL OR r.started_at >= sqlc.narg('from')::timestamptz)
   AND (sqlc.narg('to')::timestamptz IS NULL OR r.started_at < sqlc.narg('to')::timestamptz)
   AND (sqlc.narg('robot_id')::uuid IS NULL OR r.robot_id = sqlc.narg('robot_id')::uuid)
   AND (sqlc.narg('scenario_id')::uuid IS NULL OR r.scenario_id = sqlc.narg('scenario_id')::uuid)

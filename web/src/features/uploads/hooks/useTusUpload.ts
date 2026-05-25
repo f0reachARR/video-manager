@@ -19,6 +19,7 @@ export type UploadItem = {
 };
 
 export type UploadMeta = {
+  tournamentId: string | null;
   deviceId: string | null;
   sessionId: string | null;
   uploaderId: string | null;
@@ -105,6 +106,7 @@ export function useTusUpload({
       filename: file.name,
       filetype: file.type || "application/octet-stream",
     };
+    if (m.tournamentId) meta.tournamentId = m.tournamentId;
     if (m.deviceId) meta.deviceId = m.deviceId;
     if (m.sessionId) meta.sessionId = m.sessionId;
     if (m.uploaderId) meta.uploaderId = m.uploaderId;

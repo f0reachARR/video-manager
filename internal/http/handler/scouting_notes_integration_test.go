@@ -8,14 +8,14 @@ import (
 
 type scoutingNoteResp struct {
 	ID           string    `json:"id"`
-	MatchID      string    `json:"matchId"`
-	TargetTeamID string    `json:"targetTeamId"`
+	TournamentID string    `json:"tournamentId"`
+	TeamID       string    `json:"teamId"`
 	PlainText    string    `json:"plainText"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
-func seedMatchAndTeams(t *testing.T, env *testEnv) (matchID, teamA, teamB string) {
+func seedTournamentAndTeams(t *testing.T, env *testEnv) (tournamentID, teamA, teamB string) {
 	t.Helper()
 	type idR struct{ ID string `json:"id"` }
 
@@ -31,37 +31,37 @@ func seedMatchAndTeams(t *testing.T, env *testEnv) (matchID, teamA, teamB string
 	}
 	teamA = mkTeam("A")
 	teamB = mkTeam("B")
-
-	var m idR
-	rec = env.do(t, http.MethodPost, "/matches", map[string]any{
-		"tournamentId": tour.ID, "teamAId": teamA, "teamBId": teamB,
-	}, &m)
-	mustStatus(t, rec, http.StatusCreated)
-	matchID = m.ID
+	tournamentID = tour.ID
 	return
 }
 
-func TestScoutingNoteCRUD(t *testing.T) {
+func TestScoutingNoteAutoCreateAndList(t *testing.T) {
 	env := setupEnv(t)
-	matchID, _, teamB := seedMatchAndTeams(t, env)
+	tournamentID, _, teamB := seedTournamentAndTeams(t, env)
 
-	// Create
+	// GetByTeam auto-creates the note on first access — the SPA opens the
+	// team page and the Hocuspocus document is guaranteed to exist.
 	var n1 scoutingNoteResp
-	rec := env.do(t, http.MethodPost, "/matches/"+matchID+"/scouting-notes",
-		map[string]any{"targetTeamId": teamB}, &n1)
-	mustStatus(t, rec, http.StatusCreated)
+	rec := env.do(t, http.MethodGet,
+		"/tournaments/"+tournamentID+"/teams/"+teamB+"/scouting-note", nil, &n1)
+	mustStatus(t, rec, http.StatusOK)
 	if n1.PlainText != "" {
 		t.Errorf("plainText should start empty: %q", n1.PlainText)
 	}
-
-	// Duplicate (match, team) → 409
-	rec = env.do(t, http.MethodPost, "/matches/"+matchID+"/scouting-notes",
-		map[string]any{"targetTeamId": teamB}, nil)
-	if rec.Code != http.StatusConflict {
-		t.Errorf("duplicate expected 409, got %d", rec.Code)
+	if n1.TournamentID != tournamentID || n1.TeamID != teamB {
+		t.Errorf("unexpected note: %+v", n1)
 	}
 
-	// Get
+	// Second GET should return the same row (idempotent upsert).
+	var n2 scoutingNoteResp
+	rec = env.do(t, http.MethodGet,
+		"/tournaments/"+tournamentID+"/teams/"+teamB+"/scouting-note", nil, &n2)
+	mustStatus(t, rec, http.StatusOK)
+	if n2.ID != n1.ID {
+		t.Errorf("expected same id, got %q vs %q", n1.ID, n2.ID)
+	}
+
+	// Get by id
 	var fetched scoutingNoteResp
 	rec = env.do(t, http.MethodGet, "/scouting-notes/"+n1.ID, nil, &fetched)
 	mustStatus(t, rec, http.StatusOK)
@@ -69,12 +69,12 @@ func TestScoutingNoteCRUD(t *testing.T) {
 		t.Errorf("get id mismatch")
 	}
 
-	// List by match
+	// List by tournament
 	type listR struct {
 		Data []scoutingNoteResp `json:"data"`
 	}
 	var list listR
-	rec = env.do(t, http.MethodGet, "/matches/"+matchID+"/scouting-notes", nil, &list)
+	rec = env.do(t, http.MethodGet, "/tournaments/"+tournamentID+"/scouting-notes", nil, &list)
 	mustStatus(t, rec, http.StatusOK)
 	if len(list.Data) != 1 || list.Data[0].ID != n1.ID {
 		t.Errorf("list: %+v", list)
@@ -87,20 +87,18 @@ func TestScoutingNoteCRUD(t *testing.T) {
 	mustStatus(t, rec, http.StatusNotFound)
 }
 
-func TestScoutingNoteCreateRejectsBadTeam(t *testing.T) {
+func TestScoutingNoteRejectsBadTournament(t *testing.T) {
 	env := setupEnv(t)
-	matchID, _, _ := seedMatchAndTeams(t, env)
-	rec := env.do(t, http.MethodPost, "/matches/"+matchID+"/scouting-notes",
-		map[string]any{"targetTeamId": "not-uuid"}, nil)
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("expected 422, got %d", rec.Code)
-	}
+	_, _, teamB := seedTournamentAndTeams(t, env)
+	rec := env.do(t, http.MethodGet,
+		"/tournaments/00000000-0000-0000-0000-000000000000/teams/"+teamB+"/scouting-note", nil, nil)
+	mustStatus(t, rec, http.StatusNotFound)
 }
 
-func TestScoutingNoteCreateMatchNotFound(t *testing.T) {
+func TestScoutingNoteRejectsBadTeam(t *testing.T) {
 	env := setupEnv(t)
-	rec := env.do(t, http.MethodPost,
-		"/matches/00000000-0000-0000-0000-000000000000/scouting-notes",
-		map[string]any{"targetTeamId": "00000000-0000-0000-0000-000000000001"}, nil)
+	tournamentID, _, _ := seedTournamentAndTeams(t, env)
+	rec := env.do(t, http.MethodGet,
+		"/tournaments/"+tournamentID+"/teams/00000000-0000-0000-0000-000000000000/scouting-note", nil, nil)
 	mustStatus(t, rec, http.StatusNotFound)
 }

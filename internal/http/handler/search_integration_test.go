@@ -42,38 +42,40 @@ func TestSearchRunsCombinedFilters(t *testing.T) {
 		map[string]any{"runOffsetSec": 1, "category": "success"}, nil)
 	mustStatus(t, rec, http.StatusCreated)
 
+	tq := "tournamentId=" + deps.TournamentID
+
 	// Period filter (May 2 only): expect r2 alone.
 	var list runListResponse
 	rec = env.do(t, http.MethodGet,
-		"/search/runs?from=2026-05-02T00:00:00Z&to=2026-05-03T00:00:00Z", nil, &list)
+		"/search/runs?"+tq+"&from=2026-05-02T00:00:00Z&to=2026-05-03T00:00:00Z", nil, &list)
 	mustStatus(t, rec, http.StatusOK)
 	if len(list.Data) != 1 || list.Data[0].ID != r2 {
 		t.Errorf("period filter: %+v", list.Data)
 	}
 
 	// Memo q
-	rec = env.do(t, http.MethodGet, "/search/runs?q=weather", nil, &list)
+	rec = env.do(t, http.MethodGet, "/search/runs?"+tq+"&q=weather", nil, &list)
 	mustStatus(t, rec, http.StatusOK)
 	if len(list.Data) != 1 || list.Data[0].ID != r2 {
 		t.Errorf("memo q: %+v", list.Data)
 	}
 
 	// tagIds AND (must have BOTH)
-	rec = env.do(t, http.MethodGet, "/search/runs?tagIds="+deps.TagID+","+tagB.ID, nil, &list)
+	rec = env.do(t, http.MethodGet, "/search/runs?"+tq+"&tagIds="+deps.TagID+","+tagB.ID, nil, &list)
 	mustStatus(t, rec, http.StatusOK)
 	if len(list.Data) != 1 || list.Data[0].ID != r2 {
 		t.Errorf("tag AND: %+v", list.Data)
 	}
 
 	// markerCategories OR — r2 has success
-	rec = env.do(t, http.MethodGet, "/search/runs?markerCategories=success,failure", nil, &list)
+	rec = env.do(t, http.MethodGet, "/search/runs?"+tq+"&markerCategories=success,failure", nil, &list)
 	mustStatus(t, rec, http.StatusOK)
 	if len(list.Data) != 1 || list.Data[0].ID != r2 {
 		t.Errorf("marker filter: %+v", list.Data)
 	}
 
-	// No filters: expect 3, DESC by started_at
-	rec = env.do(t, http.MethodGet, "/search/runs", nil, &list)
+	// No additional filters: expect 3, DESC by started_at
+	rec = env.do(t, http.MethodGet, "/search/runs?"+tq, nil, &list)
 	mustStatus(t, rec, http.StatusOK)
 	if len(list.Data) != 3 || list.Data[0].ID != r3 || list.Data[2].ID != r1 {
 		t.Errorf("ordering: %+v", list.Data)
@@ -104,15 +106,16 @@ func TestSearchRunsCursor(t *testing.T) {
 		mustStatus(t, rec, http.StatusCreated)
 	}
 
+	tq := "tournamentId=" + deps.TournamentID
 	var page runListResponse
-	rec := env.do(t, http.MethodGet, "/search/runs?limit=2", nil, &page)
+	rec := env.do(t, http.MethodGet, "/search/runs?"+tq+"&limit=2", nil, &page)
 	mustStatus(t, rec, http.StatusOK)
 	if len(page.Data) != 2 || !page.Pagination.HasMore || page.Pagination.NextCursor == nil {
 		t.Fatalf("first page: %+v", page)
 	}
 
 	var rest runListResponse
-	rec = env.do(t, http.MethodGet, "/search/runs?limit=2&cursor="+*page.Pagination.NextCursor, nil, &rest)
+	rec = env.do(t, http.MethodGet, "/search/runs?"+tq+"&limit=2&cursor="+*page.Pagination.NextCursor, nil, &rest)
 	mustStatus(t, rec, http.StatusOK)
 	if len(rest.Data) != 1 || rest.Pagination.HasMore {
 		t.Errorf("second page: %+v", rest)

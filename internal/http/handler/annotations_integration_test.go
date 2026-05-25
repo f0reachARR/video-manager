@@ -26,8 +26,9 @@ type annotationListResp struct {
 
 func createTestVideo(t *testing.T, env *testEnv, storageKey string) string {
 	t.Helper()
+	tournamentID := env.createTournament(t, "T-"+storageKey)
 	if _, err := env.Pool.Exec(t.Context(),
-		`INSERT INTO videos (storage_key, duration_sec) VALUES ($1, 60)`, storageKey); err != nil {
+		`INSERT INTO videos (storage_key, tournament_id, duration_sec) VALUES ($1, $2::uuid, 60)`, storageKey, tournamentID); err != nil {
 		t.Fatalf("insert video: %v", err)
 	}
 	var id string

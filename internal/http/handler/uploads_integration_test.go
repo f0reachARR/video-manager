@@ -10,7 +10,7 @@ type tusHookResp struct {
 }
 
 // post-finish hook payload that mirrors tusd v2's JSON shape.
-func tusHookBody(uploadID string) map[string]any {
+func tusHookBody(uploadID, tournamentID string) map[string]any {
 	return map[string]any{
 		"Type": "post-finish",
 		"Event": map[string]any{
@@ -18,8 +18,9 @@ func tusHookBody(uploadID string) map[string]any {
 				"ID":   uploadID,
 				"Size": 100,
 				"MetaData": map[string]string{
-					"filename": "x.mp4",
-					"filetype": "video/mp4",
+					"filename":     "x.mp4",
+					"filetype":     "video/mp4",
+					"tournamentId": tournamentID,
 				},
 				"Storage": map[string]string{
 					"Type":   "s3store",
@@ -33,8 +34,9 @@ func tusHookBody(uploadID string) map[string]any {
 
 func TestTusHookCreatesVideoAndEnqueuesProbe(t *testing.T) {
 	env := setupEnv(t)
+	tournamentID := env.createTournament(t, "T")
 	var resp tusHookResp
-	rec := env.do(t, http.MethodPost, "/uploads/tus-hook", tusHookBody("upload-abc"), &resp)
+	rec := env.do(t, http.MethodPost, "/uploads/tus-hook", tusHookBody("upload-abc", tournamentID), &resp)
 	mustStatus(t, rec, http.StatusOK)
 	if resp.VideoID == nil {
 		t.Fatal("videoId missing from response")
@@ -56,12 +58,13 @@ func TestTusHookCreatesVideoAndEnqueuesProbe(t *testing.T) {
 
 func TestTusHookIdempotent(t *testing.T) {
 	env := setupEnv(t)
+	tournamentID := env.createTournament(t, "T")
 	var first tusHookResp
-	rec := env.do(t, http.MethodPost, "/uploads/tus-hook", tusHookBody("upload-dup"), &first)
+	rec := env.do(t, http.MethodPost, "/uploads/tus-hook", tusHookBody("upload-dup", tournamentID), &first)
 	mustStatus(t, rec, http.StatusOK)
 
 	var second tusHookResp
-	rec = env.do(t, http.MethodPost, "/uploads/tus-hook", tusHookBody("upload-dup"), &second)
+	rec = env.do(t, http.MethodPost, "/uploads/tus-hook", tusHookBody("upload-dup", tournamentID), &second)
 	mustStatus(t, rec, http.StatusOK)
 	if first.VideoID == nil || second.VideoID == nil || *first.VideoID != *second.VideoID {
 		t.Errorf("expected same videoId, got %v vs %v", first.VideoID, second.VideoID)
@@ -84,7 +87,8 @@ func TestTusHookIdempotent(t *testing.T) {
 
 func TestTusHookIgnoresNonPostFinish(t *testing.T) {
 	env := setupEnv(t)
-	body := tusHookBody("pre-x")
+	tournamentID := env.createTournament(t, "T")
+	body := tusHookBody("pre-x", tournamentID)
 	body["Type"] = "pre-create"
 	rec := env.do(t, http.MethodPost, "/uploads/tus-hook", body, nil)
 	mustStatus(t, rec, http.StatusOK)

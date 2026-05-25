@@ -34,7 +34,7 @@ function MatchesPage() {
   const navigate = useNavigate();
   const tournaments = useTournaments();
   const teams = useTeams();
-  const matches = useMatches(tournamentId ? { tournamentId } : {});
+  const matches = useMatches();
   const [opened, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<Match | null>(null);
 

@@ -7,6 +7,7 @@ import type {
   SessionModeHint,
   UpdateSessionRequest,
 } from "../../../lib/api/client";
+import { useCurrentTournamentId } from "../../../stores/currentTournament";
 import { useTournaments } from "../../tournaments/api/queries";
 import { useCreateSession, useUpdateSession } from "../api/queries";
 
@@ -32,6 +33,7 @@ export function SessionEditModal({
   onClose: () => void;
   session: Session | null;
 }) {
+  const currentTournamentId = useCurrentTournamentId();
   const [name, setName] = useState(session?.name ?? "");
   const [modeHint, setModeHint] = useState<SessionModeHint>(
     session?.modeHint ?? "practice",
@@ -40,24 +42,22 @@ export function SessionEditModal({
   const [endedAt, setEndedAt] = useState<Date | null>(toDate(session?.endedAt));
   const [location, setLocation] = useState(session?.location ?? "");
   const [tournamentId, setTournamentId] = useState<string | null>(
-    session?.tournamentId ?? null,
+    session?.tournamentId ?? currentTournamentId ?? null,
   );
   const create = useCreateSession();
   const update = useUpdateSession();
   const tournaments = useTournaments();
 
   const submit = () => {
+    if (!tournamentId) return; // disabled state should have prevented this
     if (session) {
-      // PATCH semantics: `tournamentId: null` clears the link; omit if
-      // unchanged. We always send it so the modal can both set and clear
-      // — the backend's Optional<string> Pattern accepts JSON null.
       const payload: UpdateSessionRequest = {
         name,
         modeHint,
         startedAt: toIsoOrNull(startedAt),
         endedAt: toIsoOrNull(endedAt),
         location: location || null,
-        tournamentId: tournamentId ?? null,
+        tournamentId,
       };
       update.mutate({ id: session.id, body: payload }, { onSuccess: onClose });
     } else {
@@ -68,7 +68,7 @@ export function SessionEditModal({
           startedAt: toIsoOrNull(startedAt),
           endedAt: toIsoOrNull(endedAt),
           location: location || null,
-          tournamentId: tournamentId ?? null,
+          tournamentId,
         },
         { onSuccess: onClose },
       );
@@ -117,8 +117,8 @@ export function SessionEditModal({
           placeholder="例: 体育館 A"
         />
         <Select
-          label="大会 (任意)"
-          placeholder="紐付け無し"
+          label="大会"
+          placeholder="大会を選択"
           data={(tournaments.data?.data ?? []).map((t) => ({
             value: t.id,
             label: t.name,
@@ -126,8 +126,8 @@ export function SessionEditModal({
           value={tournamentId}
           onChange={setTournamentId}
           searchable
-          clearable
-          description="一括アップロード画面で、この大会を選んだときに候補に出ます。"
+          required
+          allowDeselect={false}
         />
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
@@ -136,7 +136,7 @@ export function SessionEditModal({
           <Button
             onClick={submit}
             loading={create.isPending || update.isPending}
-            disabled={!name.trim()}
+            disabled={!name.trim() || !tournamentId}
           >
             保存
           </Button>

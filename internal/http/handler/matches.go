@@ -62,18 +62,16 @@ func (h *Matches) List(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err.Error())
 		return
 	}
+	tournamentID, err := requiredTournamentID(r)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
 	params := sqlc.ListMatchesPageParams{
+		TournamentID:    tournamentID,
 		Limit:           limit + 1,
 		CursorCreatedAt: cursorAt,
 		CursorID:        cursorID,
-	}
-	if v := r.URL.Query().Get("tournamentId"); v != "" {
-		id, err := parseUUIDParam(v)
-		if err != nil {
-			badRequest(w, "invalid tournamentId")
-			return
-		}
-		params.TournamentID = id
 	}
 	rows, err := h.Q.ListMatchesPage(r.Context(), params)
 	if err != nil {

@@ -77,7 +77,7 @@ const listMatchesPage = `-- name: ListMatchesPage :many
 SELECT id, tournament_id, team_a_id, team_b_id, scheduled_at, created_at
 FROM matches
 WHERE
-  ($2::uuid IS NULL OR tournament_id = $2::uuid)
+  tournament_id = $2::uuid
   AND ($3::timestamptz IS NULL
        OR (created_at, id) > ($3::timestamptz, $4::uuid))
 ORDER BY created_at ASC, id ASC

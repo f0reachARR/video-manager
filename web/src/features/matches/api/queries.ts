@@ -6,6 +6,7 @@ import {
   type UpdateMatchRequest,
   matchesApi,
 } from "../../../lib/api/client";
+import { useCurrentTournamentId } from "../../../stores/currentTournament";
 
 export const useMatch = (id: string | null | undefined) =>
   useQuery({
@@ -14,11 +15,17 @@ export const useMatch = (id: string | null | undefined) =>
     enabled: !!id,
   });
 
-export const useMatches = (params: MatchListParams = {}) =>
-  useQuery({
-    queryKey: ["matches", params] as const,
-    queryFn: () => matchesApi.list({ limit: 200, ...params }),
+export const useMatches = (
+  params: Omit<MatchListParams, "tournamentId"> = {},
+) => {
+  const tournamentId = useCurrentTournamentId();
+  return useQuery({
+    queryKey: ["matches", { ...params, tournamentId }] as const,
+    queryFn: () =>
+      matchesApi.list({ limit: 200, ...params, tournamentId: tournamentId! }),
+    enabled: !!tournamentId,
   });
+};
 
 export const useCreateMatch = () => {
   const qc = useQueryClient();

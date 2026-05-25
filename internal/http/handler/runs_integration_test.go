@@ -28,22 +28,25 @@ type runResp struct {
 
 // runDeps creates the masters needed to satisfy Run's foreign keys.
 type runDeps struct {
-	SessionID  string
-	TeamID     string
-	RobotID    string
-	ScenarioID string
-	TagID      string
-	VideoID    string
+	TournamentID string
+	SessionID    string
+	TeamID       string
+	RobotID      string
+	ScenarioID   string
+	TagID        string
+	VideoID      string
 }
 
 func seedRunDeps(t *testing.T, env *testEnv) runDeps {
 	t.Helper()
 	ctx := t.Context()
 
+	tournamentID := env.createTournament(t, "T")
+
 	// session
 	var sess sessionResp
 	rec := env.do(t, http.MethodPost, "/sessions",
-		map[string]any{"name": "S", "modeHint": "practice"}, &sess)
+		map[string]any{"name": "S", "modeHint": "practice", "tournamentId": tournamentID}, &sess)
 	mustStatus(t, rec, http.StatusCreated)
 
 	// team
@@ -75,7 +78,8 @@ func seedRunDeps(t *testing.T, env *testEnv) runDeps {
 	// cross-session attaches.
 	storageKey := "run-test-key"
 	if _, err := env.Pool.Exec(ctx,
-		`INSERT INTO videos (session_id, storage_key, duration_sec) VALUES ($1, $2, 90)`, sess.ID, storageKey); err != nil {
+		`INSERT INTO videos (tournament_id, session_id, storage_key, duration_sec) VALUES ($1::uuid, $2, $3, 90)`,
+		tournamentID, sess.ID, storageKey); err != nil {
 		t.Fatalf("insert video: %v", err)
 	}
 	var videoID string
@@ -85,12 +89,13 @@ func seedRunDeps(t *testing.T, env *testEnv) runDeps {
 	}
 
 	return runDeps{
-		SessionID:  sess.ID,
-		TeamID:     team.ID,
-		RobotID:    robot.ID,
-		ScenarioID: sc.ID,
-		TagID:      tag.ID,
-		VideoID:    videoID,
+		TournamentID: tournamentID,
+		SessionID:    sess.ID,
+		TeamID:       team.ID,
+		RobotID:      robot.ID,
+		ScenarioID:   sc.ID,
+		TagID:        tag.ID,
+		VideoID:      videoID,
 	}
 }
 

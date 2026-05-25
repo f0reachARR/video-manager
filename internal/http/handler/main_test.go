@@ -121,3 +121,19 @@ func mustStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 		t.Fatalf("status: got %d want %d, body=%s", rec.Code, want, rec.Body.String())
 	}
 }
+
+// createTournament inserts a tournament row directly via sqlc and returns its
+// ID. Used by tests that don't actually care about the tournament's identity
+// — they just need a valid id to satisfy the new FK on videos/runs/sessions.
+func (e *testEnv) createTournament(t *testing.T, name string) string {
+	t.Helper()
+	tn, err := e.Q.CreateTournament(t.Context(), sqlc.CreateTournamentParams{Name: name})
+	if err != nil {
+		t.Fatalf("seed tournament: %v", err)
+	}
+	var idStr string
+	if err := e.Pool.QueryRow(t.Context(), `SELECT $1::uuid::text`, tn.ID).Scan(&idStr); err != nil {
+		t.Fatalf("format tournament id: %v", err)
+	}
+	return idStr
+}

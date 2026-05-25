@@ -47,6 +47,9 @@ export function SessionAssignModal({ video, onClose }: Props) {
         name,
         modeHint: "practice",
         startedAt: video.recordedAt ?? null,
+        // Sessions are tournament-scoped; reuse the video's tournament so the
+        // newly created session lands in the same tournament as the upload.
+        tournamentId: video.tournamentId,
       });
       sessionId = session.id;
     } else {

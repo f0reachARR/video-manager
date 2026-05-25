@@ -7,12 +7,22 @@ import {
   sessionsApi,
 } from "../../../lib/api/client";
 import { queryKeys } from "../../../lib/api/queryKeys";
+import { useCurrentTournamentId } from "../../../stores/currentTournament";
 
-export const useSessions = (params: SessionListParams = {}) =>
-  useQuery({
-    queryKey: queryKeys.sessions(params),
-    queryFn: () => sessionsApi.list({ limit: 200, ...params }),
+export const useSessions = (
+  params: Omit<SessionListParams, "tournamentId"> = {},
+) => {
+  const tournamentId = useCurrentTournamentId();
+  return useQuery({
+    queryKey: queryKeys.sessions({
+      ...params,
+      tournamentId: tournamentId ?? "",
+    }),
+    queryFn: () =>
+      sessionsApi.list({ limit: 200, ...params, tournamentId: tournamentId! }),
+    enabled: !!tournamentId,
   });
+};
 
 export const useCreateSession = () => {
   const qc = useQueryClient();

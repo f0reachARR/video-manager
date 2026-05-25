@@ -120,6 +120,21 @@ func uuidString(id pgtype.UUID) string {
 	return uuid.UUID(id.Bytes).String()
 }
 
+// requiredTournamentID reads the `tournamentId` query param and returns it as
+// a non-NULL pgtype.UUID. Returned as a hard error so callers can short-circuit
+// the request with a 400 — every tournament-scoped list endpoint demands this.
+func requiredTournamentID(r *http.Request) (pgtype.UUID, error) {
+	v := r.URL.Query().Get("tournamentId")
+	if v == "" {
+		return pgtype.UUID{}, errors.New("tournamentId is required")
+	}
+	id, err := parseUUIDParam(v)
+	if err != nil {
+		return pgtype.UUID{}, errors.New("invalid tournamentId")
+	}
+	return id, nil
+}
+
 func nullableUUID(s *string) (pgtype.UUID, error) {
 	if s == nil {
 		return pgtype.UUID{}, nil

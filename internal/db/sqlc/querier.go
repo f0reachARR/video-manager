@@ -33,6 +33,7 @@ type Querier interface {
 	CreateScenario(ctx context.Context, arg CreateScenarioParams) (Scenario, error)
 	// ScoutingNote rows: ydoc_state / plain_text は Hocuspocus が更新するため
 	// Go API は CRUD と GET だけを公開する。
+	// (tournament_id, team_id) ごとに最大1行。
 	CreateScoutingNote(ctx context.Context, arg CreateScoutingNoteParams) (ScoutingNote, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
@@ -70,7 +71,7 @@ type Querier interface {
 	GetRunVideo(ctx context.Context, id pgtype.UUID) (RunVideo, error)
 	GetScenario(ctx context.Context, id pgtype.UUID) (Scenario, error)
 	GetScoutingNote(ctx context.Context, id pgtype.UUID) (ScoutingNote, error)
-	GetScoutingNoteByMatchAndTeam(ctx context.Context, arg GetScoutingNoteByMatchAndTeamParams) (ScoutingNote, error)
+	GetScoutingNoteByTournamentAndTeam(ctx context.Context, arg GetScoutingNoteByTournamentAndTeamParams) (ScoutingNote, error)
 	GetSession(ctx context.Context, id pgtype.UUID) (Session, error)
 	GetTag(ctx context.Context, id pgtype.UUID) (Tag, error)
 	GetTeam(ctx context.Context, id pgtype.UUID) (Team, error)
@@ -112,7 +113,7 @@ type Querier interface {
 	ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]Run, error)
 	ListScenarios(ctx context.Context) ([]Scenario, error)
 	ListScenariosPage(ctx context.Context, arg ListScenariosPageParams) ([]Scenario, error)
-	ListScoutingNotesByMatch(ctx context.Context, matchID pgtype.UUID) ([]ScoutingNote, error)
+	ListScoutingNotesByTournament(ctx context.Context, tournamentID pgtype.UUID) ([]ScoutingNote, error)
 	// Sessions that either:
 	//   (a) contain the video's time range (treating ended_at IS NULL as an
 	//       ongoing / open session that extends to +infinity), or

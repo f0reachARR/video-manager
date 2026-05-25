@@ -36,16 +36,11 @@ type sessionDTO struct {
 	EndedAt      *time.Time `json:"endedAt"`
 	Location     *string    `json:"location"`
 	ModeHint     string     `json:"modeHint"`
-	TournamentID *string    `json:"tournamentId"`
+	TournamentID string     `json:"tournamentId"`
 	CreatedAt    time.Time  `json:"createdAt"`
 }
 
 func toSessionDTO(s sqlc.Session) sessionDTO {
-	var tournamentID *string
-	if s.TournamentID.Valid {
-		v := uuidString(s.TournamentID)
-		tournamentID = &v
-	}
 	return sessionDTO{
 		ID:           uuidString(s.ID),
 		Name:         s.Name,
@@ -53,7 +48,7 @@ func toSessionDTO(s sqlc.Session) sessionDTO {
 		EndedAt:      timeOrNil(s.EndedAt),
 		Location:     s.Location,
 		ModeHint:     string(s.ModeHint),
-		TournamentID: tournamentID,
+		TournamentID: uuidString(s.TournamentID),
 		CreatedAt:    s.CreatedAt.Time,
 	}
 }
@@ -64,7 +59,7 @@ type createSessionRequest struct {
 	EndedAt      *time.Time `json:"endedAt"`
 	Location     *string    `json:"location"`
 	ModeHint     *string    `json:"modeHint"`
-	TournamentID *string    `json:"tournamentId"`
+	TournamentID string     `json:"tournamentId"`
 }
 
 type updateSessionRequest struct {
@@ -73,7 +68,7 @@ type updateSessionRequest struct {
 	EndedAt      Optional[time.Time] `json:"endedAt"`
 	Location     Optional[string]    `json:"location"`
 	ModeHint     *string             `json:"modeHint"`
-	TournamentID Optional[string]    `json:"tournamentId"`
+	TournamentID *string             `json:"tournamentId"`
 }
 
 type sessionListResponse struct {
@@ -114,14 +109,12 @@ func (h *Sessions) List(w http.ResponseWriter, r *http.Request) {
 		}
 		params.ModeHint = sqlc.NullSessionModeHint{SessionModeHint: mh, Valid: true}
 	}
-	if v := r.URL.Query().Get("tournamentId"); v != "" {
-		id, err := parseUUIDParam(v)
-		if err != nil {
-			badRequest(w, "invalid tournamentId")
-			return
-		}
-		params.TournamentID = id
+	tournamentID, err := requiredTournamentID(r)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
 	}
+	params.TournamentID = tournamentID
 	if v := r.URL.Query().Get("startedFrom"); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {
@@ -172,7 +165,11 @@ func (h *Sessions) Create(w http.ResponseWriter, r *http.Request) {
 		}
 		mode = mh
 	}
-	tournamentID, err := nullableUUID(req.TournamentID)
+	if req.TournamentID == "" {
+		writeError(w, http.StatusUnprocessableEntity, "validation", "tournamentId is required", nil)
+		return
+	}
+	tournamentID, err := parseUUIDParam(req.TournamentID)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "validation", "invalid tournamentId", nil)
 		return
@@ -249,16 +246,13 @@ func (h *Sessions) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		params.ModeHint = sqlc.NullSessionModeHint{SessionModeHint: mh, Valid: true}
 	}
-	if req.TournamentID.Set {
-		params.TournamentIDSet = true
-		if !req.TournamentID.Null {
-			id, err := parseUUIDParam(req.TournamentID.Value)
-			if err != nil {
-				writeError(w, http.StatusUnprocessableEntity, "validation", "invalid tournamentId", nil)
-				return
-			}
-			params.TournamentID = id
+	if req.TournamentID != nil {
+		tid, err := parseUUIDParam(*req.TournamentID)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "validation", "invalid tournamentId", nil)
+			return
 		}
+		params.TournamentID = tid
 	}
 	s, err := h.Q.UpdateSession(r.Context(), params)
 	if err != nil {
@@ -312,8 +306,9 @@ func (h *Sessions) Candidates(w http.ResponseWriter, r *http.Request) {
 	// so containing sessions match regardless of how old their started_at is.
 	// We still re-check gap in Go to populate gapSec for the UI.
 	sessions, err := h.Q.ListSessionCandidatesForVideo(r.Context(), sqlc.ListSessionCandidatesForVideoParams{
-		WindowStart: pgtypeTimestamptz(recordedAt.Add(-candidateGapThreshold)),
-		WindowEnd:   pgtypeTimestamptz(videoEnd.Add(candidateGapThreshold)),
+		TournamentID: video.TournamentID,
+		WindowStart:  pgtypeTimestamptz(recordedAt.Add(-candidateGapThreshold)),
+		WindowEnd:    pgtypeTimestamptz(videoEnd.Add(candidateGapThreshold)),
 	})
 	if err != nil {
 		internalError(w, err)

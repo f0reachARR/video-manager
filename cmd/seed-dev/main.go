@@ -75,7 +75,29 @@ func run() error {
 	}
 	slog.Info("tag", "id", uuidStr(tag.ID), "name", tag.Name)
 
+	// Tournament is now required to operate the UI — uploads, runs, matches
+	// all sit underneath one. Seed a default so the SPA can be exercised
+	// immediately after migration.
+	tournament, err := ensureTournament(ctx, q, "Dev Tournament")
+	if err != nil {
+		return err
+	}
+	slog.Info("tournament", "id", uuidStr(tournament.ID), "name", tournament.Name)
+
 	return nil
+}
+
+func ensureTournament(ctx context.Context, q *sqlc.Queries, name string) (sqlc.Tournament, error) {
+	tournaments, err := q.ListTournamentsPage(ctx, sqlc.ListTournamentsPageParams{Limit: 50})
+	if err != nil {
+		return sqlc.Tournament{}, err
+	}
+	for _, t := range tournaments {
+		if t.Name == name {
+			return t, nil
+		}
+	}
+	return q.CreateTournament(ctx, sqlc.CreateTournamentParams{Name: name})
 }
 
 func strPtr(s string) *string { return &s }

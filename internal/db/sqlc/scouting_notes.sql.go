@@ -13,29 +13,30 @@ import (
 
 const createScoutingNote = `-- name: CreateScoutingNote :one
 
-INSERT INTO scouting_notes (match_id, target_team_id)
+INSERT INTO scouting_notes (tournament_id, team_id)
 VALUES ($1, $2)
-RETURNING id, match_id, target_team_id, ydoc_state, plain_text, updated_at, created_at
+RETURNING id, ydoc_state, plain_text, updated_at, created_at, tournament_id, team_id
 `
 
 type CreateScoutingNoteParams struct {
-	MatchID      pgtype.UUID
-	TargetTeamID pgtype.UUID
+	TournamentID pgtype.UUID
+	TeamID       pgtype.UUID
 }
 
 // ScoutingNote rows: ydoc_state / plain_text は Hocuspocus が更新するため
 // Go API は CRUD と GET だけを公開する。
+// (tournament_id, team_id) ごとに最大1行。
 func (q *Queries) CreateScoutingNote(ctx context.Context, arg CreateScoutingNoteParams) (ScoutingNote, error) {
-	row := q.db.QueryRow(ctx, createScoutingNote, arg.MatchID, arg.TargetTeamID)
+	row := q.db.QueryRow(ctx, createScoutingNote, arg.TournamentID, arg.TeamID)
 	var i ScoutingNote
 	err := row.Scan(
 		&i.ID,
-		&i.MatchID,
-		&i.TargetTeamID,
 		&i.YdocState,
 		&i.PlainText,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.TournamentID,
+		&i.TeamID,
 	)
 	return i, err
 }
@@ -53,7 +54,7 @@ func (q *Queries) DeleteScoutingNote(ctx context.Context, id pgtype.UUID) (int64
 }
 
 const getScoutingNote = `-- name: GetScoutingNote :one
-SELECT id, match_id, target_team_id, ydoc_state, plain_text, updated_at, created_at FROM scouting_notes WHERE id = $1
+SELECT id, ydoc_state, plain_text, updated_at, created_at, tournament_id, team_id FROM scouting_notes WHERE id = $1
 `
 
 func (q *Queries) GetScoutingNote(ctx context.Context, id pgtype.UUID) (ScoutingNote, error) {
@@ -61,49 +62,49 @@ func (q *Queries) GetScoutingNote(ctx context.Context, id pgtype.UUID) (Scouting
 	var i ScoutingNote
 	err := row.Scan(
 		&i.ID,
-		&i.MatchID,
-		&i.TargetTeamID,
 		&i.YdocState,
 		&i.PlainText,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.TournamentID,
+		&i.TeamID,
 	)
 	return i, err
 }
 
-const getScoutingNoteByMatchAndTeam = `-- name: GetScoutingNoteByMatchAndTeam :one
-SELECT id, match_id, target_team_id, ydoc_state, plain_text, updated_at, created_at FROM scouting_notes
-WHERE match_id = $1 AND target_team_id = $2
+const getScoutingNoteByTournamentAndTeam = `-- name: GetScoutingNoteByTournamentAndTeam :one
+SELECT id, ydoc_state, plain_text, updated_at, created_at, tournament_id, team_id FROM scouting_notes
+WHERE tournament_id = $1 AND team_id = $2
 `
 
-type GetScoutingNoteByMatchAndTeamParams struct {
-	MatchID      pgtype.UUID
-	TargetTeamID pgtype.UUID
+type GetScoutingNoteByTournamentAndTeamParams struct {
+	TournamentID pgtype.UUID
+	TeamID       pgtype.UUID
 }
 
-func (q *Queries) GetScoutingNoteByMatchAndTeam(ctx context.Context, arg GetScoutingNoteByMatchAndTeamParams) (ScoutingNote, error) {
-	row := q.db.QueryRow(ctx, getScoutingNoteByMatchAndTeam, arg.MatchID, arg.TargetTeamID)
+func (q *Queries) GetScoutingNoteByTournamentAndTeam(ctx context.Context, arg GetScoutingNoteByTournamentAndTeamParams) (ScoutingNote, error) {
+	row := q.db.QueryRow(ctx, getScoutingNoteByTournamentAndTeam, arg.TournamentID, arg.TeamID)
 	var i ScoutingNote
 	err := row.Scan(
 		&i.ID,
-		&i.MatchID,
-		&i.TargetTeamID,
 		&i.YdocState,
 		&i.PlainText,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.TournamentID,
+		&i.TeamID,
 	)
 	return i, err
 }
 
-const listScoutingNotesByMatch = `-- name: ListScoutingNotesByMatch :many
-SELECT id, match_id, target_team_id, ydoc_state, plain_text, updated_at, created_at FROM scouting_notes
-WHERE match_id = $1
+const listScoutingNotesByTournament = `-- name: ListScoutingNotesByTournament :many
+SELECT id, ydoc_state, plain_text, updated_at, created_at, tournament_id, team_id FROM scouting_notes
+WHERE tournament_id = $1
 ORDER BY created_at ASC, id ASC
 `
 
-func (q *Queries) ListScoutingNotesByMatch(ctx context.Context, matchID pgtype.UUID) ([]ScoutingNote, error) {
-	rows, err := q.db.Query(ctx, listScoutingNotesByMatch, matchID)
+func (q *Queries) ListScoutingNotesByTournament(ctx context.Context, tournamentID pgtype.UUID) ([]ScoutingNote, error) {
+	rows, err := q.db.Query(ctx, listScoutingNotesByTournament, tournamentID)
 	if err != nil {
 		return nil, err
 	}
@@ -113,12 +114,12 @@ func (q *Queries) ListScoutingNotesByMatch(ctx context.Context, matchID pgtype.U
 		var i ScoutingNote
 		if err := rows.Scan(
 			&i.ID,
-			&i.MatchID,
-			&i.TargetTeamID,
 			&i.YdocState,
 			&i.PlainText,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.TournamentID,
+			&i.TeamID,
 		); err != nil {
 			return nil, err
 		}

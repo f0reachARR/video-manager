@@ -130,7 +130,7 @@ func (q *Queries) InsertRendition(ctx context.Context, arg InsertRenditionParams
 }
 
 const listEncodingVideos = `-- name: ListEncodingVideos :many
-SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok FROM videos
+SELECT id, session_id, device_id, uploader_id, storage_key, recorded_at, duration_sec, time_offset_sec, created_at, thumbnail_key, display_name, hls_master_key, hls_status, source_video_codec, source_audio_codec, source_width, source_height, passthrough_ok, tournament_id FROM videos
 WHERE hls_status IN ('planning', 'encoding', 'failed')
 ORDER BY created_at DESC
 LIMIT $1
@@ -167,6 +167,7 @@ func (q *Queries) ListEncodingVideos(ctx context.Context, limit int32) ([]Video,
 			&i.SourceWidth,
 			&i.SourceHeight,
 			&i.PassthroughOk,
+			&i.TournamentID,
 		); err != nil {
 			return nil, err
 		}

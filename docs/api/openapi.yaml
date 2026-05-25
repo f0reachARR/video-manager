@@ -912,18 +912,18 @@ paths:
       operationId: listSessions
       summary: セッション一覧
       parameters:
+        - name: tournamentId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
         - name: modeHint
           in: query
           description: モードで絞り込む
           required: false
           schema:
             $ref: "#/components/schemas/SessionModeHint"
-        - name: tournamentId
-          in: query
-          required: false
-          schema:
-            type: string
-            format: uuid
         - name: startedFrom
           in: query
           description: 開始時刻の下限（含む）
@@ -1045,6 +1045,12 @@ paths:
       operationId: listVideos
       summary: 動画一覧
       parameters:
+        - name: tournamentId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
         - name: sessionId
           in: query
           required: false
@@ -1249,13 +1255,15 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /matches/{matchId}/scouting-notes:
+  /tournaments/{tournamentId}/scouting-notes:
     parameters:
-      - $ref: "#/components/parameters/MatchIdPath"
+      - $ref: "#/components/parameters/TournamentId"
     get:
       tags: [scouting-notes]
-      operationId: listScoutingNotes
-      summary: Match 配下の ScoutingNote 一覧
+      operationId: listScoutingNotesByTournament
+      summary: 大会配下の ScoutingNote 一覧
+      description: |
+        (tournamentId, teamId) ごとに最大1件。Hocuspocus が ydoc_state を更新する。
       responses:
         "200":
           description: OK
@@ -1265,34 +1273,27 @@ paths:
                 $ref: "#/components/schemas/ScoutingNoteList"
         "404":
           $ref: "#/components/responses/NotFound"
-    post:
+
+  /tournaments/{tournamentId}/teams/{teamId}/scouting-note:
+    parameters:
+      - $ref: "#/components/parameters/TournamentId"
+      - $ref: "#/components/parameters/TeamId"
+    get:
       tags: [scouting-notes]
-      operationId: createScoutingNote
-      summary: ScoutingNote を新規作成
+      operationId: getScoutingNoteByTeam
+      summary: 大会 × チームの ScoutingNote (なければ作成して返す)
       description: |
-        本文は Hocuspocus が WS 経由で更新する。同じ (matchId, targetTeamId)
-        の組が既に存在する場合は 409 を返す。
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateScoutingNoteRequest"
+        SPA が team ページを開くたびに呼ぶ idempotent な upsert-on-read。
+        Hocuspocus は返却された note.id を documentName として接続する。
       responses:
-        "201":
-          description: Created
+        "200":
+          description: OK
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ScoutingNote"
-        "409":
-          description: 既に存在する
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "422":
-          $ref: "#/components/responses/UnprocessableEntity"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /scouting-notes/{noteId}:
     parameters:
@@ -1406,6 +1407,12 @@ paths:
       operationId: listRuns
       summary: Run 一覧
       parameters:
+        - name: tournamentId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
         - name: sessionId
           in: query
           required: false
@@ -1700,6 +1707,12 @@ paths:
         spec-devflow.md §9 で扱う Phase 1 の検索条件。
         期間 / Robot / Scenario / tags / Marker category / memo の組合せで Run を絞り込む。
       parameters:
+        - name: tournamentId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
         - name: from
           in: query
           required: false
@@ -1971,7 +1984,7 @@ paths:
       parameters:
         - name: tournamentId
           in: query
-          required: false
+          required: true
           schema:
             type: string
             format: uuid
@@ -2617,7 +2630,7 @@ components:
     # ---------- Session ----------
     Session:
       type: object
-      required: [id, name, modeHint, createdAt]
+      required: [id, name, modeHint, tournamentId, createdAt]
       properties:
         id:
           type: string
@@ -2635,14 +2648,14 @@ components:
         modeHint:
           $ref: "#/components/schemas/SessionModeHint"
         tournamentId:
-          type: [string, "null"]
+          type: string
           format: uuid
         createdAt:
           type: string
           format: date-time
     CreateSessionRequest:
       type: object
-      required: [name]
+      required: [name, tournamentId]
       properties:
         name:
           type: string
@@ -2658,7 +2671,7 @@ components:
         modeHint:
           $ref: "#/components/schemas/SessionModeHint"
         tournamentId:
-          type: [string, "null"]
+          type: string
           format: uuid
     UpdateSessionRequest:
       type: object
@@ -2677,7 +2690,7 @@ components:
         modeHint:
           $ref: "#/components/schemas/SessionModeHint"
         tournamentId:
-          type: [string, "null"]
+          type: string
           format: uuid
     SessionList:
       type: object
@@ -2717,9 +2730,12 @@ components:
     # ---------- Video ----------
     Video:
       type: object
-      required: [id, storageKey, displayName, timeOffsetSec, hasThumbnail, hlsStatus, createdAt]
+      required: [id, tournamentId, storageKey, displayName, timeOffsetSec, hasThumbnail, hlsStatus, createdAt]
       properties:
         id:
+          type: string
+          format: uuid
+        tournamentId:
           type: string
           format: uuid
         sessionId:
@@ -2954,11 +2970,14 @@ components:
     # ---------- Run ----------
     Run:
       type: object
-      required: [id, sessionId, teamId, robotId, scenarioId, startedAt, endedAt, durationSec, memo, createdAt]
+      required: [id, tournamentId, sessionId, teamId, robotId, scenarioId, startedAt, endedAt, durationSec, memo, createdAt]
       description: |
         `endedAt` はサーバー側で `startedAt + durationSec` から計算したレスポンス専用の値で、更新時は `startedAt` と `durationSec` を渡す。
       properties:
         id:
+          type: string
+          format: uuid
+        tournamentId:
           type: string
           format: uuid
         sessionId:
@@ -3511,15 +3530,15 @@ components:
     # ---------- ScoutingNote (Phase 2) ----------
     ScoutingNote:
       type: object
-      required: [id, matchId, targetTeamId, plainText, updatedAt, createdAt]
+      required: [id, tournamentId, teamId, plainText, updatedAt, createdAt]
       properties:
         id:
           type: string
           format: uuid
-        matchId:
+        tournamentId:
           type: string
           format: uuid
-        targetTeamId:
+        teamId:
           type: string
           format: uuid
         plainText:
@@ -3531,13 +3550,6 @@ components:
         createdAt:
           type: string
           format: date-time
-    CreateScoutingNoteRequest:
-      type: object
-      required: [targetTeamId]
-      properties:
-        targetTeamId:
-          type: string
-          format: uuid
     ScoutingNoteList:
       type: object
       required: [data]

@@ -353,17 +353,18 @@ type RobotImage struct {
 }
 
 type Run struct {
-	ID          pgtype.UUID
-	SessionID   pgtype.UUID
-	TeamID      pgtype.UUID
-	RobotID     pgtype.UUID
-	ScenarioID  pgtype.UUID
-	MatchID     pgtype.UUID
-	StartedAt   pgtype.Timestamptz
-	Score       *float64
-	Memo        string
-	CreatedAt   pgtype.Timestamptz
-	DurationSec int32
+	ID           pgtype.UUID
+	SessionID    pgtype.UUID
+	TeamID       pgtype.UUID
+	RobotID      pgtype.UUID
+	ScenarioID   pgtype.UUID
+	MatchID      pgtype.UUID
+	StartedAt    pgtype.Timestamptz
+	Score        *float64
+	Memo         string
+	CreatedAt    pgtype.Timestamptz
+	DurationSec  int32
+	TournamentID pgtype.UUID
 }
 
 type RunTag struct {
@@ -391,12 +392,12 @@ type Scenario struct {
 
 type ScoutingNote struct {
 	ID           pgtype.UUID
-	MatchID      pgtype.UUID
-	TargetTeamID pgtype.UUID
 	YdocState    []byte
 	PlainText    string
 	UpdatedAt    pgtype.Timestamptz
 	CreatedAt    pgtype.Timestamptz
+	TournamentID pgtype.UUID
+	TeamID       pgtype.UUID
 }
 
 type Session struct {
@@ -472,6 +473,7 @@ type Video struct {
 	SourceWidth      *int32
 	SourceHeight     *int32
 	PassthroughOk    bool
+	TournamentID     pgtype.UUID
 }
 
 type VideoRendition struct {

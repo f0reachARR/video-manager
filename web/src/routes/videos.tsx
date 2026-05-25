@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 
 import { ResourcePage } from "../components/layout/ResourcePage";
+import { useCurrentTournamentId } from "../stores/currentTournament";
 import { useCurrentUserId } from "../stores/currentUser";
 import { useDevices } from "../features/devices/api/queries";
 import { useSessions } from "../features/sessions/api/queries";
@@ -28,6 +29,7 @@ function VideosPage() {
   const devices = useDevices();
   const sessions = useSessions();
   const currentUserId = useCurrentUserId();
+  const currentTournamentId = useCurrentTournamentId();
   const navigate = useNavigate();
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -35,11 +37,12 @@ function VideosPage() {
   // useTusUpload's getMeta reads the latest selection at upload start, so we
   // mirror the upload-time meta to refs to avoid resetting the hook when the
   // user picks a different Session/Device between drops.
-  const metaRef = useRef({ deviceId, sessionId, currentUserId });
-  metaRef.current = { deviceId, sessionId, currentUserId };
+  const metaRef = useRef({ deviceId, sessionId, currentUserId, currentTournamentId });
+  metaRef.current = { deviceId, sessionId, currentUserId, currentTournamentId };
 
   const upload = useTusUpload({
     getMeta: () => ({
+      tournamentId: metaRef.current.currentTournamentId,
       deviceId: metaRef.current.deviceId,
       sessionId: metaRef.current.sessionId,
       uploaderId: metaRef.current.currentUserId,

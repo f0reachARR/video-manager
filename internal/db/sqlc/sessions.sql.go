@@ -84,16 +84,18 @@ func (q *Queries) GetSession(ctx context.Context, id pgtype.UUID) (Session, erro
 const listSessionCandidatesForVideo = `-- name: ListSessionCandidatesForVideo :many
 SELECT id, name, started_at, ended_at, location, mode_hint, tournament_id, created_at
 FROM sessions
-WHERE started_at IS NOT NULL
-  AND started_at <= $1::timestamptz
+WHERE tournament_id = $1::uuid
+  AND started_at IS NOT NULL
+  AND started_at <= $2::timestamptz
   AND COALESCE(ended_at, 'infinity'::timestamptz)
-      >= $2::timestamptz
+      >= $3::timestamptz
 ORDER BY started_at ASC
 `
 
 type ListSessionCandidatesForVideoParams struct {
-	WindowEnd   pgtype.Timestamptz
-	WindowStart pgtype.Timestamptz
+	TournamentID pgtype.UUID
+	WindowEnd    pgtype.Timestamptz
+	WindowStart  pgtype.Timestamptz
 }
 
 // Sessions that either:
@@ -108,7 +110,7 @@ type ListSessionCandidatesForVideoParams struct {
 // started_at is, so a forgotten "in progress" session still appears for
 // today's upload — that's exactly the post-hoc linking UX we want.
 func (q *Queries) ListSessionCandidatesForVideo(ctx context.Context, arg ListSessionCandidatesForVideoParams) ([]Session, error) {
-	rows, err := q.db.Query(ctx, listSessionCandidatesForVideo, arg.WindowEnd, arg.WindowStart)
+	rows, err := q.db.Query(ctx, listSessionCandidatesForVideo, arg.TournamentID, arg.WindowEnd, arg.WindowStart)
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +142,8 @@ const listSessionsPage = `-- name: ListSessionsPage :many
 SELECT id, name, started_at, ended_at, location, mode_hint, tournament_id, created_at
 FROM sessions
 WHERE
-  ($2::session_mode_hint IS NULL OR mode_hint = $2::session_mode_hint)
-  AND ($3::uuid IS NULL OR tournament_id = $3::uuid)
+  tournament_id = $2::uuid
+  AND ($3::session_mode_hint IS NULL OR mode_hint = $3::session_mode_hint)
   AND ($4::timestamptz IS NULL OR started_at >= $4::timestamptz)
   AND ($5::timestamptz IS NULL OR started_at <= $5::timestamptz)
   AND ($6::timestamptz IS NULL OR (created_at, id) > ($6::timestamptz, $7::uuid))
@@ -151,8 +153,8 @@ LIMIT $1
 
 type ListSessionsPageParams struct {
 	Limit           int32
-	ModeHint        NullSessionModeHint
 	TournamentID    pgtype.UUID
+	ModeHint        NullSessionModeHint
 	StartedFrom     pgtype.Timestamptz
 	StartedTo       pgtype.Timestamptz
 	CursorCreatedAt pgtype.Timestamptz
@@ -162,8 +164,8 @@ type ListSessionsPageParams struct {
 func (q *Queries) ListSessionsPage(ctx context.Context, arg ListSessionsPageParams) ([]Session, error) {
 	rows, err := q.db.Query(ctx, listSessionsPage,
 		arg.Limit,
-		arg.ModeHint,
 		arg.TournamentID,
+		arg.ModeHint,
 		arg.StartedFrom,
 		arg.StartedTo,
 		arg.CursorCreatedAt,
@@ -204,23 +206,22 @@ SET
   ended_at = CASE WHEN $4::bool THEN $5 ELSE ended_at END,
   location = CASE WHEN $6::bool THEN $7 ELSE location END,
   mode_hint = COALESCE($8::session_mode_hint, mode_hint),
-  tournament_id = CASE WHEN $9::bool THEN $10::uuid ELSE tournament_id END
-WHERE id = $11
+  tournament_id = COALESCE($9::uuid, tournament_id)
+WHERE id = $10
 RETURNING id, name, started_at, ended_at, location, mode_hint, tournament_id, created_at
 `
 
 type UpdateSessionParams struct {
-	Name            *string
-	StartedAtSet    bool
-	StartedAt       pgtype.Timestamptz
-	EndedAtSet      bool
-	EndedAt         pgtype.Timestamptz
-	LocationSet     bool
-	Location        *string
-	ModeHint        NullSessionModeHint
-	TournamentIDSet bool
-	TournamentID    pgtype.UUID
-	ID              pgtype.UUID
+	Name         *string
+	StartedAtSet bool
+	StartedAt    pgtype.Timestamptz
+	EndedAtSet   bool
+	EndedAt      pgtype.Timestamptz
+	LocationSet  bool
+	Location     *string
+	ModeHint     NullSessionModeHint
+	TournamentID pgtype.UUID
+	ID           pgtype.UUID
 }
 
 func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (Session, error) {
@@ -233,7 +234,6 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (S
 		arg.LocationSet,
 		arg.Location,
 		arg.ModeHint,
-		arg.TournamentIDSet,
 		arg.TournamentID,
 		arg.ID,
 	)

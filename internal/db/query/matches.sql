@@ -10,7 +10,7 @@ SELECT * FROM matches WHERE id = $1;
 SELECT *
 FROM matches
 WHERE
-  (sqlc.narg('tournament_id')::uuid IS NULL OR tournament_id = sqlc.narg('tournament_id')::uuid)
+  tournament_id = sqlc.arg('tournament_id')::uuid
   AND (sqlc.narg('cursor_created_at')::timestamptz IS NULL
        OR (created_at, id) > (sqlc.narg('cursor_created_at')::timestamptz, sqlc.narg('cursor_id')::uuid))
 ORDER BY created_at ASC, id ASC

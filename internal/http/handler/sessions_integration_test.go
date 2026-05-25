@@ -36,9 +36,10 @@ func mustTime(t *testing.T, s string) time.Time {
 
 func TestSessionsPatchClearsLocation(t *testing.T) {
 	env := setupEnv(t)
+	tournamentID := env.createTournament(t, "T1")
 	var s sessionResp
 	rec := env.do(t, http.MethodPost, "/sessions",
-		map[string]any{"name": "S1", "modeHint": "practice", "location": "Gym A"}, &s)
+		map[string]any{"name": "S1", "modeHint": "practice", "location": "Gym A", "tournamentId": tournamentID}, &s)
 	mustStatus(t, rec, http.StatusCreated)
 	if s.Location == nil || *s.Location != "Gym A" {
 		t.Fatalf("create did not set location: %+v", s)
@@ -55,15 +56,16 @@ func TestSessionsPatchClearsLocation(t *testing.T) {
 
 func TestSessionsCandidatesOverlapAndGap(t *testing.T) {
 	env := setupEnv(t)
+	tournamentID := env.createTournament(t, "T1")
 
 	// Seed scaffolding required to produce a Video with recorded_at set.
 	// We bypass tus + ffprobe by inserting a Video row directly via the DB.
 	ctx := t.Context()
 	storageKey := "test-key-candidates"
 	rows, err := env.Pool.Exec(ctx, `
-		INSERT INTO videos (storage_key, recorded_at, duration_sec)
-		VALUES ($1, '2026-05-01T10:30:00Z'::timestamptz, 60)
-	`, storageKey)
+		INSERT INTO videos (storage_key, tournament_id, recorded_at, duration_sec)
+		VALUES ($1, $2::uuid, '2026-05-01T10:30:00Z'::timestamptz, 60)
+	`, storageKey, tournamentID)
 	if err != nil {
 		t.Fatalf("insert video: %v", err)
 	}
@@ -80,10 +82,11 @@ func TestSessionsCandidatesOverlapAndGap(t *testing.T) {
 	create := func(name, start, end string) string {
 		var s sessionResp
 		rec := env.do(t, http.MethodPost, "/sessions", map[string]any{
-			"name":      name,
-			"modeHint":  "practice",
-			"startedAt": start,
-			"endedAt":   end,
+			"name":         name,
+			"modeHint":     "practice",
+			"startedAt":    start,
+			"endedAt":      end,
+			"tournamentId": tournamentID,
 		}, &s)
 		mustStatus(t, rec, http.StatusCreated)
 		return s.ID
@@ -123,13 +126,14 @@ func TestSessionsCandidatesOverlapAndGap(t *testing.T) {
 // fell outside the gap threshold and was hidden from the link-later UI.
 func TestSessionsCandidatesIncludesOpenEndedSession(t *testing.T) {
 	env := setupEnv(t)
+	tournamentID := env.createTournament(t, "T1")
 	ctx := t.Context()
 
 	storageKey := "test-key-open-ended"
 	if _, err := env.Pool.Exec(ctx, `
-		INSERT INTO videos (storage_key, recorded_at, duration_sec)
-		VALUES ($1, '2026-05-01T14:00:00Z'::timestamptz, 60)
-	`, storageKey); err != nil {
+		INSERT INTO videos (storage_key, tournament_id, recorded_at, duration_sec)
+		VALUES ($1, $2::uuid, '2026-05-01T14:00:00Z'::timestamptz, 60)
+	`, storageKey, tournamentID); err != nil {
 		t.Fatalf("insert video: %v", err)
 	}
 	var videoID string
@@ -141,9 +145,10 @@ func TestSessionsCandidatesIncludesOpenEndedSession(t *testing.T) {
 	// Session started 4 hours before the video, ended_at omitted entirely.
 	var sess sessionResp
 	rec := env.do(t, http.MethodPost, "/sessions", map[string]any{
-		"name":      "Morning practice",
-		"modeHint":  "practice",
-		"startedAt": "2026-05-01T10:00:00Z",
+		"name":         "Morning practice",
+		"modeHint":     "practice",
+		"startedAt":    "2026-05-01T10:00:00Z",
+		"tournamentId": tournamentID,
 	}, &sess)
 	mustStatus(t, rec, http.StatusCreated)
 
@@ -168,13 +173,14 @@ func TestSessionsCandidatesIncludesOpenEndedSession(t *testing.T) {
 // 3 days ago and not yet closed.
 func TestSessionsCandidatesIncludesContainingSessionFromLongAgo(t *testing.T) {
 	env := setupEnv(t)
+	tournamentID := env.createTournament(t, "T1")
 	ctx := t.Context()
 
 	storageKey := "test-key-old-containing"
 	if _, err := env.Pool.Exec(ctx, `
-		INSERT INTO videos (storage_key, recorded_at, duration_sec)
-		VALUES ($1, '2026-05-04T14:00:00Z'::timestamptz, 60)
-	`, storageKey); err != nil {
+		INSERT INTO videos (storage_key, tournament_id, recorded_at, duration_sec)
+		VALUES ($1, $2::uuid, '2026-05-04T14:00:00Z'::timestamptz, 60)
+	`, storageKey, tournamentID); err != nil {
 		t.Fatalf("insert video: %v", err)
 	}
 	var videoID string
@@ -187,9 +193,10 @@ func TestSessionsCandidatesIncludesContainingSessionFromLongAgo(t *testing.T) {
 	// video falls inside that span, so it must surface as a candidate.
 	var sess sessionResp
 	rec := env.do(t, http.MethodPost, "/sessions", map[string]any{
-		"name":      "Weekend tournament",
-		"modeHint":  "practice",
-		"startedAt": "2026-05-01T08:00:00Z",
+		"name":         "Weekend tournament",
+		"modeHint":     "practice",
+		"startedAt":    "2026-05-01T08:00:00Z",
+		"tournamentId": tournamentID,
 	}, &sess)
 	mustStatus(t, rec, http.StatusCreated)
 
@@ -221,10 +228,11 @@ func TestSessionsCandidatesRequiresVideoID(t *testing.T) {
 
 func TestSessionsCandidatesVideoWithoutRecordedAt(t *testing.T) {
 	env := setupEnv(t)
+	tournamentID := env.createTournament(t, "T1")
 	ctx := t.Context()
 	storageKey := "test-key-no-recorded"
 	if _, err := env.Pool.Exec(ctx,
-		`INSERT INTO videos (storage_key) VALUES ($1)`, storageKey); err != nil {
+		`INSERT INTO videos (storage_key, tournament_id) VALUES ($1, $2::uuid)`, storageKey, tournamentID); err != nil {
 		t.Fatalf("insert video: %v", err)
 	}
 	var videoID string

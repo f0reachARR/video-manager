@@ -74,8 +74,8 @@ func TestBulkUploadCheckRecognizesRegisteredVideo(t *testing.T) {
 	// Using raw SQL keeps the test independent of the tus hook flow.
 	var videoID pgtype.UUID
 	if err := env.Pool.QueryRow(ctx,
-		`INSERT INTO videos (storage_key) VALUES ($1) RETURNING id`,
-		"test/key/abc").Scan(&videoID); err != nil {
+		`INSERT INTO videos (storage_key, tournament_id) VALUES ($1, $2) RETURNING id`,
+		"test/key/abc", tid).Scan(&videoID); err != nil {
 		t.Fatalf("insert video: %v", err)
 	}
 

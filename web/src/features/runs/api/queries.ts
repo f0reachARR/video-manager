@@ -9,12 +9,17 @@ import {
   runsApi,
 } from "../../../lib/api/client";
 import { queryKeys } from "../../../lib/api/queryKeys";
+import { useCurrentTournamentId } from "../../../stores/currentTournament";
 
-export const useRuns = (params: RunListParams = {}) =>
-  useQuery({
-    queryKey: queryKeys.runs(params),
-    queryFn: () => runsApi.list({ limit: 200, ...params }),
+export const useRuns = (params: Omit<RunListParams, "tournamentId"> = {}) => {
+  const tournamentId = useCurrentTournamentId();
+  return useQuery({
+    queryKey: queryKeys.runs({ ...params, tournamentId: tournamentId ?? "" }),
+    queryFn: () =>
+      runsApi.list({ limit: 200, ...params, tournamentId: tournamentId! }),
+    enabled: !!tournamentId,
   });
+};
 
 export const useRun = (id: string | null | undefined) =>
   useQuery({

@@ -26,6 +26,7 @@ type Videos struct {
 
 type videoDTO struct {
 	ID            string     `json:"id"`
+	TournamentID  string     `json:"tournamentId"`
 	SessionID     *string    `json:"sessionId"`
 	DeviceID      *string    `json:"deviceId"`
 	UploaderID    *string    `json:"uploaderId"`
@@ -55,6 +56,7 @@ func toVideoDTO(v sqlc.Video) videoDTO {
 	}
 	return videoDTO{
 		ID:            uuidString(v.ID),
+		TournamentID:  uuidString(v.TournamentID),
 		SessionID:     sessionID,
 		DeviceID:      deviceID,
 		UploaderID:    uploaderID,
@@ -101,7 +103,13 @@ func (h *Videos) List(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err.Error())
 		return
 	}
+	tournamentID, err := requiredTournamentID(r)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
 	params := sqlc.ListVideosPageParams{
+		TournamentID:    tournamentID,
 		Limit:           limit + 1,
 		CursorCreatedAt: cursorAt,
 		CursorID:        cursorID,
@@ -179,7 +187,20 @@ func (h *Videos) Update(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusUnprocessableEntity, "validation", "invalid sessionId", nil)
 				return
 			}
+			// Keep tournament_id consistent with whichever session the video is
+			// being re-attached to. Clearing the session (Null) leaves tournament_id
+			// alone — the video stays in its current tournament.
+			sess, err := h.Q.GetSession(r.Context(), sid)
+			if err != nil {
+				if isNoRows(err) {
+					writeError(w, http.StatusUnprocessableEntity, "validation", "session not found", nil)
+					return
+				}
+				internalError(w, err)
+				return
+			}
 			params.SessionID = sid
+			params.TournamentID = sess.TournamentID
 		}
 	}
 	if req.DeviceID.Set {

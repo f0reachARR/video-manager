@@ -216,6 +216,8 @@ func mountAuthedRoutes(r chi.Router, d Deps) {
 			r.Post("/{tournamentId}/bulk-uploads/check", d.BulkUploads.Check)
 			r.Delete("/{tournamentId}/bulk-uploads/fingerprints", d.BulkUploads.ClearFingerprints)
 		}
+		r.Get("/{tournamentId}/scouting-notes", d.ScoutingNotes.ListByTournament)
+		r.Get("/{tournamentId}/teams/{teamId}/scouting-note", d.ScoutingNotes.GetByTeam)
 	})
 
 	r.Route("/matches", func(r chi.Router) {
@@ -224,8 +226,6 @@ func mountAuthedRoutes(r chi.Router, d Deps) {
 		r.Get("/{matchId}", d.Matches.Get)
 		r.Patch("/{matchId}", d.Matches.Update)
 		r.Delete("/{matchId}", d.Matches.Delete)
-		r.Get("/{matchId}/scouting-notes", d.ScoutingNotes.ListByMatch)
-		r.Post("/{matchId}/scouting-notes", d.ScoutingNotes.Create)
 	})
 
 	r.Route("/scouting-notes", func(r chi.Router) {

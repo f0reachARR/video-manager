@@ -22,7 +22,12 @@ func (h *Runs) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	params := sqlc.SearchRunsParams{Limit: limit + 1}
+	tournamentID, err := requiredTournamentID(r)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	params := sqlc.SearchRunsParams{TournamentID: tournamentID, Limit: limit + 1}
 
 	if v := r.URL.Query().Get("from"); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
