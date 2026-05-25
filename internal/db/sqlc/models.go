@@ -331,6 +331,7 @@ type Robot struct {
 	Version        string
 	CreatedAt      pgtype.Timestamptz
 	PrimaryImageID pgtype.UUID
+	TournamentID   pgtype.UUID
 }
 
 type RobotImage struct {
@@ -431,12 +432,6 @@ type Tournament struct {
 	StartDate pgtype.Date
 	EndDate   pgtype.Date
 	CreatedAt pgtype.Timestamptz
-}
-
-type TournamentRobot struct {
-	TournamentID pgtype.UUID
-	RobotID      pgtype.UUID
-	CreatedAt    pgtype.Timestamptz
 }
 
 type TournamentTeam struct {

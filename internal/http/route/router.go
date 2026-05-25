@@ -211,7 +211,6 @@ func mountAuthedRoutes(r chi.Router, d Deps) {
 		r.Get("/{tournamentId}/teams", d.Tournaments.ListTeams)
 		r.Put("/{tournamentId}/teams", d.Tournaments.ReplaceTeams)
 		r.Get("/{tournamentId}/robots", d.Tournaments.ListRobots)
-		r.Put("/{tournamentId}/robots", d.Tournaments.ReplaceRobots)
 		if d.BulkUploads != nil {
 			r.Post("/{tournamentId}/bulk-uploads/check", d.BulkUploads.Check)
 			r.Delete("/{tournamentId}/bulk-uploads/fingerprints", d.BulkUploads.ClearFingerprints)

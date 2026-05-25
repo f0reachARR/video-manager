@@ -10,7 +10,7 @@ export const queryKeys = {
   users: ["users"] as const,
   devices: ["devices"] as const,
   teams: ["teams"] as const,
-  robots: (params: RobotListParams = {}) => ["robots", params] as const,
+  robots: (params: RobotListParams) => ["robots", params] as const,
   scenarios: ["scenarios"] as const,
   tags: ["tags"] as const,
   sessions: (params: SessionListParams) => ["sessions", params] as const,

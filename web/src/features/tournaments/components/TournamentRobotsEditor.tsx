@@ -1,9 +1,6 @@
 import {
-  Alert,
   Badge,
   Box,
-  Button,
-  Checkbox,
   Divider,
   Group,
   Loader,
@@ -11,94 +8,44 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
-import { ApiError, type Robot, type Team } from "../../../lib/api/client";
-import { useRobots } from "../../robots/api/queries";
-import {
-  useReplaceTournamentRobots,
-  useTournamentRobots,
-  useTournamentTeams,
-} from "../api/queries";
+import { type Robot, type Team } from "../../../lib/api/client";
+import { useTournamentRobots, useTournamentTeams } from "../api/queries";
 
 type Props = { tournamentId: string };
 
+// Robots are (tournament, team) scoped — there's no longer a "register"
+// step. This panel just shows what robots exist in this tournament, grouped
+// by team. Robot creation happens on the /robots page (filtered by current
+// tournament) or inline in the "新規チーム" flow.
 export function TournamentRobotsEditor({ tournamentId }: Props) {
   const teams = useTournamentTeams(tournamentId);
-  const allRobots = useRobots();
   const current = useTournamentRobots(tournamentId);
-  const replace = useReplaceTournamentRobots(tournamentId);
-  const [selected, setSelected] = useState<Set<string> | null>(null);
-
-  useEffect(() => {
-    if (!current.data) return;
-    setSelected(new Set(current.data.data.map((r) => r.id)));
-  }, [current.data]);
-
-  const selectedSet = selected ?? new Set<string>();
 
   const participatingTeams = teams.data?.data ?? [];
   const robotsByTeam = useMemo(() => {
     const map = new Map<string, Robot[]>();
-    for (const r of allRobots.data?.data ?? []) {
+    for (const r of current.data?.data ?? []) {
       const list = map.get(r.teamId) ?? [];
       list.push(r);
       map.set(r.teamId, list);
     }
     return map;
-  }, [allRobots.data]);
+  }, [current.data]);
 
-  const dirty = useMemo(() => {
-    if (!current.data) return false;
-    const before = new Set(current.data.data.map((r) => r.id));
-    if (before.size !== selectedSet.size) return true;
-    for (const id of before) if (!selectedSet.has(id)) return true;
-    return false;
-  }, [current.data, selectedSet]);
-
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev ?? []);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const save = () => {
-    if (!selected) return;
-    replace.mutate({ robotIds: Array.from(selected) });
-  };
-
-  const isLoading = teams.isLoading || allRobots.isLoading || current.isLoading;
+  const isLoading = teams.isLoading || current.isLoading;
 
   return (
     <Stack gap="xs">
-      <Group justify="space-between">
-        <Group gap="xs">
-          <Title order={4}>持ち込みロボット</Title>
-          <Badge variant="light">{selectedSet.size} 件選択</Badge>
-        </Group>
-        <Button
-          size="xs"
-          onClick={save}
-          loading={replace.isPending}
-          disabled={!dirty || isLoading}
-        >
-          保存
-        </Button>
+      <Group gap="xs">
+        <Title order={4}>持ち込みロボット</Title>
+        <Badge variant="light">{current.data?.data.length ?? 0} 件</Badge>
       </Group>
       <Text size="xs" c="dimmed">
-        参加チーム配下のロボットのみ選択できます。未選択のチームは「team
-        の全ロボット候補」として一括アップロード時に fallback されます。
+        ロボットは (大会, チーム) ごとに別レコード。追加はマスタ管理の「ロボット」または
+        「チーム」新規作成ダイアログから。
       </Text>
-      {replace.error && (
-        <Alert color="red">
-          {replace.error instanceof ApiError
-            ? replace.error.body.message
-            : (replace.error as Error).message}
-        </Alert>
-      )}
       {isLoading && (
         <Group gap="xs">
           <Loader size="xs" />
@@ -130,26 +77,19 @@ export function TournamentRobotsEditor({ tournamentId }: Props) {
               </Group>
               {robots.length === 0 ? (
                 <Text size="xs" c="dimmed" pl="md">
-                  このチームのロボットが未登録です。
+                  このチームのロボットがこの大会にまだ登録されていません。
                 </Text>
               ) : (
                 <Stack gap={2} pl="md">
                   {robots.map((r) => (
-                    <Checkbox
-                      key={r.id}
-                      label={
-                        <Text>
-                          {r.name}
-                          {r.version && (
-                            <Text component="span" c="dimmed" ml={6}>
-                              ({r.version})
-                            </Text>
-                          )}
+                    <Text key={r.id} size="sm">
+                      {r.name}
+                      {r.version && (
+                        <Text component="span" c="dimmed" ml={6}>
+                          ({r.version})
                         </Text>
-                      }
-                      checked={selectedSet.has(r.id)}
-                      onChange={() => toggle(r.id)}
-                    />
+                      )}
+                    </Text>
                   ))}
                 </Stack>
               )}

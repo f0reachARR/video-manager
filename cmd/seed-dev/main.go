@@ -57,12 +57,6 @@ func run() error {
 	}
 	slog.Info("device", "id", uuidStr(device.ID), "name", device.Name)
 
-	robot, err := ensureRobot(ctx, q, ownTeam.ID, "Main Robot", "v1")
-	if err != nil {
-		return err
-	}
-	slog.Info("robot", "id", uuidStr(robot.ID), "name", robot.Name, "version", robot.Version)
-
 	scenario, err := ensureScenario(ctx, q, "Default Scenario", "本走のフル走行")
 	if err != nil {
 		return err
@@ -83,6 +77,20 @@ func run() error {
 		return err
 	}
 	slog.Info("tournament", "id", uuidStr(tournament.ID), "name", tournament.Name)
+
+	// Tournament-Team membership is M:N; register own team so robots can attach.
+	if err := q.AddTournamentTeam(ctx, sqlc.AddTournamentTeamParams{
+		TournamentID: tournament.ID,
+		TeamID:       ownTeam.ID,
+	}); err != nil {
+		return err
+	}
+
+	robot, err := ensureRobot(ctx, q, tournament.ID, ownTeam.ID, "Main Robot", "v1")
+	if err != nil {
+		return err
+	}
+	slog.Info("robot", "id", uuidStr(robot.ID), "name", robot.Name, "version", robot.Version)
 
 	return nil
 }
@@ -153,8 +161,11 @@ func ensureDevice(ctx context.Context, q *sqlc.Queries, name string, offset int3
 	return q.CreateDevice(ctx, sqlc.CreateDeviceParams{Name: name, DefaultTimeOffsetSec: offset})
 }
 
-func ensureRobot(ctx context.Context, q *sqlc.Queries, teamID pgtype.UUID, name, version string) (sqlc.Robot, error) {
-	robots, err := q.ListRobotsByTeam(ctx, teamID)
+func ensureRobot(ctx context.Context, q *sqlc.Queries, tournamentID, teamID pgtype.UUID, name, version string) (sqlc.Robot, error) {
+	robots, err := q.ListRobotsByTeam(ctx, sqlc.ListRobotsByTeamParams{
+		TeamID:       teamID,
+		TournamentID: tournamentID,
+	})
 	if err != nil {
 		return sqlc.Robot{}, err
 	}
@@ -164,9 +175,10 @@ func ensureRobot(ctx context.Context, q *sqlc.Queries, teamID pgtype.UUID, name,
 		}
 	}
 	return q.CreateRobot(ctx, sqlc.CreateRobotParams{
-		TeamID:  teamID,
-		Name:    name,
-		Version: version,
+		TournamentID: tournamentID,
+		TeamID:       teamID,
+		Name:         name,
+		Version:      version,
 	})
 }
 

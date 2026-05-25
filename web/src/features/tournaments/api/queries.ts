@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   type CreateTournamentRequest,
-  type ReplaceTournamentRobotsRequest,
   type ReplaceTournamentTeamsRequest,
   type UpdateTournamentRequest,
   tournamentsApi,
@@ -74,13 +73,3 @@ export const useTournamentRobots = (id: string | null | undefined) =>
     queryFn: () => tournamentsApi.listRobots(id as string),
     enabled: !!id,
   });
-
-export const useReplaceTournamentRobots = (id: string) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: ReplaceTournamentRobotsRequest) =>
-      tournamentsApi.replaceRobots(id, body),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["tournaments", "robots", id] }),
-  });
-};

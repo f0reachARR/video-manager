@@ -13,14 +13,12 @@ import (
 type Querier interface {
 	AddRunTag(ctx context.Context, arg AddRunTagParams) error
 	AddRunVideo(ctx context.Context, arg AddRunVideoParams) (RunVideo, error)
-	AddTournamentRobot(ctx context.Context, arg AddTournamentRobotParams) error
 	AddTournamentTeam(ctx context.Context, arg AddTournamentTeamParams) error
 	ClearBulkUploadFingerprintsForTournament(ctx context.Context, tournamentID pgtype.UUID) (int64, error)
 	// 画像削除時に primary が同じ id を指していたら NULL に戻す。FK の
 	// ON DELETE SET NULL でも同じ結果になるが、明示的に呼べると分かりやすい。
 	ClearRobotPrimaryImageIfMatches(ctx context.Context, arg ClearRobotPrimaryImageIfMatchesParams) error
 	ClearRunTags(ctx context.Context, runID pgtype.UUID) error
-	ClearTournamentRobots(ctx context.Context, tournamentID pgtype.UUID) error
 	ClearTournamentTeams(ctx context.Context, tournamentID pgtype.UUID) error
 	CountMarkersByTeamAndCategory(ctx context.Context, teamID pgtype.UUID) ([]CountMarkersByTeamAndCategoryRow, error)
 	CountRenditionsByStatus(ctx context.Context, videoID pgtype.UUID) (CountRenditionsByStatusRow, error)
@@ -48,6 +46,9 @@ type Querier interface {
 	DeleteMatch(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteRobot(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteRobotImage(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Removes robots in this tournament whose team is no longer in tournament_teams.
+	// Used after a Tournament's teams list shrinks so orphan robots don't linger.
+	DeleteRobotsOutsideTournamentTeams(ctx context.Context, tournamentID pgtype.UUID) (int64, error)
 	DeleteRun(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteRunVideo(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteRunVideoByRunAndVideo(ctx context.Context, arg DeleteRunVideoByRunAndVideoParams) (int64, error)
@@ -105,7 +106,7 @@ type Querier interface {
 	// 任意で captured_at 範囲を絞れる。range が NULL の側は無制限。
 	// sort 方向は caller が `order` で 'asc' / 'desc' を渡す (空なら asc)。
 	ListRobotImagesByRobot(ctx context.Context, arg ListRobotImagesByRobotParams) ([]RobotImage, error)
-	ListRobotsByTeam(ctx context.Context, teamID pgtype.UUID) ([]Robot, error)
+	ListRobotsByTeam(ctx context.Context, arg ListRobotsByTeamParams) ([]Robot, error)
 	ListRobotsByTournament(ctx context.Context, tournamentID pgtype.UUID) ([]Robot, error)
 	ListRobotsPage(ctx context.Context, arg ListRobotsPageParams) ([]Robot, error)
 	ListRunTagsByRun(ctx context.Context, runID pgtype.UUID) ([]pgtype.UUID, error)
@@ -131,9 +132,6 @@ type Querier interface {
 	// ---------- Tournament <-> Team / Robot links (P0) ----------
 	ListTeamsByTournament(ctx context.Context, tournamentID pgtype.UUID) ([]Team, error)
 	ListTeamsPage(ctx context.Context, arg ListTeamsPageParams) ([]Team, error)
-	// 整合性チェック用: PUT /tournaments/{id}/robots で渡された各 robot の team_id が
-	// 大会の参加チームに含まれているかを検証するために、対象 robot_ids の team_id を一括取得する。
-	ListTournamentRobotsTeamIDs(ctx context.Context, robotIds []pgtype.UUID) ([]ListTournamentRobotsTeamIDsRow, error)
 	ListTournamentsPage(ctx context.Context, arg ListTournamentsPageParams) ([]Tournament, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListUsersPage(ctx context.Context, arg ListUsersPageParams) ([]User, error)
@@ -144,7 +142,6 @@ type Querier interface {
 	MarkRenditionEncoding(ctx context.Context, id pgtype.UUID) (int64, error)
 	MarkRenditionFailed(ctx context.Context, arg MarkRenditionFailedParams) (int64, error)
 	MarkRenditionReady(ctx context.Context, arg MarkRenditionReadyParams) (int64, error)
-	RemoveTournamentRobot(ctx context.Context, arg RemoveTournamentRobotParams) (int64, error)
 	RemoveTournamentTeam(ctx context.Context, arg RemoveTournamentTeamParams) (int64, error)
 	SearchRuns(ctx context.Context, arg SearchRunsParams) ([]Run, error)
 	SetRobotPrimaryImage(ctx context.Context, arg SetRobotPrimaryImageParams) error

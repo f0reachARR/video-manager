@@ -7,12 +7,19 @@ import {
   robotsApi,
 } from "../../../lib/api/client";
 import { queryKeys } from "../../../lib/api/queryKeys";
+import { useCurrentTournamentId } from "../../../stores/currentTournament";
 
-export const useRobots = (params: RobotListParams = {}) =>
-  useQuery({
-    queryKey: queryKeys.robots(params),
-    queryFn: () => robotsApi.list({ limit: 200, ...params }),
+export const useRobots = (
+  params: Omit<RobotListParams, "tournamentId"> = {},
+) => {
+  const tournamentId = useCurrentTournamentId();
+  return useQuery({
+    queryKey: queryKeys.robots({ ...params, tournamentId: tournamentId ?? "" }),
+    queryFn: () =>
+      robotsApi.list({ limit: 200, ...params, tournamentId: tournamentId! }),
+    enabled: !!tournamentId,
   });
+};
 
 export const useRobot = (id: string | null | undefined) =>
   useQuery({

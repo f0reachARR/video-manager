@@ -1143,14 +1143,13 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Tournament の持ち込みロボット一覧 */
-        get: operations["listTournamentRobots"];
         /**
-         * Tournament の持ち込みロボットを置換
-         * @description 渡された robotIds の集合に置換する。各 robot の team_id が
-         *     tournament_teams に居ない場合は 422 を返す。
+         * Tournament 配下のロボット一覧
+         * @description ロボットは (tournament, team) 単位で所有される。
+         *     この大会に登録されたロボットを返す。
          */
-        put: operations["replaceTournamentRobots"];
+        get: operations["listTournamentRobots"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1302,6 +1301,11 @@ export interface components {
         Robot: {
             /** Format: uuid */
             id: string;
+            /**
+             * Format: uuid
+             * @description ロボットは (tournament, team) ごとに別レコードとして所有される
+             */
+            tournamentId: string;
             /** Format: uuid */
             teamId: string;
             name: string;
@@ -1316,6 +1320,8 @@ export interface components {
             createdAt: string;
         };
         CreateRobotRequest: {
+            /** Format: uuid */
+            tournamentId: string;
             /** Format: uuid */
             teamId: string;
             name: string;
@@ -1781,9 +1787,6 @@ export interface components {
         };
         TournamentRobotList: {
             data: components["schemas"]["Robot"][];
-        };
-        ReplaceTournamentRobotsRequest: {
-            robotIds: string[];
         };
         /** @enum {string} */
         BulkUploadMediaKind: "video" | "image";
@@ -2552,7 +2555,8 @@ export interface operations {
     };
     listRobots: {
         parameters: {
-            query?: {
+            query: {
+                tournamentId: string;
                 /** @description チームで絞り込む */
                 teamId?: string;
                 /** @description 前回レスポンスの `pagination.nextCursor` */
@@ -4376,34 +4380,6 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-        };
-    };
-    replaceTournamentRobots: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                tournamentId: components["parameters"]["TournamentId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReplaceTournamentRobotsRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TournamentRobotList"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["UnprocessableEntity"];
         };
     };
     listMatches: {

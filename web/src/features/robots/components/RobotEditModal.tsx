@@ -2,6 +2,7 @@ import { Button, Group, Modal, Select, Stack, TextInput } from "@mantine/core";
 import { useState } from "react";
 
 import type { Robot } from "../../../lib/api/client";
+import { useCurrentTournamentId } from "../../../stores/currentTournament";
 import { useCreateRobot, useUpdateRobot } from "../api/queries";
 
 export function RobotEditModal({
@@ -15,6 +16,7 @@ export function RobotEditModal({
   robot: Robot | null;
   teamOptions: { value: string; label: string }[];
 }) {
+  const tournamentId = useCurrentTournamentId();
   const [name, setName] = useState(robot?.name ?? "");
   const [version, setVersion] = useState(robot?.version ?? "");
   const [teamId, setTeamId] = useState<string | null>(
@@ -30,8 +32,11 @@ export function RobotEditModal({
         { onSuccess: onClose },
       );
     } else {
-      if (!teamId) return;
-      create.mutate({ teamId, name, version }, { onSuccess: onClose });
+      if (!teamId || !tournamentId) return;
+      create.mutate(
+        { tournamentId, teamId, name, version },
+        { onSuccess: onClose },
+      );
     }
   };
 

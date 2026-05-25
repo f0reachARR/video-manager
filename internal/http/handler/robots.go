@@ -15,6 +15,7 @@ type Robots struct {
 
 type robotDTO struct {
 	ID             string    `json:"id"`
+	TournamentID   string    `json:"tournamentId"`
 	TeamID         string    `json:"teamId"`
 	Name           string    `json:"name"`
 	Version        string    `json:"version"`
@@ -24,11 +25,12 @@ type robotDTO struct {
 
 func toRobotDTO(r sqlc.Robot) robotDTO {
 	out := robotDTO{
-		ID:        uuidString(r.ID),
-		TeamID:    uuidString(r.TeamID),
-		Name:      r.Name,
-		Version:   r.Version,
-		CreatedAt: r.CreatedAt.Time,
+		ID:           uuidString(r.ID),
+		TournamentID: uuidString(r.TournamentID),
+		TeamID:       uuidString(r.TeamID),
+		Name:         r.Name,
+		Version:      r.Version,
+		CreatedAt:    r.CreatedAt.Time,
 	}
 	if r.PrimaryImageID.Valid {
 		s := uuidString(r.PrimaryImageID)
@@ -38,9 +40,10 @@ func toRobotDTO(r sqlc.Robot) robotDTO {
 }
 
 type createRobotRequest struct {
-	TeamID  string  `json:"teamId"`
-	Name    string  `json:"name"`
-	Version *string `json:"version"`
+	TournamentID string  `json:"tournamentId"`
+	TeamID       string  `json:"teamId"`
+	Name         string  `json:"name"`
+	Version      *string `json:"version"`
 }
 
 type updateRobotRequest struct {
@@ -64,7 +67,13 @@ func (h *Robots) List(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err.Error())
 		return
 	}
+	tournamentID, err := requiredTournamentID(r)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
 	params := sqlc.ListRobotsPageParams{
+		TournamentID:    tournamentID,
 		Limit:           limit + 1,
 		CursorCreatedAt: cursorAt,
 		CursorID:        cursorID,
@@ -102,6 +111,11 @@ func (h *Robots) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "validation", "name is required", nil)
 		return
 	}
+	tournamentID, err := parseUUIDParam(req.TournamentID)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "validation", "invalid tournamentId", nil)
+		return
+	}
 	teamID, err := parseUUIDParam(req.TeamID)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "validation", "invalid teamId", nil)
@@ -112,9 +126,10 @@ func (h *Robots) Create(w http.ResponseWriter, r *http.Request) {
 		version = *req.Version
 	}
 	rb, err := h.Q.CreateRobot(r.Context(), sqlc.CreateRobotParams{
-		TeamID:  teamID,
-		Name:    req.Name,
-		Version: version,
+		TournamentID: tournamentID,
+		TeamID:       teamID,
+		Name:         req.Name,
+		Version:      version,
 	})
 	if err != nil {
 		internalError(w, err)

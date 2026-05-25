@@ -148,7 +148,10 @@ func TestTournamentReplaceTeams(t *testing.T) {
 	mustStatus(t, rec, http.StatusNotFound)
 }
 
-func TestTournamentReplaceRobotsValidatesTeamParticipation(t *testing.T) {
+// Robots are now (tournament, team)-scoped — removing a team from the
+// tournament must wipe that team's robots in this tournament. The cleanup
+// runs inside the PUT /tournaments/{id}/teams transaction.
+func TestTournamentReplaceTeamsCascadesRobots(t *testing.T) {
 	env := setupEnv(t)
 
 	var tour tournamentResp
@@ -158,64 +161,16 @@ func TestTournamentReplaceRobotsValidatesTeamParticipation(t *testing.T) {
 	mustCreate(t, env, http.MethodPost, "/teams", map[string]any{"name": "A"}, &teamA)
 	mustCreate(t, env, http.MethodPost, "/teams", map[string]any{"name": "B"}, &teamB)
 
-	var robotA1, robotB1 idOnly
-	mustCreate(t, env, http.MethodPost, "/robots",
-		map[string]any{"teamId": teamA.ID, "name": "A1"}, &robotA1)
-	mustCreate(t, env, http.MethodPost, "/robots",
-		map[string]any{"teamId": teamB.ID, "name": "B1"}, &robotB1)
-
-	// teams = [A] participating
-	rec := env.do(t, http.MethodPut, "/tournaments/"+tour.ID+"/teams",
-		map[string]any{"teamIds": []string{teamA.ID}}, nil)
-	mustStatus(t, rec, http.StatusOK)
-
-	// robots = [A1] → OK
-	var rlist tournamentRobotList
-	rec = env.do(t, http.MethodPut, "/tournaments/"+tour.ID+"/robots",
-		map[string]any{"robotIds": []string{robotA1.ID}}, &rlist)
-	mustStatus(t, rec, http.StatusOK)
-	if len(rlist.Data) != 1 || rlist.Data[0].ID != robotA1.ID {
-		t.Fatalf("expected [A1], got %+v", rlist)
-	}
-
-	// robots = [B1] — B not participating → 422
-	rec = env.do(t, http.MethodPut, "/tournaments/"+tour.ID+"/robots",
-		map[string]any{"robotIds": []string{robotB1.ID}}, nil)
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422 for non-participating team's robot, got %d body=%s", rec.Code, rec.Body.String())
-	}
-
-	// 既存 robots は A1 のままであるべき (422 トランザクションは巻き戻る)
-	rec = env.do(t, http.MethodGet, "/tournaments/"+tour.ID+"/robots", nil, &rlist)
-	mustStatus(t, rec, http.StatusOK)
-	if len(rlist.Data) != 1 || rlist.Data[0].ID != robotA1.ID {
-		t.Fatalf("expected [A1] preserved, got %+v", rlist)
-	}
-}
-
-func TestTournamentReplaceTeamsCascadesRobotLinks(t *testing.T) {
-	env := setupEnv(t)
-
-	var tour tournamentResp
-	mustCreate(t, env, http.MethodPost, "/tournaments", map[string]any{"name": "T1"}, &tour)
-
-	var teamA, teamB teamRespMini
-	mustCreate(t, env, http.MethodPost, "/teams", map[string]any{"name": "A"}, &teamA)
-	mustCreate(t, env, http.MethodPost, "/teams", map[string]any{"name": "B"}, &teamB)
-
-	var robotA1, robotB1 idOnly
-	mustCreate(t, env, http.MethodPost, "/robots",
-		map[string]any{"teamId": teamA.ID, "name": "A1"}, &robotA1)
-	mustCreate(t, env, http.MethodPost, "/robots",
-		map[string]any{"teamId": teamB.ID, "name": "B1"}, &robotB1)
-
-	// teams = [A,B], robots = [A1,B1]
+	// teams = [A,B] participating, then create one robot per team in this tournament.
 	rec := env.do(t, http.MethodPut, "/tournaments/"+tour.ID+"/teams",
 		map[string]any{"teamIds": []string{teamA.ID, teamB.ID}}, nil)
 	mustStatus(t, rec, http.StatusOK)
-	rec = env.do(t, http.MethodPut, "/tournaments/"+tour.ID+"/robots",
-		map[string]any{"robotIds": []string{robotA1.ID, robotB1.ID}}, nil)
-	mustStatus(t, rec, http.StatusOK)
+
+	var robotA1, robotB1 idOnly
+	mustCreate(t, env, http.MethodPost, "/robots",
+		map[string]any{"tournamentId": tour.ID, "teamId": teamA.ID, "name": "A1"}, &robotA1)
+	mustCreate(t, env, http.MethodPost, "/robots",
+		map[string]any{"tournamentId": tour.ID, "teamId": teamB.ID, "name": "B1"}, &robotB1)
 
 	// teams = [A] のみに置換 → B1 (B 配下) は自動削除されるはず
 	rec = env.do(t, http.MethodPut, "/tournaments/"+tour.ID+"/teams",

@@ -57,10 +57,10 @@ func seedRunDeps(t *testing.T, env *testEnv) runDeps {
 	rec = env.do(t, http.MethodPost, "/teams", map[string]any{"name": "T"}, &team)
 	mustStatus(t, rec, http.StatusCreated)
 
-	// robot
+	// robot — robots are (tournament, team) scoped now
 	var robot teamResp
 	rec = env.do(t, http.MethodPost, "/robots",
-		map[string]any{"teamId": team.ID, "name": "R", "version": "v1"}, &robot)
+		map[string]any{"tournamentId": tournamentID, "teamId": team.ID, "name": "R", "version": "v1"}, &robot)
 	mustStatus(t, rec, http.StatusCreated)
 
 	// scenario

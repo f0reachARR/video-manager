@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 
 import type { Team } from "../../../lib/api/client";
+import { useCurrentTournamentId } from "../../../stores/currentTournament";
 import { useCreateRobot } from "../../robots/api/queries";
 import { useCreateTeam, useUpdateTeam } from "../api/queries";
 
@@ -23,6 +24,7 @@ export function TeamEditModal({
   onClose: () => void;
   team: Team | null;
 }) {
+  const tournamentId = useCurrentTournamentId();
   const [name, setName] = useState(team?.name ?? "");
   const [isOwn, setIsOwn] = useState(team?.isOwn ?? false);
   const [robotVersion, setRobotVersion] = useState("");
@@ -33,6 +35,9 @@ export function TeamEditModal({
 
   const isCreate = team === null;
   const robotsPending = createRobot.isPending;
+  // Inline robot creation only makes sense when a tournament is currently
+  // selected — robots are (tournament, team) scoped now.
+  const canCreateRobots = isCreate && !!tournamentId;
 
   const submit = async () => {
     const payload = { name, isOwn };
@@ -41,13 +46,16 @@ export function TeamEditModal({
       return;
     }
     const created = await create.mutateAsync(payload);
-    const trimmed = robotNames.map((n) => n.trim()).filter((n) => n !== "");
-    for (const n of trimmed) {
-      await createRobot.mutateAsync({
-        teamId: created.id,
-        name: n,
-        version: robotVersion,
-      });
+    if (canCreateRobots) {
+      const trimmed = robotNames.map((n) => n.trim()).filter((n) => n !== "");
+      for (const n of trimmed) {
+        await createRobot.mutateAsync({
+          tournamentId: tournamentId!,
+          teamId: created.id,
+          name: n,
+          version: robotVersion,
+        });
+      }
     }
     onClose();
   };
@@ -70,7 +78,7 @@ export function TeamEditModal({
           checked={isOwn}
           onChange={(e) => setIsOwn(e.currentTarget?.checked ?? false)}
         />
-        {isCreate && (
+        {canCreateRobots && (
           <>
             <Divider label="ロボット一括登録 (任意)" labelPosition="left" />
             <TextInput

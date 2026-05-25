@@ -328,26 +328,12 @@ func (h *Tournaments) ReplaceTeams(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Robots whose team is no longer participating must be dropped from
-	// tournament_robots. Re-fetch the remaining robot links and clear any
-	// orphans in this same tx.
-	remainingRobots, err := qtx.ListRobotsByTournament(r.Context(), id)
-	if err != nil {
+	// Robots whose team is no longer participating in this tournament are
+	// orphaned — delete them outright (a robot row is (tournament, team) scoped
+	// now). CASCADE wipes their runs/markers/images.
+	if _, err := qtx.DeleteRobotsOutsideTournamentTeams(r.Context(), id); err != nil {
 		internalError(w, err)
 		return
-	}
-	allowedTeams := make(map[[16]byte]struct{}, len(teamIDs))
-	for _, t := range teamIDs {
-		allowedTeams[t.Bytes] = struct{}{}
-	}
-	for _, rb := range remainingRobots {
-		if _, ok := allowedTeams[rb.TeamID.Bytes]; ok {
-			continue
-		}
-		if _, err := qtx.RemoveTournamentRobot(r.Context(), sqlc.RemoveTournamentRobotParams{TournamentID: id, RobotID: rb.ID}); err != nil {
-			internalError(w, err)
-			return
-		}
 	}
 
 	rows, err := qtx.ListTeamsByTournament(r.Context(), id)
@@ -383,100 +369,6 @@ func (h *Tournaments) ListRobots(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.Q.ListRobotsByTournament(r.Context(), id)
 	if err != nil {
-		internalError(w, err)
-		return
-	}
-	out := make([]robotDTO, len(rows))
-	for i, rb := range rows {
-		out[i] = toRobotDTO(rb)
-	}
-	writeJSON(w, http.StatusOK, tournamentRobotListResponse{Data: out})
-}
-
-func (h *Tournaments) ReplaceRobots(w http.ResponseWriter, r *http.Request) {
-	if h.Pool == nil {
-		internalError(w, errMissingPool)
-		return
-	}
-	id, err := parseUUIDParam(chi.URLParam(r, "tournamentId"))
-	if err != nil {
-		badRequest(w, "invalid tournamentId")
-		return
-	}
-	var req replaceTournamentRobotsRequest
-	if err := decodeJSON(r, &req); err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-	robotIDs, err := parseUUIDList(req.RobotIDs)
-	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "validation", "invalid robotIds: "+err.Error(), nil)
-		return
-	}
-
-	ok, err := h.tournamentExists(r.Context(), id)
-	if err != nil {
-		internalError(w, err)
-		return
-	}
-	if !ok {
-		notFound(w, "tournament not found")
-		return
-	}
-
-	// A2 制約: 各ロボットの team が tournament_teams に居ること。
-	if len(robotIDs) > 0 {
-		teamRows, err := h.Q.ListTournamentRobotsTeamIDs(r.Context(), robotIDs)
-		if err != nil {
-			internalError(w, err)
-			return
-		}
-		if len(teamRows) != len(robotIDs) {
-			writeError(w, http.StatusUnprocessableEntity, "validation", "robot not found", nil)
-			return
-		}
-		participating, err := h.Q.ListTeamsByTournament(r.Context(), id)
-		if err != nil {
-			internalError(w, err)
-			return
-		}
-		allowed := make(map[[16]byte]struct{}, len(participating))
-		for _, t := range participating {
-			allowed[t.ID.Bytes] = struct{}{}
-		}
-		for _, row := range teamRows {
-			if _, ok := allowed[row.TeamID.Bytes]; !ok {
-				writeError(w, http.StatusUnprocessableEntity, "validation",
-					"robot's team is not a participant of this tournament", nil)
-				return
-			}
-		}
-	}
-
-	tx, err := h.Pool.Begin(r.Context())
-	if err != nil {
-		internalError(w, err)
-		return
-	}
-	defer tx.Rollback(context.Background())
-	qtx := h.Q.WithTx(tx)
-
-	if err := qtx.ClearTournamentRobots(r.Context(), id); err != nil {
-		internalError(w, err)
-		return
-	}
-	for _, rid := range robotIDs {
-		if err := qtx.AddTournamentRobot(r.Context(), sqlc.AddTournamentRobotParams{TournamentID: id, RobotID: rid}); err != nil {
-			internalError(w, err)
-			return
-		}
-	}
-	rows, err := qtx.ListRobotsByTournament(r.Context(), id)
-	if err != nil {
-		internalError(w, err)
-		return
-	}
-	if err := tx.Commit(r.Context()); err != nil {
 		internalError(w, err)
 		return
 	}

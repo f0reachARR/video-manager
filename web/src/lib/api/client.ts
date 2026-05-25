@@ -73,8 +73,6 @@ export type TournamentTeamList = components["schemas"]["TournamentTeamList"];
 export type TournamentRobotList = components["schemas"]["TournamentRobotList"];
 export type ReplaceTournamentTeamsRequest =
   components["schemas"]["ReplaceTournamentTeamsRequest"];
-export type ReplaceTournamentRobotsRequest =
-  components["schemas"]["ReplaceTournamentRobotsRequest"];
 
 export type BulkUploadMediaKind = components["schemas"]["BulkUploadMediaKind"];
 export type BulkUploadCheckItem = components["schemas"]["BulkUploadCheckItem"];
@@ -247,11 +245,19 @@ export const teamsApi = {
 };
 
 // ---- Robots ----
-export type RobotListParams = PageParams & { teamId?: string };
+export type RobotListParams = PageParams & {
+  tournamentId: string;
+  teamId?: string;
+};
 export const robotsApi = {
-  list: (p: RobotListParams = {}) =>
+  list: (p: RobotListParams) =>
     request<RobotList>(
-      `/robots${qs({ cursor: p.cursor, limit: p.limit, teamId: p.teamId })}`,
+      `/robots${qs({
+        cursor: p.cursor,
+        limit: p.limit,
+        tournamentId: p.tournamentId,
+        teamId: p.teamId,
+      })}`,
     ),
   get: (id: string) => request<Robot>(`/robots/${id}`),
   create: (body: CreateRobotRequest) =>
@@ -545,11 +551,6 @@ export const tournamentsApi = {
     }),
   listRobots: (id: string) =>
     request<TournamentRobotList>(`/tournaments/${id}/robots`),
-  replaceRobots: (id: string, body: ReplaceTournamentRobotsRequest) =>
-    request<TournamentRobotList>(`/tournaments/${id}/robots`, {
-      method: "PUT",
-      json: body,
-    }),
   checkBulkUploads: (id: string, body: BulkUploadCheckRequest) =>
     request<BulkUploadCheckResponse>(
       `/tournaments/${id}/bulk-uploads/check`,

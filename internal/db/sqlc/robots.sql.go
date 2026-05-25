@@ -12,19 +12,25 @@ import (
 )
 
 const createRobot = `-- name: CreateRobot :one
-INSERT INTO robots (team_id, name, version)
-VALUES ($1, $2, $3)
-RETURNING id, team_id, name, version, created_at, primary_image_id
+INSERT INTO robots (tournament_id, team_id, name, version)
+VALUES ($1, $2, $3, $4)
+RETURNING id, team_id, name, version, created_at, primary_image_id, tournament_id
 `
 
 type CreateRobotParams struct {
-	TeamID  pgtype.UUID
-	Name    string
-	Version string
+	TournamentID pgtype.UUID
+	TeamID       pgtype.UUID
+	Name         string
+	Version      string
 }
 
 func (q *Queries) CreateRobot(ctx context.Context, arg CreateRobotParams) (Robot, error) {
-	row := q.db.QueryRow(ctx, createRobot, arg.TeamID, arg.Name, arg.Version)
+	row := q.db.QueryRow(ctx, createRobot,
+		arg.TournamentID,
+		arg.TeamID,
+		arg.Name,
+		arg.Version,
+	)
 	var i Robot
 	err := row.Scan(
 		&i.ID,
@@ -33,6 +39,7 @@ func (q *Queries) CreateRobot(ctx context.Context, arg CreateRobotParams) (Robot
 		&i.Version,
 		&i.CreatedAt,
 		&i.PrimaryImageID,
+		&i.TournamentID,
 	)
 	return i, err
 }
@@ -49,8 +56,26 @@ func (q *Queries) DeleteRobot(ctx context.Context, id pgtype.UUID) (int64, error
 	return result.RowsAffected(), nil
 }
 
+const deleteRobotsOutsideTournamentTeams = `-- name: DeleteRobotsOutsideTournamentTeams :execrows
+DELETE FROM robots r
+WHERE r.tournament_id = $1
+  AND r.team_id NOT IN (
+    SELECT tt.team_id FROM tournament_teams tt WHERE tt.tournament_id = $1
+  )
+`
+
+// Removes robots in this tournament whose team is no longer in tournament_teams.
+// Used after a Tournament's teams list shrinks so orphan robots don't linger.
+func (q *Queries) DeleteRobotsOutsideTournamentTeams(ctx context.Context, tournamentID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRobotsOutsideTournamentTeams, tournamentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getRobot = `-- name: GetRobot :one
-SELECT id, team_id, name, version, created_at, primary_image_id FROM robots WHERE id = $1
+SELECT id, team_id, name, version, created_at, primary_image_id, tournament_id FROM robots WHERE id = $1
 `
 
 func (q *Queries) GetRobot(ctx context.Context, id pgtype.UUID) (Robot, error) {
@@ -63,16 +88,25 @@ func (q *Queries) GetRobot(ctx context.Context, id pgtype.UUID) (Robot, error) {
 		&i.Version,
 		&i.CreatedAt,
 		&i.PrimaryImageID,
+		&i.TournamentID,
 	)
 	return i, err
 }
 
 const listRobotsByTeam = `-- name: ListRobotsByTeam :many
-SELECT id, team_id, name, version, created_at, primary_image_id FROM robots WHERE team_id = $1 ORDER BY name, version
+SELECT id, team_id, name, version, created_at, primary_image_id, tournament_id FROM robots
+WHERE team_id = $1
+  AND tournament_id = $2::uuid
+ORDER BY name, version
 `
 
-func (q *Queries) ListRobotsByTeam(ctx context.Context, teamID pgtype.UUID) ([]Robot, error) {
-	rows, err := q.db.Query(ctx, listRobotsByTeam, teamID)
+type ListRobotsByTeamParams struct {
+	TeamID       pgtype.UUID
+	TournamentID pgtype.UUID
+}
+
+func (q *Queries) ListRobotsByTeam(ctx context.Context, arg ListRobotsByTeamParams) ([]Robot, error) {
+	rows, err := q.db.Query(ctx, listRobotsByTeam, arg.TeamID, arg.TournamentID)
 	if err != nil {
 		return nil, err
 	}
@@ -87,6 +121,41 @@ func (q *Queries) ListRobotsByTeam(ctx context.Context, teamID pgtype.UUID) ([]R
 			&i.Version,
 			&i.CreatedAt,
 			&i.PrimaryImageID,
+			&i.TournamentID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRobotsByTournament = `-- name: ListRobotsByTournament :many
+SELECT id, team_id, name, version, created_at, primary_image_id, tournament_id FROM robots
+WHERE tournament_id = $1
+ORDER BY name ASC, version ASC
+`
+
+func (q *Queries) ListRobotsByTournament(ctx context.Context, tournamentID pgtype.UUID) ([]Robot, error) {
+	rows, err := q.db.Query(ctx, listRobotsByTournament, tournamentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Robot
+	for rows.Next() {
+		var i Robot
+		if err := rows.Scan(
+			&i.ID,
+			&i.TeamID,
+			&i.Name,
+			&i.Version,
+			&i.CreatedAt,
+			&i.PrimaryImageID,
+			&i.TournamentID,
 		); err != nil {
 			return nil, err
 		}
@@ -99,17 +168,19 @@ func (q *Queries) ListRobotsByTeam(ctx context.Context, teamID pgtype.UUID) ([]R
 }
 
 const listRobotsPage = `-- name: ListRobotsPage :many
-SELECT id, team_id, name, version, created_at, primary_image_id
+SELECT id, team_id, name, version, created_at, primary_image_id, tournament_id
 FROM robots
 WHERE
-  ($2::uuid IS NULL OR team_id = $2::uuid)
-  AND ($3::timestamptz IS NULL OR (created_at, id) > ($3::timestamptz, $4::uuid))
+  tournament_id = $2::uuid
+  AND ($3::uuid IS NULL OR team_id = $3::uuid)
+  AND ($4::timestamptz IS NULL OR (created_at, id) > ($4::timestamptz, $5::uuid))
 ORDER BY created_at ASC, id ASC
 LIMIT $1
 `
 
 type ListRobotsPageParams struct {
 	Limit           int32
+	TournamentID    pgtype.UUID
 	TeamID          pgtype.UUID
 	CursorCreatedAt pgtype.Timestamptz
 	CursorID        pgtype.UUID
@@ -118,6 +189,7 @@ type ListRobotsPageParams struct {
 func (q *Queries) ListRobotsPage(ctx context.Context, arg ListRobotsPageParams) ([]Robot, error) {
 	rows, err := q.db.Query(ctx, listRobotsPage,
 		arg.Limit,
+		arg.TournamentID,
 		arg.TeamID,
 		arg.CursorCreatedAt,
 		arg.CursorID,
@@ -136,6 +208,7 @@ func (q *Queries) ListRobotsPage(ctx context.Context, arg ListRobotsPageParams) 
 			&i.Version,
 			&i.CreatedAt,
 			&i.PrimaryImageID,
+			&i.TournamentID,
 		); err != nil {
 			return nil, err
 		}
@@ -153,7 +226,7 @@ SET
   name = COALESCE($1, name),
   version = COALESCE($2, version)
 WHERE id = $3
-RETURNING id, team_id, name, version, created_at, primary_image_id
+RETURNING id, team_id, name, version, created_at, primary_image_id, tournament_id
 `
 
 type UpdateRobotParams struct {
@@ -172,6 +245,7 @@ func (q *Queries) UpdateRobot(ctx context.Context, arg UpdateRobotParams) (Robot
 		&i.Version,
 		&i.CreatedAt,
 		&i.PrimaryImageID,
+		&i.TournamentID,
 	)
 	return i, err
 }

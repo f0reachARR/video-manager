@@ -475,6 +475,12 @@ paths:
       operationId: listRobots
       summary: ロボット一覧
       parameters:
+        - name: tournamentId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
         - name: teamId
           in: query
           description: チームで絞り込む
@@ -1940,29 +1946,10 @@ paths:
     get:
       tags: [tournaments]
       operationId: listTournamentRobots
-      summary: Tournament の持ち込みロボット一覧
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TournamentRobotList"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    put:
-      tags: [tournaments]
-      operationId: replaceTournamentRobots
-      summary: Tournament の持ち込みロボットを置換
+      summary: Tournament 配下のロボット一覧
       description: |
-        渡された robotIds の集合に置換する。各 robot の team_id が
-        tournament_teams に居ない場合は 422 を返す。
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ReplaceTournamentRobotsRequest"
+        ロボットは (tournament, team) 単位で所有される。
+        この大会に登録されたロボットを返す。
       responses:
         "200":
           description: OK
@@ -1972,8 +1959,6 @@ paths:
                 $ref: "#/components/schemas/TournamentRobotList"
         "404":
           $ref: "#/components/responses/NotFound"
-        "422":
-          $ref: "#/components/responses/UnprocessableEntity"
 
   # ---------- Matches (Phase 2) ----------
   /matches:
@@ -2425,11 +2410,15 @@ components:
     # ---------- Robot ----------
     Robot:
       type: object
-      required: [id, teamId, name, version, primaryImageId, createdAt]
+      required: [id, tournamentId, teamId, name, version, primaryImageId, createdAt]
       properties:
         id:
           type: string
           format: uuid
+        tournamentId:
+          type: string
+          format: uuid
+          description: ロボットは (tournament, team) ごとに別レコードとして所有される
         teamId:
           type: string
           format: uuid
@@ -2447,8 +2436,11 @@ components:
           format: date-time
     CreateRobotRequest:
       type: object
-      required: [teamId, name]
+      required: [tournamentId, teamId, name]
       properties:
+        tournamentId:
+          type: string
+          format: uuid
         teamId:
           type: string
           format: uuid
@@ -3306,16 +3298,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Robot"
-    ReplaceTournamentRobotsRequest:
-      type: object
-      required: [robotIds]
-      properties:
-        robotIds:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            format: uuid
 
     BulkUploadMediaKind:
       type: string
