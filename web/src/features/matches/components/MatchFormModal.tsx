@@ -3,8 +3,8 @@ import { DateTimePicker } from "@mantine/dates";
 import { useState } from "react";
 
 import type { Match } from "../../../lib/api/client";
+import { useCurrentTournamentId } from "../../../stores/currentTournament";
 import { useTeams } from "../../teams/api/queries";
-import { useTournaments } from "../../tournaments/api/queries";
 import { useCreateMatch, useUpdateMatch } from "../api/queries";
 
 export function MatchFormModal({
@@ -18,14 +18,13 @@ export function MatchFormModal({
   match?: Match;
   defaultTournamentId?: string;
 }) {
-  const tournaments = useTournaments();
+  const currentTournamentId = useCurrentTournamentId();
   const teams = useTeams();
   const create = useCreateMatch();
   const update = useUpdateMatch();
 
-  const [tournamentId, setTournamentId] = useState<string | null>(
-    match?.tournamentId ?? defaultTournamentId ?? null,
-  );
+  const tournamentId =
+    match?.tournamentId ?? defaultTournamentId ?? currentTournamentId ?? null;
   const [teamAId, setTeamAId] = useState<string | null>(match?.teamAId ?? null);
   const [teamBId, setTeamBId] = useState<string | null>(match?.teamBId ?? null);
   const [scheduledAt, setScheduledAt] = useState<Date | null>(
@@ -67,18 +66,6 @@ export function MatchFormModal({
   return (
     <Modal opened={opened} onClose={onClose} title={match ? "試合を編集" : "試合を作成"}>
       <Stack>
-        {!match && (
-          <Select
-            label="Tournament"
-            data={(tournaments.data?.data ?? []).map((t) => ({
-              value: t.id,
-              label: t.name,
-            }))}
-            value={tournamentId}
-            onChange={setTournamentId}
-            required
-          />
-        )}
         <Group grow>
           <Select
             label="Team A"

@@ -38,7 +38,7 @@ function RobotsPage() {
   return (
     <ResourcePage
       title="ロボット"
-      description="チーム配下に登録されるロボット。バージョン違いも別レコードとして扱います。"
+      description="現在の大会 × チームに登録されたロボット。バージョン違いは別レコード。"
       isLoading={robots.isLoading || teams.isLoading}
       error={robots.error ?? teams.error}
       onRetry={() => {

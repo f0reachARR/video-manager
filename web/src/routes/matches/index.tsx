@@ -1,12 +1,4 @@
-import {
-  ActionIcon,
-  Badge,
-  Button,
-  Group,
-  Select,
-  Table,
-  Text,
-} from "@mantine/core";
+import { ActionIcon, Button, Group, Table, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -15,24 +7,16 @@ import { ResourcePage } from "../../components/layout/ResourcePage";
 import type { Match } from "../../lib/api/client";
 import { useDeleteMatch, useMatches } from "../../features/matches/api/queries";
 import { useTeams } from "../../features/teams/api/queries";
-import { useTournaments } from "../../features/tournaments/api/queries";
 import { MatchFormModal } from "../../features/matches/components/MatchFormModal";
-
-type MatchesSearch = { tournamentId?: string };
+import { useCurrentTournamentId } from "../../stores/currentTournament";
 
 export const Route = createFileRoute("/matches/")({
   component: MatchesPage,
-  validateSearch: (search: Record<string, unknown>): MatchesSearch => ({
-    tournamentId:
-      typeof search.tournamentId === "string" ? search.tournamentId : undefined,
-  }),
 });
 
 function MatchesPage() {
-  const { tournamentId } = Route.useSearch();
-  const searchNavigate = Route.useNavigate();
+  const tournamentId = useCurrentTournamentId();
   const navigate = useNavigate();
-  const tournaments = useTournaments();
   const teams = useTeams();
   const matches = useMatches();
   const [opened, { open, close }] = useDisclosure(false);
@@ -42,51 +26,25 @@ function MatchesPage() {
     const m = new Map((teams.data?.data ?? []).map((t) => [t.id, t.name]));
     return (id: string) => m.get(id) ?? id.slice(0, 8);
   }, [teams.data]);
-  const tournamentName = useMemo(() => {
-    const m = new Map(
-      (tournaments.data?.data ?? []).map((t) => [t.id, t.name]),
-    );
-    return (id: string) => m.get(id) ?? id.slice(0, 8);
-  }, [tournaments.data]);
 
   const list = matches.data?.data ?? [];
 
   return (
     <ResourcePage
       title="試合 (Match)"
-      description="Tournament 配下の対戦。Phase 2 で導入。"
+      description="現在の大会の対戦一覧。"
       isLoading={matches.isLoading}
       error={matches.error}
       onRetry={() => matches.refetch()}
       actions={
-        <Group>
-          <Select
-            placeholder="Tournament で絞り込み"
-            data={(tournaments.data?.data ?? []).map((t) => ({
-              value: t.id,
-              label: t.name,
-            }))}
-            value={tournamentId ?? null}
-            onChange={(v) =>
-              searchNavigate({ search: { tournamentId: v ?? undefined } })
-            }
-            clearable
-            w={260}
-            size="sm"
-          />
-          <Button
-            onClick={open}
-            disabled={(tournaments.data?.data ?? []).length === 0}
-          >
-            ＋ 試合を作成
-          </Button>
-        </Group>
+        <Button onClick={open} disabled={!tournamentId}>
+          ＋ 試合を作成
+        </Button>
       }
     >
       <Table striped highlightOnHover withRowBorders={false}>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>大会</Table.Th>
             <Table.Th>対戦</Table.Th>
             <Table.Th>予定時刻</Table.Th>
             <Table.Th>作成日時</Table.Th>
@@ -102,9 +60,6 @@ function MatchesPage() {
                 navigate({ to: "/matches/$matchId", params: { matchId: m.id } })
               }
             >
-              <Table.Td>
-                <Badge variant="light">{tournamentName(m.tournamentId)}</Badge>
-              </Table.Td>
               <Table.Td>
                 <Text size="sm">
                   {teamName(m.teamAId)}{" "}
@@ -136,7 +91,7 @@ function MatchesPage() {
           ))}
           {list.length === 0 && (
             <Table.Tr>
-              <Table.Td colSpan={5}>
+              <Table.Td colSpan={4}>
                 <Text c="dimmed" ta="center" py="md">
                   まだ試合がありません
                 </Text>
@@ -149,7 +104,7 @@ function MatchesPage() {
       <MatchFormModal
         opened={opened}
         onClose={close}
-        defaultTournamentId={tournamentId}
+        defaultTournamentId={tournamentId ?? undefined}
       />
       {editing && (
         <MatchFormModal

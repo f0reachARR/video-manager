@@ -25,20 +25,20 @@ const tournamentScopedItems = [
   { to: "/pre-match", label: "本番前モード" },
   { to: "/bulk-upload", label: "現場一括アップロード" },
   { to: "/search", label: "検索" },
+  { to: "/matches", label: "試合" },
   { to: "/sessions", label: "セッション" },
   { to: "/runs", label: "Run" },
   { to: "/videos", label: "動画" },
   { to: "/encoding", label: "エンコード状況" },
-  { to: "/matches", label: "試合" },
+  { to: "/robots", label: "ロボット" },
 ] as const;
 
-// Masters that are tournament-agnostic. The five "universals" plus Team / Robot
-// which are M:N with tournaments.
+// Tournament-agnostic masters. Tournament/User/Device/Scenario/Tag are the
+// five "universals"; Team rides along because it's M:N with tournaments.
 const masterItems = [
   { to: "/tournaments", label: "大会" },
-  { to: "/users", label: "ユーザー" },
   { to: "/teams", label: "チーム" },
-  { to: "/robots", label: "ロボット" },
+  { to: "/users", label: "ユーザー" },
   { to: "/devices", label: "機材" },
   { to: "/scenarios", label: "シナリオ" },
   { to: "/tags", label: "タグ" },

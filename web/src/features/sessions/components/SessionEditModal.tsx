@@ -8,7 +8,6 @@ import type {
   UpdateSessionRequest,
 } from "../../../lib/api/client";
 import { useCurrentTournamentId } from "../../../stores/currentTournament";
-import { useTournaments } from "../../tournaments/api/queries";
 import { useCreateSession, useUpdateSession } from "../api/queries";
 
 const modeOptions: { value: SessionModeHint; label: string }[] = [
@@ -41,15 +40,15 @@ export function SessionEditModal({
   const [startedAt, setStartedAt] = useState<Date | null>(toDate(session?.startedAt));
   const [endedAt, setEndedAt] = useState<Date | null>(toDate(session?.endedAt));
   const [location, setLocation] = useState(session?.location ?? "");
-  const [tournamentId, setTournamentId] = useState<string | null>(
-    session?.tournamentId ?? currentTournamentId ?? null,
-  );
   const create = useCreateSession();
   const update = useUpdateSession();
-  const tournaments = useTournaments();
+
+  // Existing sessions stay in their original tournament; new ones land in the
+  // currently selected one. The user already picked it from the header.
+  const tournamentId = session?.tournamentId ?? currentTournamentId ?? null;
 
   const submit = () => {
-    if (!tournamentId) return; // disabled state should have prevented this
+    if (!tournamentId) return;
     if (session) {
       const payload: UpdateSessionRequest = {
         name,
@@ -115,19 +114,6 @@ export function SessionEditModal({
           value={location}
           onChange={(e) => setLocation(e.currentTarget.value)}
           placeholder="例: 体育館 A"
-        />
-        <Select
-          label="大会"
-          placeholder="大会を選択"
-          data={(tournaments.data?.data ?? []).map((t) => ({
-            value: t.id,
-            label: t.name,
-          }))}
-          value={tournamentId}
-          onChange={setTournamentId}
-          searchable
-          required
-          allowDeselect={false}
         />
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
