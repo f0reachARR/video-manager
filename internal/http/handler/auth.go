@@ -14,8 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/oauth2"
 
-	"github.com/f0reachARR/video-manager/internal/auth"
-	"github.com/f0reachARR/video-manager/internal/db/sqlc"
+	"github.com/f0reachARR/soiree/internal/auth"
+	"github.com/f0reachARR/soiree/internal/db/sqlc"
 )
 
 // Auth wires the OIDC-backed login flow plus a /me endpoint.

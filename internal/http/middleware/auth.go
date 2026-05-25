@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/f0reachARR/video-manager/internal/auth"
-	"github.com/f0reachARR/video-manager/internal/db/sqlc"
+	"github.com/f0reachARR/soiree/internal/auth"
+	"github.com/f0reachARR/soiree/internal/db/sqlc"
 )
 
 // AuthDeps wires the auth middleware. Signer is required; Queries is required

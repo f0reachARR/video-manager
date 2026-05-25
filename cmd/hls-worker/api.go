@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/f0reachARR/video-manager/internal/hlswire"
+	"github.com/f0reachARR/soiree/internal/hlswire"
 )
 
 // apiClient wraps the worker's HTTP calls to the API. All requests carry the

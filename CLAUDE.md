@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-Robocon test-run video manager. Go API + Vite/React SPA + Postgres + MinIO (S3) + tusd + Hocuspocus, orchestrated via docker compose. Phase 1 (auth, upload, runs, markers, matches, annotations, scouting notes, HLS pipeline) is implemented; see [spec.md](spec.md), [spec-devflow.md](spec-devflow.md), [spec-dir-structure.md](spec-dir-structure.md) for the full design and [docs/development.md](docs/development.md) for the dev guide.
+Soiree — Robocon test-run video manager. Go API + Vite/React SPA + Postgres + MinIO (S3) + tusd + Hocuspocus, orchestrated via docker compose. Phase 1 (auth, upload, runs, markers, matches, annotations, scouting notes, HLS pipeline) is implemented; see [spec.md](spec.md), [spec-devflow.md](spec-devflow.md), [spec-dir-structure.md](spec-dir-structure.md) for the full design and [docs/development.md](docs/development.md) for the dev guide.
 
 `ffprobe`/`ffmpeg` must be on the host (`brew install ffmpeg`); `heif-convert` (libheif) is optional but required for HEIC photo uploads.
 
@@ -33,7 +33,7 @@ Go and pnpm versions are pinned in [mise.toml](mise.toml); run `mise install`. T
 ## Testing
 
 - Pure unit tests: `go test ./internal/...`.
-- Handler-level integration tests live next to handlers (`*_integration_test.go`) and need a real Postgres. `scripts/test.sh` creates `video_manager_test` if missing and sets `TEST_DATABASE_URL`. Each test starts by TRUNCATEing all tables (see [internal/testutil/pgtest/](internal/testutil/pgtest/)), so they are **not** safe to run in parallel — don't add `t.Parallel()` or external shared state.
+- Handler-level integration tests live next to handlers (`*_integration_test.go`) and need a real Postgres. `scripts/test.sh` creates `soiree_test` if missing and sets `TEST_DATABASE_URL`. Each test starts by TRUNCATEing all tables (see [internal/testutil/pgtest/](internal/testutil/pgtest/)), so they are **not** safe to run in parallel — don't add `t.Parallel()` or external shared state.
 - Follow existing tests: `setupEnv(t)` returns a test router; use `env.do(t, method, path, body, &out)` to make requests.
 
 ## High-level architecture
@@ -81,7 +81,7 @@ Vite 8 + React 19 + TypeScript + Mantine + TanStack Router (`tsr generate` regen
 
 ### Auth model
 
-`LoadUser` middleware runs on every request and resolves a user from the signed `vm_session` cookie or (when `AUTH_DEV_BYPASS=true`) the `X-User-Id` header. Handlers needing auth read `auth.UserFromContext` and the `/` group above `mountAuthedRoutes` enforces `RequireAuth`. The SPA boots through `AuthGate`, which calls `/auth/me`; with OIDC disabled it falls back to the dev user picker.
+`LoadUser` middleware runs on every request and resolves a user from the signed `soiree_session` cookie or (when `AUTH_DEV_BYPASS=true`) the `X-User-Id` header. Handlers needing auth read `auth.UserFromContext` and the `/` group above `mountAuthedRoutes` enforces `RequireAuth`. The SPA boots through `AuthGate`, which calls `/auth/me`; with OIDC disabled it falls back to the dev user picker.
 
 ## API contract workflow
 

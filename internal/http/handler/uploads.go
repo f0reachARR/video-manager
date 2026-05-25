@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/f0reachARR/video-manager/internal/db/sqlc"
+	"github.com/f0reachARR/soiree/internal/db/sqlc"
 )
 
 // JobEnqueuer is the subset of worker.Manager the upload handler depends on.

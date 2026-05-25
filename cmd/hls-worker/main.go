@@ -23,8 +23,8 @@ import (
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
 
-	"github.com/f0reachARR/video-manager/internal/hlswire"
-	"github.com/f0reachARR/video-manager/internal/storage"
+	"github.com/f0reachARR/soiree/internal/hlswire"
+	"github.com/f0reachARR/soiree/internal/storage"
 )
 
 type config struct {

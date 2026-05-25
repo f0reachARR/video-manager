@@ -1,8 +1,8 @@
 {
-  "name": "video-manager",
+  "name": "soiree",
   "private": true,
   "version": "0.1.0",
-  "description": "Robocon test-run video manager (root workspace).",
+  "description": "Soiree — Robocon test-run video manager (root workspace).",
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "build:web": "pnpm --filter web build",

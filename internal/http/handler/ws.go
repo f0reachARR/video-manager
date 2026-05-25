@@ -10,7 +10,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
 
-	"github.com/f0reachARR/video-manager/internal/realtime"
+	"github.com/f0reachARR/soiree/internal/realtime"
 )
 
 type WS struct {

@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/f0reachARR/video-manager/internal/hlsrunner/ffmpeg"
-	"github.com/f0reachARR/video-manager/internal/hlswire"
-	"github.com/f0reachARR/video-manager/internal/storage"
+	"github.com/f0reachARR/soiree/internal/hlsrunner/ffmpeg"
+	"github.com/f0reachARR/soiree/internal/hlswire"
+	"github.com/f0reachARR/soiree/internal/storage"
 )
 
 const (

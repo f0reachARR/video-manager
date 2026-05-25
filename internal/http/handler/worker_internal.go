@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/f0reachARR/video-manager/internal/hlswire"
-	"github.com/f0reachARR/video-manager/internal/worker/dispatch"
+	"github.com/f0reachARR/soiree/internal/hlswire"
+	"github.com/f0reachARR/soiree/internal/worker/dispatch"
 )
 
 // WorkerInternal serves the /internal/worker/jobs/* endpoints used by the

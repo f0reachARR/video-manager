@@ -21,7 +21,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/f0reachARR/video-manager/internal/hlswire"
+	"github.com/f0reachARR/soiree/internal/hlswire"
 )
 
 // Errors returned to the HTTP handler when a per-job request can't be matched.

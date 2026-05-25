@@ -32,7 +32,7 @@ export async function pickDirectory(): Promise<FileSystemDirectoryHandle | null>
       // The "bulk-upload" id lets the browser remember the last-picked
       // location across visits — handy when the SD card is always mounted
       // at the same path.
-      id: "video-manager-bulk-upload",
+      id: "soiree-bulk-upload",
       mode: "read",
     });
     return handle;

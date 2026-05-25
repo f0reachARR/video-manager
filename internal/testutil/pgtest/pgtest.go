@@ -1,6 +1,6 @@
 // Package pgtest sets up the shared Postgres test database used by integration
 // tests. The dev `docker compose` Postgres is reused with a dedicated database
-// (default: video_manager_test). On the first call per process the public
+// (default: soiree_test). On the first call per process the public
 // schema is dropped, recreated, and all migrations under `migrations/` are
 // applied. Each subsequent Setup truncates all user tables so tests stay
 // isolated without paying the migration cost again.
@@ -23,7 +23,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const defaultURL = "postgres://video:video@localhost:5432/video_manager_test?sslmode=disable"
+const defaultURL = "postgres://video:video@localhost:5432/soiree_test?sslmode=disable"
 
 var (
 	bootstrapOnce sync.Once

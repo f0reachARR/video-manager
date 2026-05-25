@@ -16,7 +16,7 @@ function IndexPage() {
 
   return (
     <Stack maw={720}>
-      <Title order={2}>Hello, Video Manager</Title>
+      <Title order={2}>Hello, Soiree</Title>
       <Text c="dimmed">
         Phase 1 §4 までの管理 UI が動きます。左のナビからマスタとセッションを操作してください。
       </Text>

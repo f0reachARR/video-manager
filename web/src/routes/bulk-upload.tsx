@@ -40,9 +40,9 @@ import { useSessions } from "../features/sessions/api/queries";
 import { useCurrentTournamentId } from "../stores/currentTournament";
 import { useCurrentUserId } from "../stores/currentUser";
 
-const LS_SESSION_KEY = "video-manager.bulk-upload.sessionId";
-const LS_TEAM_KEY = "video-manager.bulk-upload.teamId";
-const LS_ROBOT_KEY = "video-manager.bulk-upload.robotId";
+const LS_SESSION_KEY = "soiree.bulk-upload.sessionId";
+const LS_TEAM_KEY = "soiree.bulk-upload.teamId";
+const LS_ROBOT_KEY = "soiree.bulk-upload.robotId";
 
 export const Route = createFileRoute("/bulk-upload")({
   component: BulkUploadPage,

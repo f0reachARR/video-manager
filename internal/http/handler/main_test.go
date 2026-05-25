@@ -11,11 +11,11 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/f0reachARR/video-manager/internal/db/sqlc"
-	"github.com/f0reachARR/video-manager/internal/http/handler"
-	appmid "github.com/f0reachARR/video-manager/internal/http/middleware"
-	"github.com/f0reachARR/video-manager/internal/http/route"
-	"github.com/f0reachARR/video-manager/internal/testutil/pgtest"
+	"github.com/f0reachARR/soiree/internal/db/sqlc"
+	"github.com/f0reachARR/soiree/internal/http/handler"
+	appmid "github.com/f0reachARR/soiree/internal/http/middleware"
+	"github.com/f0reachARR/soiree/internal/http/route"
+	"github.com/f0reachARR/soiree/internal/testutil/pgtest"
 )
 
 type pingerFunc func(ctx context.Context) error

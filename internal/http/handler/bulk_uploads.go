@@ -10,7 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/f0reachARR/video-manager/internal/db/sqlc"
+	"github.com/f0reachARR/soiree/internal/db/sqlc"
 )
 
 // BulkUploads owns the per-tournament dedup memory used by the on-site

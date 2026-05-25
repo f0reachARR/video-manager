@@ -10,16 +10,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/f0reachARR/video-manager/internal/auth"
-	"github.com/f0reachARR/video-manager/internal/config"
-	"github.com/f0reachARR/video-manager/internal/db"
-	"github.com/f0reachARR/video-manager/internal/db/sqlc"
-	"github.com/f0reachARR/video-manager/internal/http/handler"
-	appmid "github.com/f0reachARR/video-manager/internal/http/middleware"
-	"github.com/f0reachARR/video-manager/internal/http/route"
-	"github.com/f0reachARR/video-manager/internal/realtime"
-	"github.com/f0reachARR/video-manager/internal/storage"
-	"github.com/f0reachARR/video-manager/internal/worker"
+	"github.com/f0reachARR/soiree/internal/auth"
+	"github.com/f0reachARR/soiree/internal/config"
+	"github.com/f0reachARR/soiree/internal/db"
+	"github.com/f0reachARR/soiree/internal/db/sqlc"
+	"github.com/f0reachARR/soiree/internal/http/handler"
+	appmid "github.com/f0reachARR/soiree/internal/http/middleware"
+	"github.com/f0reachARR/soiree/internal/http/route"
+	"github.com/f0reachARR/soiree/internal/realtime"
+	"github.com/f0reachARR/soiree/internal/storage"
+	"github.com/f0reachARR/soiree/internal/worker"
 )
 
 func main() {

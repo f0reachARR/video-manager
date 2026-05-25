@@ -14,9 +14,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/f0reachARR/video-manager/internal/auth"
-	"github.com/f0reachARR/video-manager/internal/db/sqlc"
-	"github.com/f0reachARR/video-manager/internal/realtime"
+	"github.com/f0reachARR/soiree/internal/auth"
+	"github.com/f0reachARR/soiree/internal/db/sqlc"
+	"github.com/f0reachARR/soiree/internal/realtime"
 )
 
 type Markers struct {

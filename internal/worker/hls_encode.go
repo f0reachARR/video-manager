@@ -12,10 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
 
-	"github.com/f0reachARR/video-manager/internal/db/sqlc"
-	"github.com/f0reachARR/video-manager/internal/hlswire"
-	"github.com/f0reachARR/video-manager/internal/storage"
-	"github.com/f0reachARR/video-manager/internal/worker/dispatch"
+	"github.com/f0reachARR/soiree/internal/db/sqlc"
+	"github.com/f0reachARR/soiree/internal/hlswire"
+	"github.com/f0reachARR/soiree/internal/storage"
+	"github.com/f0reachARR/soiree/internal/worker/dispatch"
 )
 
 // EncodeVariantArgs is the payload for a single video.hls.encode_variant job.

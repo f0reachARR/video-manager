@@ -10,9 +10,9 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 
-	"github.com/f0reachARR/video-manager/internal/db/sqlc"
-	"github.com/f0reachARR/video-manager/internal/storage"
-	"github.com/f0reachARR/video-manager/internal/worker/dispatch"
+	"github.com/f0reachARR/soiree/internal/db/sqlc"
+	"github.com/f0reachARR/soiree/internal/storage"
+	"github.com/f0reachARR/soiree/internal/worker/dispatch"
 )
 
 // Config controls which queues this process polls and at what concurrency.

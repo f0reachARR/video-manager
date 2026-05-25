@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/f0reachARR/video-manager/internal/db/sqlc"
+	"github.com/f0reachARR/soiree/internal/db/sqlc"
 )
 
 // SearchRuns implements GET /search/runs. Cursor encoding mirrors the other

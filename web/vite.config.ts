@@ -17,8 +17,8 @@ export default defineConfig({
       injectRegister: false,
       includeAssets: ["icon.svg"],
       manifest: {
-        name: "Video Manager",
-        short_name: "VideoMgr",
+        name: "Soiree",
+        short_name: "Soiree",
         description: "ロボコン テストラン動画整理アプリ",
         start_url: "/",
         scope: "/",

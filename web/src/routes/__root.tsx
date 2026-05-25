@@ -75,7 +75,7 @@ function AuthenticatedLayout() {
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="lg">
-            <Title order={4}>Video Manager</Title>
+            <Title order={4}>Soiree</Title>
             <TournamentSelector />
           </Group>
           <SessionMenu />

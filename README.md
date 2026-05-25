@@ -1,4 +1,4 @@
-# video-manager
+# Soiree
 
 ロボコンのテストラン・練習動画を整理し、自チームの振り返りと対戦相手のスカウティングを
 支援するセルフホスト型 Web アプリ。チーム内サーバに Docker Compose で立ち上げて使う
@@ -137,7 +137,7 @@ HLS エンコード / ffprobe ジョブを動かすには `.env` の `WORKER_AUT
 | --- | --- | --- |
 | SPA (Vite) | 5173 | `/api/*` を 8080 にプロキシ |
 | Go API | 8080 | `/health`, `/ready`, `/auth/*`, `/internal/worker/*` |
-| PostgreSQL | 5432 | `video / video / video_manager` |
+| PostgreSQL | 5432 | `video / video / soiree` |
 | MinIO API | 9000 | S3 互換。Go API が署名 URL を発行 |
 | MinIO Console | 9001 | `minio / minio123` |
 | tusd | 1080 | S3 backend で MinIO に保存。post-finish hook で API に通知 |
@@ -188,7 +188,7 @@ Browser ─tus─▶ tusd (1080) ─S3─▶ MinIO (9000)
 | `scripts/seed-dev.sh` | `cmd/seed-dev` を実行してマスタの最小データを投入（冪等） |
 | `scripts/lint-openapi.sh` | `docs/api/openapi.yaml` を Redocly で検証 |
 | `scripts/gen-api-client.sh` | OpenAPI から `web/src/lib/api/generated.ts` を生成 |
-| `scripts/test.sh` | `video_manager_test` DB を用意して `go test ./...` を実行 |
+| `scripts/test.sh` | `soiree_test` DB を用意して `go test ./...` を実行 |
 
 ## ディレクトリ
 
@@ -215,13 +215,13 @@ Browser ─tus─▶ tusd (1080) ─S3─▶ MinIO (9000)
 
 ```sh
 docker compose up -d postgres        # 既に起動済みなら不要
-./scripts/test.sh                    # 既定で video_manager_test DB を作って実行
+./scripts/test.sh                    # 既定で soiree_test DB を作って実行
 ./scripts/test.sh -run TestRuns ./internal/http/handler/...
 ```
 
 - 純関数ユニットテストは `go test ./internal/...` だけでも動く
 - ハンドラ統合テストは実 Postgres を使う。`TEST_DATABASE_URL` 環境変数があれば
-  それを優先（既定値: `postgres://video:video@localhost:5432/video_manager_test?sslmode=disable`）
+  それを優先（既定値: `postgres://video:video@localhost:5432/soiree_test?sslmode=disable`）
 - 各テストの開始時に全テーブルが TRUNCATE されるため隔離は不要 (ただし並列実行は不可)
 
 ## API 契約

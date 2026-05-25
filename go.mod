@@ -1,4 +1,4 @@
-module github.com/f0reachARR/video-manager
+module github.com/f0reachARR/soiree
 
 go 1.26.1
 

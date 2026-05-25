@@ -7,7 +7,7 @@
 // queryPermission() returns "prompt", so the caller has to re-request
 // on a user gesture. useDirectoryScan already handles that path.
 
-const DB_NAME = "video-manager-bulk-upload";
+const DB_NAME = "soiree-bulk-upload";
 const STORE = "handles";
 const KEY = "lastDirectory";
 

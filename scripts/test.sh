@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the Go test suite against a dedicated Postgres database
-# (video_manager_test by default) inside the dev docker compose stack.
+# (soiree_test by default) inside the dev docker compose stack.
 # The database is created if missing; schema reset is handled per-process by
 # internal/testutil/pgtest.
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
@@ -9,7 +9,7 @@ load_env
 PG_USER="${POSTGRES_USER:-video}"
 PG_PASSWORD="${POSTGRES_PASSWORD:-video}"
 PG_PORT="${POSTGRES_PORT:-5432}"
-TEST_DB="${TEST_DATABASE_NAME:-video_manager_test}"
+TEST_DB="${TEST_DATABASE_NAME:-soiree_test}"
 
 # Ensure the test database exists. Uses docker compose so the host doesn't
 # need a psql client installed.

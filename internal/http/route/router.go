@@ -7,8 +7,8 @@ import (
 	chimid "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
-	"github.com/f0reachARR/video-manager/internal/http/handler"
-	appmid "github.com/f0reachARR/video-manager/internal/http/middleware"
+	"github.com/f0reachARR/soiree/internal/http/handler"
+	appmid "github.com/f0reachARR/soiree/internal/http/middleware"
 )
 
 type Deps struct {

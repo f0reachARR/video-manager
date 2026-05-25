@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: Video Manager API
+  title: Soiree API
   version: 0.1.0
   description: |
-    Robocon test-run video manager HTTP API.
+    Soiree — Robocon test-run video manager HTTP API.
 
     Phase 1 の主要リソース（masters / sessions / videos / runs / markers / search）を契約として定義する。
     実装は spec-devflow.md §4〜§9 の順に handler / service / UI を縦断で積む。

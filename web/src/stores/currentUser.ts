@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 
 import { setCurrentUserIdProvider } from "../lib/api/client";
 
-const STORAGE_KEY = "video-manager.currentUserId";
+const STORAGE_KEY = "soiree.currentUserId";
 
 type Listener = () => void;
 const listeners = new Set<Listener>();

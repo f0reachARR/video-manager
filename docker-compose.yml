@@ -10,14 +10,14 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-video}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-video}
-      POSTGRES_DB: ${POSTGRES_DB:-video_manager}
+      POSTGRES_DB: ${POSTGRES_DB:-soiree}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./deploy/compose/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-video} -d ${POSTGRES_DB:-video_manager}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-video} -d ${POSTGRES_DB:-soiree}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -104,7 +104,7 @@ services:
         condition: service_healthy
         required: false
     environment:
-      DATABASE_URL: ${DATABASE_URL_INTERNAL:-${DATABASE_URL:-postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-video_manager}?sslmode=disable}}
+      DATABASE_URL: ${DATABASE_URL_INTERNAL:-${DATABASE_URL:-postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-soiree}?sslmode=disable}}
       HOCUSPOCUS_PORT: "1234"
     ports:
       - "${HOCUSPOCUS_PORT:-1234}:1234"
@@ -158,7 +158,7 @@ services:
       HTTP_ADDR: ":8080"
       APP_VERSION: ${APP_VERSION:-0.1.0}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
-      DATABASE_URL: ${DATABASE_URL_INTERNAL:-${DATABASE_URL:-postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-video_manager}?sslmode=disable}}
+      DATABASE_URL: ${DATABASE_URL_INTERNAL:-${DATABASE_URL:-postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-soiree}?sslmode=disable}}
       S3_ENDPOINT: ${S3_ENDPOINT_INTERNAL:-${S3_ENDPOINT:-http://minio:9000}}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_BUCKET: ${S3_BUCKET:-${MINIO_BUCKET:-videos}}

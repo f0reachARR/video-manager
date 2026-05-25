@@ -7,7 +7,7 @@ Phase 1 では Go API + React SPA + PostgreSQL + MinIO + tusd を先に成立さ
 ## 全体構成
 
 ```text
-video-manager/
+soiree/
 ├── cmd/
 │   └── app/
 │       └── main.go
@@ -399,7 +399,7 @@ docs/
 最初から全部を作ると重くなるため、Phase 1 の実装開始時は次の範囲を先に作る。
 
 ```text
-video-manager/
+soiree/
 ├── cmd/app/main.go
 ├── internal/
 │   ├── config/

@@ -42,14 +42,14 @@ OIDC を使いたいときは `.env` で次を設定する:
 
 ```ini
 OIDC_ISSUER_URL=https://idp.example.com
-OIDC_CLIENT_ID=video-manager
+OIDC_CLIENT_ID=soiree
 OIDC_CLIENT_SECRET=...
 OIDC_REDIRECT_URL=http://localhost:8080/auth/callback
 SESSION_SECRET=<openssl rand -base64 48>
 AUTH_DEV_BYPASS=false
 ```
 
-セッションは HttpOnly な `vm_session` cookie に HMAC で署名されて入る。サインアウトはヘッダのユーザ名 → `サインアウト` で `/auth/logout` を叩き、cookie を破棄する。
+セッションは HttpOnly な `soiree_session` cookie に HMAC で署名されて入る。サインアウトはヘッダのユーザ名 → `サインアウト` で `/auth/logout` を叩き、cookie を破棄する。
 
 ## 3. リポジトリ地図
 
@@ -111,7 +111,7 @@ Browser ─tus─▶ tusd (1080) ─S3─▶ MinIO (9000) ─key─┐
 ## 7. テストの書き方
 
 - 純関数ユニットテストは `go test ./internal/...` だけで OK。
-- ハンドラ統合テストは `video_manager_test` DB を使う。`scripts/test.sh` が DB の存在チェックと作成を行うので、`docker compose up -d postgres` してあれば実行できる。
+- ハンドラ統合テストは `soiree_test` DB を使う。`scripts/test.sh` が DB の存在チェックと作成を行うので、`docker compose up -d postgres` してあれば実行できる。
 - 各テストの開始時に [internal/testutil/pgtest](../internal/testutil/pgtest/) が全テーブルを TRUNCATE する。並列テスト前提ではないので、外部状態（クライアントの参照など）は使わない。
 - 既存のテスト群に倣って `setupEnv(t)` で `httptest.Server` 相当のテスト用ルーターを取得し、`env.do(t, method, path, body, &out)` でリクエストを送る。
 

@@ -20,7 +20,7 @@ import (
 )
 
 // SessionCookieName is the name of the long-lived signed cookie.
-const SessionCookieName = "vm_session"
+const SessionCookieName = "soiree_session"
 
 // Session holds the data we serialize into the cookie.
 type Session struct {

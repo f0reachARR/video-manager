@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-const STORAGE_KEY = "video-manager.currentTournamentId";
+const STORAGE_KEY = "soiree.currentTournamentId";
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
