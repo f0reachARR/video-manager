@@ -66,6 +66,25 @@ services:
         mc mb --ignore-existing "local/$$MINIO_BUCKET"
         echo "bucket ready: $$MINIO_BUCKET"
 
+  # One-shot: apply golang-migrate migrations. Always runs (no profile) so
+  # `docker compose up` keeps the schema in sync regardless of whether Postgres
+  # is internal (profile: internal-postgres) or external. Dev workflows that
+  # use the host-mode stack via ./scripts/dev.sh still call
+  # ./scripts/migrate.sh up by hand, which hits the same DATABASE_URL.
+  migrate:
+    image: migrate/migrate:v4.18.1
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    volumes:
+      - ./migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=${DATABASE_URL_INTERNAL:-${DATABASE_URL:-postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-soiree}?sslmode=disable}}
+      - up
+
   # --- Always-on infra: tusd + hocuspocus ------------------------------------
   tusd:
     image: tusproject/tusd:v2.5
@@ -103,6 +122,8 @@ services:
       postgres:
         condition: service_healthy
         required: false
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: ${DATABASE_URL_INTERNAL:-${DATABASE_URL:-postgres://${POSTGRES_USER:-video}:${POSTGRES_PASSWORD:-video}@postgres:5432/${POSTGRES_DB:-soiree}?sslmode=disable}}
       HOCUSPOCUS_PORT: "1234"
@@ -154,6 +175,8 @@ services:
       minio-init:
         condition: service_completed_successfully
         required: false
+      migrate:
+        condition: service_completed_successfully
     environment:
       HTTP_ADDR: ":8080"
       APP_VERSION: ${APP_VERSION:-0.1.0}
