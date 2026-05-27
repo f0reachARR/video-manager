@@ -1,5 +1,15 @@
-import { Badge, Checkbox, Group, Loader, Progress, Table, Text } from "@mantine/core";
+import {
+  Badge,
+  Checkbox,
+  Group,
+  Loader,
+  Progress,
+  Stack,
+  Table,
+  Text,
+} from "@mantine/core";
 
+import { ResponsiveList } from "../../../components/layout/ResponsiveList";
 import type { ScannedFile } from "../hooks/useDirectoryScan";
 import type { BulkImageUploadItem } from "../hooks/useImageBulkUpload";
 import type { BulkVideoUploadItem } from "../hooks/useVideoBulkUpload";
@@ -103,7 +113,7 @@ export function FileTable({
   const someSelected =
     selection != null && selectableKeys.some((k) => selection.selected.has(k));
 
-  return (
+  const table = (
     <Table striped withTableBorder verticalSpacing="xs">
       <Table.Thead>
         <Table.Tr>
@@ -220,6 +230,82 @@ export function FileTable({
         })}
       </Table.Tbody>
     </Table>
+  );
+
+  return (
+    <ResponsiveList
+      items={files}
+      getKey={(f) => f.key}
+      table={table}
+      renderCard={(f) => {
+        const up = uploads?.get(f.key);
+        const imgUp = imageUploads?.[f.key];
+        const selectable = isSelectable(f, up, imgUp);
+        const vid = rowVideoId(f, up);
+        return (
+          <Stack gap="xs">
+            <Group justify="space-between" wrap="nowrap" align="flex-start">
+              <Group wrap="nowrap" gap="sm" align="flex-start">
+                {selection && (
+                  <Checkbox
+                    checked={selection.selected.has(f.key)}
+                    onChange={() => selection.onToggle(f.key)}
+                    disabled={!selectable}
+                    aria-label={`${f.file.name} を選択`}
+                  />
+                )}
+                {f.mediaKind === "video" && vid ? (
+                  <UploadedVideoThumb
+                    videoId={vid}
+                    onClick={
+                      onPreviewVideo ? () => onPreviewVideo(vid) : undefined
+                    }
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 96,
+                      height: 54,
+                      background: "var(--mantine-color-gray-1)",
+                      borderRadius: 4,
+                    }}
+                  />
+                )}
+              </Group>
+              <Badge color={KIND_COLOR[f.mediaKind]} variant="light">
+                {KIND_LABEL[f.mediaKind]}
+              </Badge>
+            </Group>
+            <Text size="sm" style={{ wordBreak: "break-all" }}>
+              {f.file.name}
+            </Text>
+            {(f.knownResult?.videoId || (up?.videoId && !f.knownResult?.videoId)) && (
+              <Text size="xs" c="dimmed" ff="monospace">
+                → video {f.knownResult?.videoId ?? up?.videoId}
+              </Text>
+            )}
+            {(f.knownResult?.robotImageId || imgUp?.imageId) && (
+              <Text size="xs" c="dimmed" ff="monospace">
+                → image {f.knownResult?.robotImageId ?? imgUp?.imageId}
+              </Text>
+            )}
+            <Group justify="space-between" align="center" wrap="nowrap">
+              <Text size="xs" c="dimmed">
+                {formatSize(f.file.size)}
+              </Text>
+              <StatusCell
+                file={f}
+                hashing={hashing}
+                checking={checking}
+                upload={up}
+                imageUpload={imgUp}
+              />
+            </Group>
+            {showVideoActions && vid && <UploadedVideoActions videoId={vid} />}
+          </Stack>
+        );
+      }}
+    />
   );
 }
 

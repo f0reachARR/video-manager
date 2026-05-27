@@ -3,6 +3,7 @@ import {
   Badge,
   Button,
   Group,
+  Stack,
   Table,
   Text,
 } from "@mantine/core";
@@ -11,6 +12,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 
 import { ResourcePage } from "../../components/layout/ResourcePage";
+import { ResponsiveList } from "../../components/layout/ResponsiveList";
 import type { Run } from "../../lib/api/client";
 import { formatDateTimeFull, formatDateTimeShort } from "../../lib/time";
 import { useDeleteRun, useRuns } from "../../features/runs/api/queries";
@@ -55,58 +57,96 @@ function RunsPage() {
       onRetry={() => runs.refetch()}
       actions={<Button onClick={open}>＋ Run を作成</Button>}
     >
-      <Table striped highlightOnHover withRowBorders={false}>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Session</Table.Th>
-            <Table.Th>Robot</Table.Th>
-            <Table.Th>Scenario</Table.Th>
-            <Table.Th>Team</Table.Th>
-            <Table.Th>区間</Table.Th>
-            <Table.Th>Score</Table.Th>
-            <Table.Th style={{ width: 160 }}>操作</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {list.map((r) => (
-            <Table.Tr key={r.id}>
-              <Table.Td>
-                <Badge size="sm" variant="light">
-                  {nameMaps.sessionNames.get(r.sessionId) ?? r.sessionId}
-                </Badge>
-              </Table.Td>
-              <Table.Td>
+      <ResponsiveList
+        items={list}
+        getKey={(r) => r.id}
+        empty={
+          <Text c="dimmed" ta="center" py="md">
+            まだ Run がありません
+          </Text>
+        }
+        table={
+          <Table striped highlightOnHover withRowBorders={false}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Session</Table.Th>
+                <Table.Th>Robot</Table.Th>
+                <Table.Th>Scenario</Table.Th>
+                <Table.Th>Team</Table.Th>
+                <Table.Th>区間</Table.Th>
+                <Table.Th>Score</Table.Th>
+                <Table.Th style={{ width: 160 }}>操作</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {list.map((r) => (
+                <Table.Tr key={r.id}>
+                  <Table.Td>
+                    <Badge size="sm" variant="light">
+                      {nameMaps.sessionNames.get(r.sessionId) ?? r.sessionId}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    {nameMaps.robotNames.get(r.robotId) ?? r.robotId}
+                  </Table.Td>
+                  <Table.Td>
+                    {nameMaps.scenarioNames.get(r.scenarioId) ?? r.scenarioId}
+                  </Table.Td>
+                  <Table.Td>
+                    {nameMaps.teamNames.get(r.teamId) ?? r.teamId}
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="xs" title={formatDateTimeFull(r.startedAt)}>
+                      {formatDateTimeShort(r.startedAt)}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      +{r.durationSec ?? 0}s
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>{r.score != null ? r.score : "—"}</Table.Td>
+                  <Table.Td>
+                    <RunActions run={r} />
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        }
+        renderCard={(r) => (
+          <Stack gap={6}>
+            <Group justify="space-between" wrap="nowrap" align="flex-start">
+              <Badge size="sm" variant="light">
+                {nameMaps.sessionNames.get(r.sessionId) ?? r.sessionId}
+              </Badge>
+              {r.score != null && (
+                <Text size="sm" fw={600}>
+                  {r.score} pt
+                </Text>
+              )}
+            </Group>
+            <Text size="sm" fw={500}>
+              {nameMaps.teamNames.get(r.teamId) ?? r.teamId}
+            </Text>
+            <Group gap="xs">
+              <Text size="xs" c="dimmed">
                 {nameMaps.robotNames.get(r.robotId) ?? r.robotId}
-              </Table.Td>
-              <Table.Td>
+              </Text>
+              <Text size="xs" c="dimmed">
+                /
+              </Text>
+              <Text size="xs" c="dimmed">
                 {nameMaps.scenarioNames.get(r.scenarioId) ?? r.scenarioId}
-              </Table.Td>
-              <Table.Td>{nameMaps.teamNames.get(r.teamId) ?? r.teamId}</Table.Td>
-              <Table.Td>
-                <Text size="xs" title={formatDateTimeFull(r.startedAt)}>
-                  {formatDateTimeShort(r.startedAt)}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  +{r.durationSec ?? 0}s
-                </Text>
-              </Table.Td>
-              <Table.Td>{r.score != null ? r.score : "—"}</Table.Td>
-              <Table.Td>
-                <RunActions run={r} />
-              </Table.Td>
-            </Table.Tr>
-          ))}
-          {list.length === 0 && (
-            <Table.Tr>
-              <Table.Td colSpan={7}>
-                <Text c="dimmed" ta="center" py="md">
-                  まだ Run がありません
-                </Text>
-              </Table.Td>
-            </Table.Tr>
-          )}
-        </Table.Tbody>
-      </Table>
+              </Text>
+            </Group>
+            <Group justify="space-between" align="center">
+              <Text size="xs" c="dimmed" title={formatDateTimeFull(r.startedAt)}>
+                {formatDateTimeShort(r.startedAt)} +{r.durationSec ?? 0}s
+              </Text>
+              <RunActions run={r} />
+            </Group>
+          </Stack>
+        )}
+      />
       <RunCreateModal opened={opened} onClose={close} />
     </ResourcePage>
   );
