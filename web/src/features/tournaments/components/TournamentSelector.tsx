@@ -47,8 +47,8 @@ export function TournamentSelector() {
   }
 
   return (
-    <Group gap={6}>
-      <Text size="xs" c="dimmed">
+    <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+      <Text size="xs" c="dimmed" visibleFrom="sm">
         大会
       </Text>
       <Select
@@ -58,7 +58,7 @@ export function TournamentSelector() {
         onChange={(v) => setCurrentTournamentId(v)}
         allowDeselect={false}
         searchable
-        w={220}
+        w={{ base: 150, sm: 220 }}
       />
     </Group>
   );

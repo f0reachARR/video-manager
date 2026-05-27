@@ -70,8 +70,8 @@ function AuthenticatedLayout() {
       padding="md"
     >
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="lg">
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap" gap="sm">
+          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
             <Title order={4}>Soiree</Title>
             <TournamentSelector />
           </Group>

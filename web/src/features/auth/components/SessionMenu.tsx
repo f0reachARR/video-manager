@@ -16,9 +16,9 @@ export function SessionMenu() {
   return (
     <Menu position="bottom-end" withinPortal>
       <Menu.Target>
-        <Button variant="subtle" size="xs">
-          <Group gap={6}>
-            <Text size="sm" fw={500}>
+        <Button variant="subtle" size="xs" style={{ minWidth: 0 }}>
+          <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+            <Text size="sm" fw={500} truncate maw={{ base: 90, sm: 200 }}>
               {me.data.name}
             </Text>
             <Text size="xs" c="dimmed">
