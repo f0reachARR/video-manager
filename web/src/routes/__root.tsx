@@ -65,7 +65,7 @@ function AuthenticatedLayout() {
   return (
     <AppShell
       header={{ height: 56 }}
-      navbar={{ width: 220, breakpoint: "sm" }}
+      navbar={{ width: 220, breakpoint: "sm", collapsed: { mobile: true } }}
       footer={{ height: 56, collapsed: !isMobile, offset: true }}
       padding="md"
     >
