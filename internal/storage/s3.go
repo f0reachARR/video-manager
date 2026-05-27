@@ -7,15 +7,39 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
+
+// noAcceptEncodingSigner wraps the default SigV4 signer to strip the
+// Accept-Encoding header before signing and restore it afterwards. Google
+// Cloud Storage's frontend rewrites Accept-Encoding (e.g. to
+// "identity,gzip(gfe)") between the client and the server, so the signature
+// the client computes over it never matches what GCS validates, yielding
+// spurious SignatureDoesNotMatch errors. Excluding the header from the signed
+// set sidesteps the mismatch and is harmless against S3/MinIO.
+// See https://www.kofuk.org/blog/20240105-aws-sdk-go-v2-gcs/
+type noAcceptEncodingSigner struct {
+	signer s3.HTTPSignerV4
+}
+
+func (s noAcceptEncodingSigner) SignHTTP(ctx context.Context, credentials aws.Credentials, r *http.Request, payloadHash string, service string, region string, signingTime time.Time, optFns ...func(*v4.SignerOptions)) error {
+	acceptEncoding := r.Header.Get("Accept-Encoding")
+	r.Header.Del("Accept-Encoding")
+	err := s.signer.SignHTTP(ctx, credentials, r, payloadHash, service, region, signingTime, optFns...)
+	if acceptEncoding != "" {
+		r.Header.Set("Accept-Encoding", acceptEncoding)
+	}
+	return err
+}
 
 type Config struct {
 	Endpoint     string
@@ -50,9 +74,16 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 	// enables by default. Disable both so presigned URLs stay compatible.
 	awsCfg.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 	awsCfg.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+	// Default signer mirrors newDefaultV4Signer (DisableURIPathEscaping is
+	// required for S3-style signing), wrapped to drop Accept-Encoding so GCS
+	// HMAC access doesn't fail with SignatureDoesNotMatch.
+	signer := noAcceptEncodingSigner{signer: v4.NewSigner(func(so *v4.SignerOptions) {
+		so.DisableURIPathEscaping = true
+	})}
 	cli := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(cfg.Endpoint)
 		o.UsePathStyle = cfg.UsePathStyle
+		o.HTTPSignerV4 = signer
 	})
 	// Separate client for presigning so we can hand the browser URLs
 	// against a public hostname even when the operational endpoint is
@@ -62,6 +93,7 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		pcli := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 			o.BaseEndpoint = aws.String(cfg.PresignEndpoint)
 			o.UsePathStyle = cfg.UsePathStyle
+			o.HTTPSignerV4 = signer
 		})
 		presignClient = s3.NewPresignClient(pcli)
 	}
